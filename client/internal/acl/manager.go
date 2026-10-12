@@ -537,11 +537,14 @@ func extractRuleSources(r *mgmProto.FirewallRule) ([]netip.Prefix, error) {
 	if len(r.SourcePrefixes) > 0 {
 		out := make([]netip.Prefix, 0, len(r.SourcePrefixes))
 		for _, raw := range r.SourcePrefixes {
-			addr, err := netiputil.DecodeAddr(raw)
+			prefix, err := netiputil.DecodePrefix(raw)
 			if err != nil {
 				return nil, fmt.Errorf("decode source prefix: %w", err)
 			}
-			out = append(out, netip.PrefixFrom(addr.Unmap(), addr.Unmap().BitLen()))
+			// SourcePrefixes carries CIDR networks, not only peer host addresses.
+			// Preserve /0 wildcards and subnet masks instead of narrowing each
+			// source to a single host and silently changing firewall policies.
+			out = append(out, prefix)
 		}
 		return out, nil
 	}

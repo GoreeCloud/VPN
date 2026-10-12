@@ -1,6 +1,6 @@
 # Security baseline and release restrictions
 
-**Source-import development stage only.** No independent vulnerability assessment, Go compilation, runtime verification, packet-level validation, or production acceptance has occurred as a result of this import.
+**Source-import development stage only.** Limited Go package tests and static analysis have been introduced, but no full-product compilation, independent vulnerability assessment, VPN runtime verification, packet-level validation, or production acceptance has been completed.
 
 ## Non-negotiable release gates
 

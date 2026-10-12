@@ -18,6 +18,95 @@ import (
 	"github.com/netbirdio/netbird/shared/netiputil"
 )
 
+// TestExtractRuleSourcesPreservesCIDRs guards the management-to-client ACL
+// boundary. The wire format conveys prefixes; narrowing them to host routes
+// silently breaks subnets and /0 wildcards from the management control plane.
+func TestExtractRuleSourcesPreservesCIDRs(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		sources []string
+	}{
+		{name: "IPv4 subnet", sources: []string{"10.1.2.0/24"}},
+		{name: "IPv6 subnet", sources: []string{"fd00:1234::/64"}},
+		{name: "IPv4 wildcard", sources: []string{"0.0.0.0/0"}},
+		{name: "IPv6 wildcard", sources: []string{"::/0"}},
+		{name: "mixed networks", sources: []string{"10.0.0.0/8", "fd00::/48"}},
+		{name: "host routes", sources: []string{"100.64.0.5/32", "fd00::5/128"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := make([][]byte, 0, len(tc.sources))
+			want := make([]netip.Prefix, 0, len(tc.sources))
+			for _, source := range tc.sources {
+				prefix := netip.MustParsePrefix(source)
+				encoded, err := netiputil.EncodePrefix(prefix)
+				require.NoError(t, err)
+				raw = append(raw, encoded)
+				want = append(want, prefix)
+			}
+			got, err := extractRuleSources(&mgmProto.FirewallRule{SourcePrefixes: raw})
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+func TestExtractRuleSourcesRejectsMalformedCIDR(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+	}{
+		{name: "empty", raw: []byte{}},
+		{name: "truncated", raw: []byte{10, 0, 0}},
+		{name: "invalid IPv4 mask", raw: []byte{10, 0, 0, 1, 33}},
+		{name: "invalid IPv6 mask", raw: append(make([]byte, 16), 129)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := extractRuleSources(&mgmProto.FirewallRule{
+				SourcePrefixes: [][]byte{netiputil.EncodeAddr(netip.MustParseAddr("10.0.0.1")), tc.raw},
+			})
+			require.Error(t, err, "invalid second prefix must reject the whole rule")
+		})
+	}
+}
+
+func TestGroupPeerRulesKeepsFirewallWildcardCIDRs(t *testing.T) {
+	expected := []netip.Prefix{
+		netip.MustParsePrefix("0.0.0.0/0"),
+		netip.MustParsePrefix("10.1.0.0/16"),
+		netip.MustParsePrefix("::/0"),
+		netip.MustParsePrefix("fd00::/48"),
+	}
+	wire := make([][]byte, 0, len(expected))
+	for _, prefix := range expected {
+		encoded, err := netiputil.EncodePrefix(prefix)
+		require.NoError(t, err)
+		wire = append(wire, encoded)
+	}
+	rules, denyErr, err := groupPeerRules([]*mgmProto.FirewallRule{{
+		PolicyID:       []byte("policy-wildcard"),
+		SourcePrefixes: wire,
+		Direction:      mgmProto.RuleDirection_IN,
+		Action:         mgmProto.RuleAction_DROP,
+		Protocol:       mgmProto.RuleProtocol_TCP,
+	}})
+	require.NoError(t, denyErr)
+	require.NoError(t, err)
+	require.Len(t, rules, 2, "IPv4 and IPv6 firewall source families must stay separate")
+	assert.Equal(t, expected[:2], rules[0].sources)
+	assert.Equal(t, expected[2:], rules[1].sources)
+}
+
+func TestGroupPeerRulesMalformedDenyMustFail(t *testing.T) {
+	rules, denyErr, err := groupPeerRules([]*mgmProto.FirewallRule{{
+		PolicyID:       []byte("deny-malformed"),
+		SourcePrefixes: [][]byte{{10, 0, 0, 1, 33}},
+		Action:         mgmProto.RuleAction_DROP,
+	}})
+	assert.Empty(t, rules)
+	require.Error(t, denyErr, "malformed deny must not be skipped as an allowed failure")
+	require.NoError(t, err)
+}
+
 // TestGroupPeerRulesPolicyIDSeparates verifies that two FirewallRules
 // with identical selectors but different PolicyIDs do NOT get merged
 // into one group, so each policy's sources merge under its own
