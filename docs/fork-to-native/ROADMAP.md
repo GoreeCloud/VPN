@@ -17,6 +17,7 @@
 
 - [x] Correct inherited client ACL decoding to preserve management-specified IPv4/IPv6 CIDR masks and /0 wildcards; add malformed-deny and mixed-family regression tests (scoped Go test evidence only)
 - [x] Development candidate (pending review): reject non-host IPv4/IPv6 prefix wire values when decoding a single peer address, while keeping network-prefix decoding available for ACL routes; scoped `shared/netiputil`, `base62`, and `monotime` tests passed locally on Go 1.27.1 (source evidence only)
+- [x] Development candidate (pending review): security toolchain patch maintenance selects Go 1.26.9 for source defaults and Go 1.27.2 in scoped GitHub CI (new exact-head checks still required)
 - [ ] Validate policy propagation from running management service through clients, real firewall backends, and revocation under network changes
 
 Inventory peer connectivity, WireGuard key handling, enrollment/SSO/MFA, NAT traversal, DNS, routing, policy, daemon, management/signal/relay services, UI clients and installers. Document feature parity and unsupported behavior. Build an inbound/outbound endpoint and telemetry matrix, secret-handling review, AGPL obligations, STRIDE-style threat model, and security-response plan. Set fail-closed defaults and no implicit affiliation with upstream hosted control planes.
