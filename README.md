@@ -13,6 +13,10 @@ GoreeCloud VPN is a planned GoreeCloud-native, privacy-conscious VPN and private
 
 ## Documentation
 
+- [Feature status and evidence navigation](docs/FEATURES.md)
+- [Proposed product specifications and acceptance criteria](docs/SPECIFICATIONS.md)
+- [Planned feature and capability catalog](docs/PLANNED-FEATURES.md)
+- [Implemented source-level work (not release claims)](docs/IMPLEMENTED-FEATURES.md)
 - [Upstream provenance, modifications, and license obligations](docs/fork-to-native/UPSTREAM.md)
 - [Migration and acceptance milestones](docs/fork-to-native/ROADMAP.md)
 - [Security baseline and release restrictions](docs/fork-to-native/SECURITY.md)
