@@ -2,9 +2,9 @@ module github.com/netbirdio/netbird
 
 go 1.26.0
 
-// Pin the toolchain to a patch release >= go1.26.2
+// Pin the default toolchain to a security-patched Go 1.26 release
 // See https://go.dev/issue/77875.
-toolchain go1.26.7
+toolchain go1.26.9
 
 require (
 	cunicu.li/go-rosenpass v0.5.42
