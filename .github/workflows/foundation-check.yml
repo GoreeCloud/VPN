@@ -12,4 +12,17 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Verify provenance, notices and workflow isolation
         run: bash scripts/check-ftn-baseline.sh
+  focused-go-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: '1.27.0'
+          cache: false
+      - name: Validate portable Go primitives and IP prefix encoding
+        env:
+          GOTOOLCHAIN: local
+        run: go test -count=1 ./base62 ./monotime ./shared/netiputil
 

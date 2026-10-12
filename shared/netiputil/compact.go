@@ -16,6 +16,10 @@ import (
 // EncodePrefix encodes a netip.Prefix into compact bytes.
 // The address is always unmapped before encoding.
 func EncodePrefix(p netip.Prefix) ([]byte, error) {
+	if !p.IsValid() {
+		return nil, fmt.Errorf("invalid IP prefix")
+	}
+
 	addr := p.Addr().Unmap()
 	bits := p.Bits()
 	if addr.Is4() && bits > 32 {

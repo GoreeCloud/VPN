@@ -8,6 +8,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEncodePrefixRejectsInvalidInput(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix netip.Prefix
+	}{
+		{name: "zero value", prefix: netip.Prefix{}},
+		{name: "invalid address", prefix: netip.PrefixFrom(netip.Addr{}, 0)},
+		{name: "negative IPv4 bits", prefix: netip.PrefixFrom(netip.MustParseAddr("10.0.0.1"), -1)},
+		{name: "IPv4 bits above maximum", prefix: netip.PrefixFrom(netip.MustParseAddr("10.0.0.1"), 33)},
+		{name: "IPv6 bits above maximum", prefix: netip.PrefixFrom(netip.MustParseAddr("fd00::1"), 129)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded, err := EncodePrefix(tt.prefix)
+			require.Error(t, err)
+			assert.Nil(t, encoded, "invalid input must not serialize to a malformed wire value")
+		})
+	}
+}
+
 func TestEncodeDecodePrefix(t *testing.T) {
 	tests := []struct {
 		name   string
