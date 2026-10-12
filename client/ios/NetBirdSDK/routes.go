@@ -1,0 +1,95 @@
+//go:build ios
+
+package NetBirdSDK
+
+// RoutesSelectionInfoCollection made for Java layer to get non default types as collection
+type RoutesSelectionInfoCollection interface {
+	Add(s string) RoutesSelectionInfoCollection
+	Get(i int) string
+	Size() int
+}
+
+type RoutesSelectionDetails struct {
+	All    bool
+	Append bool
+	items  []RoutesSelectionInfo
+}
+
+type RoutesSelectionInfo struct {
+	ID       string
+	Network  string
+	Domains  *DomainDetails
+	Selected bool
+	Status   string
+}
+
+type DomainCollection interface {
+	Add(s DomainInfo) DomainCollection
+	Get(i int) *DomainInfo
+	Size() int
+}
+
+type DomainDetails struct {
+	items []DomainInfo
+}
+
+type DomainInfo struct {
+	Domain      string
+	resolvedIPs ResolvedIPs
+}
+
+func (d *DomainInfo) AddResolvedIP(ipAddress string) {
+	d.resolvedIPs.Add(ipAddress)
+}
+
+func (d *DomainInfo) GetResolvedIPs() *ResolvedIPs {
+	return &d.resolvedIPs
+}
+
+type ResolvedIPs struct {
+	items []string
+}
+
+func (r *ResolvedIPs) Add(ipAddress string) {
+	r.items = append(r.items, ipAddress)
+}
+
+func (r *ResolvedIPs) Get(i int) string {
+	if i < 0 || i >= len(r.items) {
+		return ""
+	}
+	return r.items[i]
+}
+
+func (r *ResolvedIPs) Size() int {
+	return len(r.items)
+}
+
+// Add new PeerInfo to the collection
+func (array RoutesSelectionDetails) Add(s RoutesSelectionInfo) RoutesSelectionDetails {
+	array.items = append(array.items, s)
+	return array
+}
+
+// Get return an element of the collection
+func (array RoutesSelectionDetails) Get(i int) *RoutesSelectionInfo {
+	return &array.items[i]
+}
+
+// Size return with the size of the collection
+func (array RoutesSelectionDetails) Size() int {
+	return len(array.items)
+}
+
+func (array DomainDetails) Add(s DomainInfo) DomainCollection {
+	array.items = append(array.items, s)
+	return array
+}
+
+func (array DomainDetails) Get(i int) *DomainInfo {
+	return &array.items[i]
+}
+
+func (array DomainDetails) Size() int {
+	return len(array.items)
+}
