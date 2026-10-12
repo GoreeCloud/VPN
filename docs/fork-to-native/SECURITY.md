@@ -1,6 +1,6 @@
 # Security baseline and release restrictions
 
-**Source-import development stage only.** Limited Go package tests and static analysis have been introduced, but no full-product compilation, independent vulnerability assessment, VPN runtime verification, packet-level validation, or production acceptance has been completed.
+**Source-import development stage only.** Limited Go package tests, static analysis, and headless source builds of the inherited `signal` and `relay` packages have been introduced. No full-product compilation, independent vulnerability assessment, VPN runtime verification, packet-level validation, or production acceptance has been completed.
 
 ## Non-negotiable release gates
 

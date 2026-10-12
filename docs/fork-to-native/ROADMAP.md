@@ -8,7 +8,8 @@
 - [x] Prevented unaudited upstream workflows from being imported
 - [x] Added scope-limited foundation validation
 - [x] Established initial portable Go unit-test scope (`base62`, `monotime`, `shared/netiputil`) and invalid-IP-prefix regression coverage, validated locally with Go 1.27.0 (full build unverified)
-- [ ] Full Go compile, broader module/test matrix and clean build evidence (requires Go >=1.26.7 or compatible toolchain)
+- [x] Compiled inherited `signal` and `relay` Go entrypoint packages in isolated Go 1.27.0 development container (headless build only, no service started)
+- [ ] Full client/management/combined Go compile, broader module/test matrix and clean build evidence (requires Go >=1.26.7 or compatible toolchain); five-component concurrent build attempt timed out without a verified result
 - [ ] Dependency/license and vulnerability scan with triage
 - [ ] Feature and outbound-network-communications inventories
 

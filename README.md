@@ -31,5 +31,7 @@ Run `bash scripts/check-ftn-baseline.sh` for source/provenance/license guardrail
 
 The `shared/netiputil` serializer now rejects invalid prefixes before serialization; this protection has regression tests for malformed IPv4/IPv6 prefix inputs. The client ACL source-prefix decoder also preserves the encoded subnet masks and `/0` wildcards rather than narrowing policy rules to individual hosts. Run `go test -p 2 -count=1 ./client/internal/acl` to validate that behavior locally; a separate scoped CI job verifies the same ACL package and runs `go vet`.
 
-These checks do **not** replace full Go compilation, runtime VPN/firewall integration tests, independent penetration review, GUI acceptance, privacy validation, or release certification. Do not use this repository as a deployable VPN without completing the required tests and review.
+A separate build-only gate compiles the inherited signal and relay Go entrypoints with `go build -p 2 -buildvcs=false ./signal ./relay`; disabling VCS stamping supports isolated builders without a Git executable. This proves source compilation for those two entrypoints only, not service startup or network operations.
+
+These checks do **not** replace full Go compilation of every component, runtime VPN/firewall integration tests, independent penetration review, GUI acceptance, privacy validation, or release certification. Do not use this repository as a deployable VPN without completing the required tests and review.
 
