@@ -1,0 +1,36 @@
+{{ $projectName := env.Getenv "PROJECT" }}{{ $amdFilePath := env.Getenv "AMD" }}{{ $armFilePath := env.Getenv "ARM" }}
+{{ $amdURL := env.Getenv "AMD_URL" }}{{ $armURL := env.Getenv "ARM_URL" }}
+{{ $amdFile := filepath.Base $amdFilePath }}{{ $armFile := filepath.Base $armFilePath }}{{ $amdFileBytes := file.Read $amdFilePath }}
+{{ $armFileBytes := file.Read $armFilePath }}# Netbird's UI Client Cask Formula
+cask "{{ $projectName }}" do
+  version "{{ env.Getenv "VERSION" }}"
+
+  if Hardware::CPU.intel?
+      url "{{ $amdURL }}"
+      sha256 "{{ crypto.SHA256 $amdFileBytes }}"
+      app "netbird_ui_darwin", target: "Netbird UI.app"
+  else
+      url "{{ $armURL }}"
+      sha256 "{{ crypto.SHA256 $armFileBytes }}"
+      app "netbird_ui_darwin", target: "Netbird UI.app"
+  end
+
+  depends_on formula: "netbird"
+
+  postflight_steps do
+    set_permissions ["Netbird UI.app/installer.sh", "Netbird UI.app/uninstaller.sh"], "0755",
+                    base: :appdir, recursive: false
+    run "Netbird UI.app/installer.sh", args: ["#{version}"], base: :appdir, sudo: true
+  end
+
+  uninstall_preflight_steps do
+    run "/bin/launchctl", args: ["bootout", "system/netbird"], sudo: true, must_succeed: false
+    run "/bin/launchctl", args: ["unload", "/Library/LaunchDaemons/netbird.plist"],
+        sudo: true, must_succeed: false
+    remove "/Library/LaunchDaemons/netbird.plist", sudo: true
+  end
+
+  name "Netbird UI"
+  desc "Netbird UI Client"
+  homepage "https://www.netbird.io/"
+end

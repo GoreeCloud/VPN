@@ -1,0 +1,7 @@
+package internal
+
+import "github.com/netbirdio/netbird/client/internal/stdnet"
+
+func (e *Engine) newStdNet() *stdnet.Net {
+	return stdnet.NewNetWithDiscover(e.clientCtx, e.mobileDep.IFaceDiscover, e.config.IFaceBlackList, e.wgDetector)
+}

@@ -1,0 +1,499 @@
+package activity
+
+import "maps"
+
+// Activity that triggered an Event
+type Activity int
+
+// Code is an activity string representation
+type Code struct {
+	Message string
+	Code    string
+}
+
+// Existing consts must not be changed, as this will break the compatibility with the existing data
+const (
+	// PeerAddedByUser indicates that a user added a new peer to the system
+	PeerAddedByUser Activity = 0
+	// PeerAddedWithSetupKey indicates that a new peer joined the system using a setup key
+	PeerAddedWithSetupKey Activity = 1
+	// UserJoined indicates that a new user joined the account
+	UserJoined Activity = 2
+	// UserInvited indicates that a new user was invited to join the account
+	UserInvited Activity = 3
+	// AccountCreated indicates that a new account has been created
+	AccountCreated Activity = 4
+	// PeerRemovedByUser indicates that a user removed a peer from the system
+	PeerRemovedByUser Activity = 5
+	// RuleAdded indicates that a user added a new rule
+	RuleAdded Activity = 6
+	// RuleUpdated indicates that a user updated a rule
+	RuleUpdated Activity = 7
+	// RuleRemoved indicates that a user removed a rule
+	RuleRemoved Activity = 8
+	// PolicyAdded indicates that a user added a new policy
+	PolicyAdded Activity = 9
+	// PolicyUpdated indicates that a user updated a policy
+	PolicyUpdated Activity = 10
+	// PolicyRemoved indicates that a user removed a policy
+	PolicyRemoved Activity = 11
+	// SetupKeyCreated indicates that a user created a new setup key
+	SetupKeyCreated Activity = 12
+	// SetupKeyUpdated indicates that a user updated a setup key
+	SetupKeyUpdated Activity = 13
+	// SetupKeyRevoked indicates that a user revoked a setup key
+	SetupKeyRevoked Activity = 14
+	// SetupKeyOverused indicates that setup key usage exhausted
+	SetupKeyOverused Activity = 15
+	// GroupCreated indicates that a user created a group
+	GroupCreated Activity = 16
+	// GroupUpdated indicates that a user updated a group
+	GroupUpdated Activity = 17
+	// GroupAddedToPeer indicates that a user added group to a peer
+	GroupAddedToPeer Activity = 18
+	// GroupRemovedFromPeer indicates that a user removed peer group
+	GroupRemovedFromPeer Activity = 19
+	// GroupAddedToUser indicates that a user added group to a user
+	GroupAddedToUser Activity = 20
+	// GroupRemovedFromUser indicates that a user removed a group from a user
+	GroupRemovedFromUser Activity = 21
+	// UserRoleUpdated indicates that a user changed the role of a user
+	UserRoleUpdated Activity = 22
+	// GroupAddedToSetupKey indicates that a user added group to a setup key
+	GroupAddedToSetupKey Activity = 23
+	// GroupRemovedFromSetupKey indicates that a user removed a group from a setup key
+	GroupRemovedFromSetupKey Activity = 24
+	// GroupAddedToDisabledManagementGroups indicates that a user added a group to the DNS setting Disabled management groups
+	GroupAddedToDisabledManagementGroups Activity = 25
+	// GroupRemovedFromDisabledManagementGroups indicates that a user removed a group from the DNS setting Disabled management groups
+	GroupRemovedFromDisabledManagementGroups Activity = 26
+	// RouteCreated indicates that a user created a route
+	RouteCreated Activity = 27
+	// RouteRemoved indicates that a user deleted a route
+	RouteRemoved Activity = 28
+	// RouteUpdated indicates that a user updated a route
+	RouteUpdated Activity = 29
+	// PeerSSHEnabled indicates that a user enabled SSH server on a peer
+	PeerSSHEnabled Activity = 30
+	// PeerSSHDisabled indicates that a user disabled SSH server on a peer
+	PeerSSHDisabled Activity = 31
+	// PeerRenamed indicates that a user renamed a peer
+	PeerRenamed Activity = 32
+	// PeerLoginExpirationEnabled indicates that a user enabled login expiration of a peer
+	PeerLoginExpirationEnabled Activity = 33
+	// PeerLoginExpirationDisabled indicates that a user disabled login expiration of a peer
+	PeerLoginExpirationDisabled Activity = 34
+	// NameserverGroupCreated indicates that a user created a nameservers group
+	NameserverGroupCreated Activity = 35
+	// NameserverGroupDeleted indicates that a user deleted a nameservers group
+	NameserverGroupDeleted Activity = 36
+	// NameserverGroupUpdated indicates that a user updated a nameservers group
+	NameserverGroupUpdated Activity = 37
+	// AccountPeerLoginExpirationEnabled indicates that a user enabled peer login expiration for the account
+	AccountPeerLoginExpirationEnabled Activity = 38
+	// AccountPeerLoginExpirationDisabled indicates that a user disabled peer login expiration for the account
+	AccountPeerLoginExpirationDisabled Activity = 39
+	// AccountPeerLoginExpirationDurationUpdated indicates that a user updated peer login expiration duration for the account
+	AccountPeerLoginExpirationDurationUpdated Activity = 40
+	// PersonalAccessTokenCreated indicates that a user created a personal access token
+	PersonalAccessTokenCreated Activity = 41
+	// PersonalAccessTokenDeleted indicates that a user deleted a personal access token
+	PersonalAccessTokenDeleted Activity = 42
+	// ServiceUserCreated indicates that a user created a service user
+	ServiceUserCreated Activity = 43
+	// ServiceUserDeleted indicates that a user deleted a service user
+	ServiceUserDeleted Activity = 44
+	// UserBlocked indicates that a user blocked another user
+	UserBlocked Activity = 45
+	// UserUnblocked indicates that a user unblocked another user
+	UserUnblocked Activity = 46
+	// UserDeleted indicates that a user deleted another user
+	UserDeleted Activity = 47
+	// GroupDeleted indicates that a user deleted group
+	GroupDeleted Activity = 48
+	// UserLoggedInPeer indicates that user logged in their peer with an interactive SSO login
+	UserLoggedInPeer Activity = 49
+	// PeerLoginExpired indicates that the user peer login has been expired and peer disconnected
+	PeerLoginExpired Activity = 50
+	// DashboardLogin indicates that the user logged in to the dashboard
+	DashboardLogin Activity = 51
+	// IntegrationCreated indicates that the user created an integration
+	IntegrationCreated Activity = 52
+	// IntegrationUpdated indicates that the user updated an integration
+	IntegrationUpdated Activity = 53
+	// IntegrationDeleted indicates that the user deleted an integration
+	IntegrationDeleted Activity = 54
+	// AccountPeerApprovalEnabled indicates that the user enabled peer approval for the account
+	AccountPeerApprovalEnabled Activity = 55
+	// AccountPeerApprovalDisabled indicates that the user disabled peer approval for the account
+	AccountPeerApprovalDisabled Activity = 56
+	// PeerApproved indicates that the peer has been approved
+	PeerApproved Activity = 57
+	// PeerApprovalRevoked indicates that the peer approval has been revoked
+	PeerApprovalRevoked Activity = 58
+	// TransferredOwnerRole indicates that the user transferred the owner role of the account
+	TransferredOwnerRole Activity = 59
+	// PostureCheckCreated indicates that the user created a posture check
+	PostureCheckCreated Activity = 60
+	// PostureCheckUpdated indicates that the user updated a posture check
+	PostureCheckUpdated Activity = 61
+	// PostureCheckDeleted indicates that the user deleted a posture check
+	PostureCheckDeleted Activity = 62
+
+	PeerInactivityExpirationEnabled  Activity = 63
+	PeerInactivityExpirationDisabled Activity = 64
+
+	AccountPeerInactivityExpirationEnabled         Activity = 65
+	AccountPeerInactivityExpirationDisabled        Activity = 66
+	AccountPeerInactivityExpirationDurationUpdated Activity = 67
+
+	SetupKeyDeleted Activity = 68
+
+	UserGroupPropagationEnabled  Activity = 69
+	UserGroupPropagationDisabled Activity = 70
+
+	AccountRoutingPeerDNSResolutionEnabled  Activity = 71
+	AccountRoutingPeerDNSResolutionDisabled Activity = 72
+
+	NetworkCreated Activity = 73
+	NetworkUpdated Activity = 74
+	NetworkDeleted Activity = 75
+
+	NetworkResourceCreated Activity = 76
+	NetworkResourceUpdated Activity = 77
+	NetworkResourceDeleted Activity = 78
+
+	NetworkRouterCreated Activity = 79
+	NetworkRouterUpdated Activity = 80
+	NetworkRouterDeleted Activity = 81
+
+	ResourceAddedToGroup     Activity = 82
+	ResourceRemovedFromGroup Activity = 83
+
+	AccountDNSDomainUpdated Activity = 84
+
+	AccountLazyConnectionEnabled  Activity = 85
+	AccountLazyConnectionDisabled Activity = 86
+
+	AccountNetworkRangeUpdated Activity = 87
+	PeerIPUpdated              Activity = 88
+	UserApproved               Activity = 89
+	UserRejected               Activity = 90
+	UserCreated                Activity = 91
+
+	AccountAutoUpdateVersionUpdated Activity = 92
+
+	IdentityProviderCreated Activity = 93
+	IdentityProviderUpdated Activity = 94
+	IdentityProviderDeleted Activity = 95
+
+	DNSZoneCreated Activity = 96
+	DNSZoneUpdated Activity = 97
+	DNSZoneDeleted Activity = 98
+
+	DNSRecordCreated Activity = 99
+	DNSRecordUpdated Activity = 100
+	DNSRecordDeleted Activity = 101
+
+	JobCreatedByUser Activity = 102
+
+	UserPasswordChanged Activity = 103
+
+	UserInviteLinkCreated     Activity = 104
+	UserInviteLinkAccepted    Activity = 105
+	UserInviteLinkRegenerated Activity = 106
+	UserInviteLinkDeleted     Activity = 107
+
+	ServiceCreated Activity = 108
+	ServiceUpdated Activity = 109
+	ServiceDeleted Activity = 110
+
+	// PeerServiceExposed indicates that a peer exposed a service via the reverse proxy
+	PeerServiceExposed Activity = 111
+	// PeerServiceUnexposed indicates that a peer-exposed service was removed
+	PeerServiceUnexposed Activity = 112
+	// PeerServiceExposeExpired indicates that a peer-exposed service was removed due to TTL expiration
+	PeerServiceExposeExpired Activity = 113
+
+	// AccountPeerExposeEnabled indicates that a user enabled peer expose for the account
+	AccountPeerExposeEnabled Activity = 114
+	// AccountPeerExposeDisabled indicates that a user disabled peer expose for the account
+	AccountPeerExposeDisabled Activity = 115
+
+	// AccountAutoUpdateAlwaysEnabled indicates that a user enabled always auto-update for the account
+	AccountAutoUpdateAlwaysEnabled Activity = 116
+	// AccountAutoUpdateAlwaysDisabled indicates that a user disabled always auto-update for the account
+	AccountAutoUpdateAlwaysDisabled Activity = 117
+
+	// DomainAdded indicates that a user added a custom domain
+	DomainAdded Activity = 118
+	// DomainDeleted indicates that a user deleted a custom domain
+	DomainDeleted Activity = 119
+	// DomainValidated indicates that a custom domain was validated
+	DomainValidated Activity = 120
+	// AccountIPv6Enabled indicates that a user enabled IPv6 overlay for the account
+	AccountIPv6Enabled Activity = 121
+	// AccountIPv6Disabled indicates that a user disabled IPv6 overlay for the account
+	AccountIPv6Disabled Activity = 122
+
+	// AccountLocalMfaEnabled indicates that a user enabled TOTP MFA for local users
+	AccountLocalMfaEnabled Activity = 123
+	// AccountLocalMfaDisabled indicates that a user disabled TOTP MFA for local users
+	AccountLocalMfaDisabled Activity = 124
+	// UserExtendedPeerSession indicates that a user refreshed their peer's
+	// SSO session deadline via ExtendAuthSession without re-establishing the
+	// tunnel. Distinct from UserLoggedInPeer (full interactive login).
+	UserExtendedPeerSession Activity = 125
+
+	// AgentNetworkProviderCreated indicates that a user created an Agent Network provider
+	AgentNetworkProviderCreated Activity = 126
+	// AgentNetworkProviderUpdated indicates that a user updated an Agent Network provider
+	AgentNetworkProviderUpdated Activity = 127
+	// AgentNetworkProviderDeleted indicates that a user deleted an Agent Network provider
+	AgentNetworkProviderDeleted Activity = 128
+
+	// AgentNetworkPolicyCreated indicates that a user created an Agent Network policy
+	AgentNetworkPolicyCreated Activity = 129
+	// AgentNetworkPolicyUpdated indicates that a user updated an Agent Network policy
+	AgentNetworkPolicyUpdated Activity = 130
+	// AgentNetworkPolicyDeleted indicates that a user deleted an Agent Network policy
+	AgentNetworkPolicyDeleted Activity = 131
+
+	// AgentNetworkGuardrailCreated indicates that a user created an Agent Network guardrail
+	AgentNetworkGuardrailCreated Activity = 132
+	// AgentNetworkGuardrailUpdated indicates that a user updated an Agent Network guardrail
+	AgentNetworkGuardrailUpdated Activity = 133
+	// AgentNetworkGuardrailDeleted indicates that a user deleted an Agent Network guardrail
+	AgentNetworkGuardrailDeleted Activity = 134
+
+	// AgentNetworkBudgetRuleCreated indicates that a user created an Agent Network budget rule
+	AgentNetworkBudgetRuleCreated Activity = 135
+	// AgentNetworkBudgetRuleUpdated indicates that a user updated an Agent Network budget rule
+	AgentNetworkBudgetRuleUpdated Activity = 136
+	// AgentNetworkBudgetRuleDeleted indicates that a user deleted an Agent Network budget rule
+	AgentNetworkBudgetRuleDeleted Activity = 137
+
+	// AgentNetworkSettingsUpdated indicates that a user updated Agent Network account settings
+	AgentNetworkSettingsUpdated Activity = 139
+
+	// AccountMetricsPushEnabled indicates that a user enabled metrics push for the account
+	AccountMetricsPushEnabled Activity = 140
+	// AccountMetricsPushDisabled indicates that a user disabled metrics push for the account
+	AccountMetricsPushDisabled Activity = 141
+
+	// AgentNetworkSettingsDeleted indicates that a user deleted the Agent Network account settings, releasing the endpoint
+	AgentNetworkSettingsDeleted Activity = 142
+
+	// CustomDomainValidationExpired indicates that an unvalidated domain registration expired.
+	CustomDomainValidationExpired Activity = 143
+
+	// AccountPeerHostnameCollisionRejectionEnabled indicates that a user enabled rejecting peer hostname collisions for the account
+	AccountPeerHostnameCollisionRejectionEnabled Activity = 144
+	// AccountPeerHostnameCollisionRejectionDisabled indicates that a user disabled rejecting peer hostname collisions for the account
+	AccountPeerHostnameCollisionRejectionDisabled Activity = 145
+
+	AccountDeleted Activity = 99999
+)
+
+var activityMap = map[Activity]Code{
+	PeerAddedByUser:                          {"Peer added", "peer.user.add"},
+	PeerAddedWithSetupKey:                    {"Peer added", "peer.setupkey.add"},
+	UserJoined:                               {"User joined", "user.join"},
+	UserInvited:                              {"User invited", "user.invite"},
+	AccountCreated:                           {"Account created", "account.create"},
+	AccountDeleted:                           {"Account deleted", "account.delete"},
+	PeerRemovedByUser:                        {"Peer deleted", "user.peer.delete"},
+	RuleAdded:                                {"Rule added", "rule.add"},
+	RuleUpdated:                              {"Rule updated", "rule.update"},
+	RuleRemoved:                              {"Rule deleted", "rule.delete"},
+	PolicyAdded:                              {"Policy added", "policy.add"},
+	PolicyUpdated:                            {"Policy updated", "policy.update"},
+	PolicyRemoved:                            {"Policy deleted", "policy.delete"},
+	SetupKeyCreated:                          {"Setup key created", "setupkey.add"},
+	SetupKeyUpdated:                          {"Setup key updated", "setupkey.update"},
+	SetupKeyRevoked:                          {"Setup key revoked", "setupkey.revoke"},
+	SetupKeyOverused:                         {"Setup key overused", "setupkey.overuse"},
+	GroupCreated:                             {"Group created", "group.add"},
+	GroupUpdated:                             {"Group updated", "group.update"},
+	GroupAddedToPeer:                         {"Group added to peer", "peer.group.add"},
+	GroupRemovedFromPeer:                     {"Group removed from peer", "peer.group.delete"},
+	GroupAddedToUser:                         {"Group added to user", "user.group.add"},
+	GroupRemovedFromUser:                     {"Group removed from user", "user.group.delete"},
+	UserRoleUpdated:                          {"User role updated", "user.role.update"},
+	GroupAddedToSetupKey:                     {"Group added to setup key", "setupkey.group.add"},
+	GroupRemovedFromSetupKey:                 {"Group removed from user setup key", "setupkey.group.delete"},
+	GroupAddedToDisabledManagementGroups:     {"Group added to disabled management DNS setting", "dns.setting.disabled.management.group.add"},
+	GroupRemovedFromDisabledManagementGroups: {"Group removed from disabled management DNS setting", "dns.setting.disabled.management.group.delete"},
+	RouteCreated:                             {"Route created", "route.add"},
+	RouteRemoved:                             {"Route deleted", "route.delete"},
+	RouteUpdated:                             {"Route updated", "route.update"},
+	PeerSSHEnabled:                           {"Peer SSH server enabled", "peer.ssh.enable"},
+	PeerSSHDisabled:                          {"Peer SSH server disabled", "peer.ssh.disable"},
+	PeerRenamed:                              {"Peer renamed", "peer.rename"},
+	PeerLoginExpirationEnabled:               {"Peer login expiration enabled", "peer.login.expiration.enable"},
+	PeerLoginExpirationDisabled:              {"Peer login expiration disabled", "peer.login.expiration.disable"},
+	NameserverGroupCreated:                   {"Nameserver group created", "nameserver.group.add"},
+	NameserverGroupDeleted:                   {"Nameserver group deleted", "nameserver.group.delete"},
+	NameserverGroupUpdated:                   {"Nameserver group updated", "nameserver.group.update"},
+	AccountPeerLoginExpirationDurationUpdated: {"Account peer login expiration duration updated", "account.setting.peer.login.expiration.update"},
+	AccountPeerLoginExpirationEnabled:         {"Account peer login expiration enabled", "account.setting.peer.login.expiration.enable"},
+	AccountPeerLoginExpirationDisabled:        {"Account peer login expiration disabled", "account.setting.peer.login.expiration.disable"},
+	PersonalAccessTokenCreated:                {"Personal access token created", "personal.access.token.create"},
+	PersonalAccessTokenDeleted:                {"Personal access token deleted", "personal.access.token.delete"},
+	ServiceUserCreated:                        {"Service user created", "service.user.create"},
+	ServiceUserDeleted:                        {"Service user deleted", "service.user.delete"},
+	UserBlocked:                               {"User blocked", "user.block"},
+	UserUnblocked:                             {"User unblocked", "user.unblock"},
+	UserDeleted:                               {"User deleted", "user.delete"},
+	GroupDeleted:                              {"Group deleted", "group.delete"},
+	UserLoggedInPeer:                          {"User logged in peer", "user.peer.login"},
+	PeerLoginExpired:                          {"Peer login expired", "peer.login.expire"},
+	DashboardLogin:                            {"Dashboard login", "dashboard.login"},
+	IntegrationCreated:                        {"Integration created", "integration.create"},
+	IntegrationUpdated:                        {"Integration updated", "integration.update"},
+	IntegrationDeleted:                        {"Integration deleted", "integration.delete"},
+	AccountPeerApprovalEnabled:                {"Account peer approval enabled", "account.setting.peer.approval.enable"},
+	AccountPeerApprovalDisabled:               {"Account peer approval disabled", "account.setting.peer.approval.disable"},
+	PeerApproved:                              {"Peer approved", "peer.approve"},
+	PeerApprovalRevoked:                       {"Peer approval revoked", "peer.approval.revoke"},
+	TransferredOwnerRole:                      {"Transferred owner role", "transferred.owner.role"},
+	PostureCheckCreated:                       {"Posture check created", "posture.check.create"},
+	PostureCheckUpdated:                       {"Posture check updated", "posture.check.update"},
+	PostureCheckDeleted:                       {"Posture check deleted", "posture.check.delete"},
+
+	PeerInactivityExpirationEnabled:  {"Peer inactivity expiration enabled", "peer.inactivity.expiration.enable"},
+	PeerInactivityExpirationDisabled: {"Peer inactivity expiration disabled", "peer.inactivity.expiration.disable"},
+
+	AccountPeerInactivityExpirationEnabled:         {"Account peer inactivity expiration enabled", "account.peer.inactivity.expiration.enable"},
+	AccountPeerInactivityExpirationDisabled:        {"Account peer inactivity expiration disabled", "account.peer.inactivity.expiration.disable"},
+	AccountPeerInactivityExpirationDurationUpdated: {"Account peer inactivity expiration duration updated", "account.peer.inactivity.expiration.update"},
+	SetupKeyDeleted: {"Setup key deleted", "setupkey.delete"},
+
+	UserGroupPropagationEnabled:  {"User group propagation enabled", "account.setting.group.propagation.enable"},
+	UserGroupPropagationDisabled: {"User group propagation disabled", "account.setting.group.propagation.disable"},
+
+	AccountRoutingPeerDNSResolutionEnabled:  {"Account routing peer DNS resolution enabled", "account.setting.routing.peer.dns.resolution.enable"},
+	AccountRoutingPeerDNSResolutionDisabled: {"Account routing peer DNS resolution disabled", "account.setting.routing.peer.dns.resolution.disable"},
+
+	NetworkCreated: {"Network created", "network.create"},
+	NetworkUpdated: {"Network updated", "network.update"},
+	NetworkDeleted: {"Network deleted", "network.delete"},
+
+	NetworkResourceCreated: {"Network resource created", "network.resource.create"},
+	NetworkResourceUpdated: {"Network resource updated", "network.resource.update"},
+	NetworkResourceDeleted: {"Network resource deleted", "network.resource.delete"},
+
+	NetworkRouterCreated: {"Network router created", "network.router.create"},
+	NetworkRouterUpdated: {"Network router updated", "network.router.update"},
+	NetworkRouterDeleted: {"Network router deleted", "network.router.delete"},
+
+	ResourceAddedToGroup:     {"Resource added to group", "resource.group.add"},
+	ResourceRemovedFromGroup: {"Resource removed from group", "resource.group.delete"},
+
+	AccountDNSDomainUpdated: {"Account DNS domain updated", "account.dns.domain.update"},
+
+	AccountLazyConnectionEnabled:  {"Account lazy connection enabled", "account.setting.lazy.connection.enable"},
+	AccountLazyConnectionDisabled: {"Account lazy connection disabled", "account.setting.lazy.connection.disable"},
+
+	AccountNetworkRangeUpdated: {"Account network range updated", "account.network.range.update"},
+
+	PeerIPUpdated: {"Peer IP updated", "peer.ip.update"},
+
+	UserApproved: {"User approved", "user.approve"},
+	UserRejected: {"User rejected", "user.reject"},
+	UserCreated:  {"User created", "user.create"},
+
+	AccountAutoUpdateVersionUpdated: {"Account AutoUpdate Version updated", "account.settings.auto.version.update"},
+	AccountAutoUpdateAlwaysEnabled:  {"Account auto-update always enabled", "account.setting.auto.update.always.enable"},
+	AccountAutoUpdateAlwaysDisabled: {"Account auto-update always disabled", "account.setting.auto.update.always.disable"},
+
+	AccountIPv6Enabled:  {"Account IPv6 overlay enabled", "account.setting.ipv6.enable"},
+	AccountIPv6Disabled: {"Account IPv6 overlay disabled", "account.setting.ipv6.disable"},
+
+	IdentityProviderCreated: {"Identity provider created", "identityprovider.create"},
+	IdentityProviderUpdated: {"Identity provider updated", "identityprovider.update"},
+	IdentityProviderDeleted: {"Identity provider deleted", "identityprovider.delete"},
+
+	DNSZoneCreated: {"DNS zone created", "dns.zone.create"},
+	DNSZoneUpdated: {"DNS zone updated", "dns.zone.update"},
+	DNSZoneDeleted: {"DNS zone deleted", "dns.zone.delete"},
+
+	DNSRecordCreated: {"DNS zone record created", "dns.zone.record.create"},
+	DNSRecordUpdated: {"DNS zone record updated", "dns.zone.record.update"},
+	DNSRecordDeleted: {"DNS zone record deleted", "dns.zone.record.delete"},
+
+	JobCreatedByUser: {"Create Job for peer", "peer.job.create"},
+
+	UserPasswordChanged: {"User password changed", "user.password.change"},
+
+	UserInviteLinkCreated:     {"User invite link created", "user.invite.link.create"},
+	UserInviteLinkAccepted:    {"User invite link accepted", "user.invite.link.accept"},
+	UserInviteLinkRegenerated: {"User invite link regenerated", "user.invite.link.regenerate"},
+	UserInviteLinkDeleted:     {"User invite link deleted", "user.invite.link.delete"},
+
+	ServiceCreated: {"Service created", "service.create"},
+	ServiceUpdated: {"Service updated", "service.update"},
+	ServiceDeleted: {"Service deleted", "service.delete"},
+
+	PeerServiceExposed:       {"Peer exposed service", "service.peer.expose"},
+	PeerServiceUnexposed:     {"Peer unexposed service", "service.peer.unexpose"},
+	PeerServiceExposeExpired: {"Peer exposed service expired", "service.peer.expose.expire"},
+
+	AccountPeerExposeEnabled:  {"Account peer expose enabled", "account.setting.peer.expose.enable"},
+	AccountPeerExposeDisabled: {"Account peer expose disabled", "account.setting.peer.expose.disable"},
+
+	AccountLocalMfaEnabled:  {"Account local MFA enabled", "account.setting.local.mfa.enable"},
+	AccountLocalMfaDisabled: {"Account local MFA disabled", "account.setting.local.mfa.disable"},
+
+	UserExtendedPeerSession: {"User extended peer session", "user.peer.session.extend"},
+
+	AgentNetworkProviderCreated: {"Agent Network provider created", "agent_network.provider.create"},
+	AgentNetworkProviderUpdated: {"Agent Network provider updated", "agent_network.provider.update"},
+	AgentNetworkProviderDeleted: {"Agent Network provider deleted", "agent_network.provider.delete"},
+
+	AgentNetworkPolicyCreated: {"Agent Network policy created", "agent_network.policy.create"},
+	AgentNetworkPolicyUpdated: {"Agent Network policy updated", "agent_network.policy.update"},
+	AgentNetworkPolicyDeleted: {"Agent Network policy deleted", "agent_network.policy.delete"},
+
+	AgentNetworkGuardrailCreated: {"Agent Network guardrail created", "agent_network.guardrail.create"},
+	AgentNetworkGuardrailUpdated: {"Agent Network guardrail updated", "agent_network.guardrail.update"},
+	AgentNetworkGuardrailDeleted: {"Agent Network guardrail deleted", "agent_network.guardrail.delete"},
+
+	AgentNetworkBudgetRuleCreated: {"Agent Network budget rule created", "agent_network.budget_rule.create"},
+	AgentNetworkBudgetRuleUpdated: {"Agent Network budget rule updated", "agent_network.budget_rule.update"},
+	AgentNetworkBudgetRuleDeleted: {"Agent Network budget rule deleted", "agent_network.budget_rule.delete"},
+
+	AgentNetworkSettingsUpdated: {"Agent Network settings updated", "agent_network.settings.update"},
+	AgentNetworkSettingsDeleted: {"Agent Network settings deleted", "agent_network.settings.delete"},
+
+	AccountMetricsPushEnabled:                     {"Account metrics push enabled", "account.setting.metrics.push.enable"},
+	AccountMetricsPushDisabled:                    {"Account metrics push disabled", "account.setting.metrics.push.disable"},
+	AccountPeerHostnameCollisionRejectionEnabled:  {"Account peer hostname collision rejection enabled", "account.setting.peer.hostname.collision.rejection.enable"},
+	AccountPeerHostnameCollisionRejectionDisabled: {"Account peer hostname collision rejection disabled", "account.setting.peer.hostname.collision.rejection.disable"},
+
+	DomainAdded:                   {"Domain added", "domain.add"},
+	DomainDeleted:                 {"Domain deleted", "domain.delete"},
+	DomainValidated:               {"Domain validated", "domain.validate"},
+	CustomDomainValidationExpired: {"Unvalidated domain registration expired", "domain.validation.expire"},
+}
+
+// StringCode returns a string code of the activity
+func (a Activity) StringCode() string {
+	if code, ok := activityMap[a]; ok {
+		return code.Code
+	}
+	return "UNKNOWN_ACTIVITY"
+}
+
+// Message returns a string representation of an activity
+func (a Activity) Message() string {
+	if code, ok := activityMap[a]; ok {
+		return code.Message
+	}
+	return "UNKNOWN_ACTIVITY"
+}
+
+// RegisterActivityMap adds new codes to the activity map
+func RegisterActivityMap(codes map[Activity]Code) {
+	maps.Copy(activityMap, codes)
+}

@@ -1,0 +1,1644 @@
+package internal
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/netip"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	wgdevice "golang.zx2c4.com/wireguard/device"
+	"golang.zx2c4.com/wireguard/tun/netstack"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+
+	"github.com/netbirdio/netbird/client/internal/stdnet"
+
+	"github.com/netbirdio/netbird/client/iface"
+	"github.com/netbirdio/netbird/client/iface/configurer"
+	"github.com/netbirdio/netbird/client/iface/device"
+	"github.com/netbirdio/netbird/client/iface/udpmux"
+	"github.com/netbirdio/netbird/client/iface/wgaddr"
+	"github.com/netbirdio/netbird/client/iface/wgproxy"
+	"github.com/netbirdio/netbird/client/internal/dns"
+	"github.com/netbirdio/netbird/client/internal/peer"
+	"github.com/netbirdio/netbird/client/internal/peer/guard"
+	icemaker "github.com/netbirdio/netbird/client/internal/peer/ice"
+	"github.com/netbirdio/netbird/client/internal/profilemanager"
+	"github.com/netbirdio/netbird/client/internal/routemanager"
+	"github.com/netbirdio/netbird/client/system"
+	nbdns "github.com/netbirdio/netbird/dns"
+	"github.com/netbirdio/netbird/monotime"
+	"github.com/netbirdio/netbird/route"
+	mgmt "github.com/netbirdio/netbird/shared/management/client"
+	mgmtProto "github.com/netbirdio/netbird/shared/management/proto"
+	"github.com/netbirdio/netbird/shared/netiputil"
+	relayClient "github.com/netbirdio/netbird/shared/relay/client"
+	signal "github.com/netbirdio/netbird/shared/signal/client"
+	"github.com/netbirdio/netbird/util"
+)
+
+type MockWGIface struct {
+	CreateFunc                 func() error
+	CreateOnAndroidFunc        func(routeRange []string, ip string, domains []string) error
+	IsUserspaceBindFunc        func() bool
+	NameFunc                   func() string
+	AddressFunc                func() wgaddr.Address
+	ToInterfaceFunc            func() *net.Interface
+	UpFunc                     func() (*udpmux.UniversalUDPMuxDefault, error)
+	UpdateAddrFunc             func(newAddr wgaddr.Address) error
+	UpdatePeerFunc             func(peerKey string, allowedIps []netip.Prefix, keepAlive time.Duration, endpoint *net.UDPAddr, preSharedKey *wgtypes.Key) error
+	RemovePeerFunc             func(peerKey string) error
+	AddAllowedIPFunc           func(peerKey string, allowedIP netip.Prefix) error
+	RemoveAllowedIPFunc        func(peerKey string, allowedIP netip.Prefix) error
+	CloseFunc                  func() error
+	SetFilterFunc              func(filter device.PacketFilter) error
+	GetFilterFunc              func() device.PacketFilter
+	GetDeviceFunc              func() *device.FilteredDevice
+	GetWGDeviceFunc            func() *wgdevice.Device
+	GetStatsFunc               func() (map[string]configurer.WGStats, error)
+	GetInterfaceGUIDStringFunc func() (string, error)
+	GetProxyFunc               func() wgproxy.Proxy
+	GetNetFunc                 func() *netstack.Net
+	LastActivitiesFunc         func() map[string]monotime.Time
+}
+
+func (m *MockWGIface) RenewTun(_ int) error {
+	return nil
+}
+
+func (m *MockWGIface) RemoveEndpointAddress(_ string) error {
+	return nil
+}
+
+func (m *MockWGIface) FullStats() (*configurer.Stats, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *MockWGIface) GetInterfaceGUIDString() (string, error) {
+	return m.GetInterfaceGUIDStringFunc()
+}
+
+func (m *MockWGIface) Create() error {
+	return m.CreateFunc()
+}
+
+func (m *MockWGIface) CreateOnAndroid(routeRange []string, ip string, domains []string) error {
+	return m.CreateOnAndroidFunc(routeRange, ip, domains)
+}
+
+func (m *MockWGIface) IsUserspaceBind() bool {
+	return m.IsUserspaceBindFunc()
+}
+
+func (m *MockWGIface) Name() string {
+	return m.NameFunc()
+}
+
+func (m *MockWGIface) Address() wgaddr.Address {
+	return m.AddressFunc()
+}
+
+func (m *MockWGIface) ToInterface() *net.Interface {
+	return m.ToInterfaceFunc()
+}
+
+func (m *MockWGIface) Up() (*udpmux.UniversalUDPMuxDefault, error) {
+	return m.UpFunc()
+}
+
+func (m *MockWGIface) UpdateAddr(newAddr wgaddr.Address) error {
+	return m.UpdateAddrFunc(newAddr)
+}
+
+func (m *MockWGIface) UpdatePeer(peerKey string, allowedIps []netip.Prefix, keepAlive time.Duration, endpoint *net.UDPAddr, preSharedKey *wgtypes.Key) error {
+	return m.UpdatePeerFunc(peerKey, allowedIps, keepAlive, endpoint, preSharedKey)
+}
+
+func (m *MockWGIface) RemovePeer(peerKey string) error {
+	return m.RemovePeerFunc(peerKey)
+}
+
+func (m *MockWGIface) AddAllowedIP(peerKey string, allowedIP netip.Prefix) error {
+	return m.AddAllowedIPFunc(peerKey, allowedIP)
+}
+
+func (m *MockWGIface) RemoveAllowedIP(peerKey string, allowedIP netip.Prefix) error {
+	return m.RemoveAllowedIPFunc(peerKey, allowedIP)
+}
+
+func (m *MockWGIface) Close() error {
+	return m.CloseFunc()
+}
+
+func (m *MockWGIface) SetFilter(filter device.PacketFilter) error {
+	return m.SetFilterFunc(filter)
+}
+
+func (m *MockWGIface) GetFilter() device.PacketFilter {
+	return m.GetFilterFunc()
+}
+
+func (m *MockWGIface) GetDevice() *device.FilteredDevice {
+	return m.GetDeviceFunc()
+}
+
+func (m *MockWGIface) GetWGDevice() *wgdevice.Device {
+	return m.GetWGDeviceFunc()
+}
+
+func (m *MockWGIface) GetStats() (map[string]configurer.WGStats, error) {
+	return m.GetStatsFunc()
+}
+
+func (m *MockWGIface) GetProxy() wgproxy.Proxy {
+	return m.GetProxyFunc()
+}
+
+func (m *MockWGIface) GetNet() *netstack.Net {
+	return m.GetNetFunc()
+}
+
+func (m *MockWGIface) LastActivities() map[string]monotime.Time {
+	if m.LastActivitiesFunc != nil {
+		return m.LastActivitiesFunc()
+	}
+	return nil
+}
+
+func (m *MockWGIface) MTU() uint16 {
+	return 1280
+}
+
+func (m *MockWGIface) SetPresharedKey(peerKey string, psk wgtypes.Key, updateOnly bool) error {
+	return nil
+}
+
+func TestMain(m *testing.M) {
+	_ = util.InitLog("debug", util.LogConsole)
+	code := m.Run()
+	os.Exit(code)
+}
+
+func TestEngine_SSHUpdateLogic(t *testing.T) {
+	// Test that SSH server start/stop logic works based on config
+	engine := &Engine{
+		config: &EngineConfig{
+			ServerSSHAllowed: false, // Start with SSH disabled
+		},
+		syncMsgMux: &sync.Mutex{},
+	}
+
+	// Test SSH disabled config
+	sshConfig := &mgmtProto.SSHConfig{SshEnabled: false}
+	err := engine.updateSSH(sshConfig)
+	assert.NoError(t, err)
+	assert.Nil(t, engine.sshServer)
+
+	// Test inbound blocked
+	engine.config.BlockInbound = true
+	err = engine.updateSSH(&mgmtProto.SSHConfig{SshEnabled: true})
+	assert.NoError(t, err)
+	assert.Nil(t, engine.sshServer)
+	engine.config.BlockInbound = false
+
+	// Test with server SSH not allowed
+	err = engine.updateSSH(&mgmtProto.SSHConfig{SshEnabled: true})
+	assert.NoError(t, err)
+	assert.Nil(t, engine.sshServer)
+}
+
+func TestEngine_SSHServerConsistency(t *testing.T) {
+
+	t.Run("server set only on successful creation", func(t *testing.T) {
+		engine := &Engine{
+			config: &EngineConfig{
+				ServerSSHAllowed: true,
+				SSHKey:           []byte("test-key"),
+			},
+			syncMsgMux: &sync.Mutex{},
+		}
+
+		engine.wgInterface = nil
+
+		err := engine.updateSSH(&mgmtProto.SSHConfig{SshEnabled: true})
+
+		assert.Error(t, err)
+		assert.Nil(t, engine.sshServer)
+	})
+
+	t.Run("cleanup handles nil gracefully", func(t *testing.T) {
+		engine := &Engine{
+			config: &EngineConfig{
+				ServerSSHAllowed: false,
+			},
+			syncMsgMux: &sync.Mutex{},
+		}
+
+		err := engine.stopSSHServer()
+		assert.NoError(t, err)
+		assert.Nil(t, engine.sshServer)
+	})
+}
+
+func TestEngine_FirstSyncInfoCarriesLoginChecks(t *testing.T) {
+	key, err := wgtypes.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(CtxInitState(context.Background()))
+	defer cancel()
+
+	infos := make(chan *system.Info, 1)
+	mgmClient := &mgmt.MockClient{
+		SyncFunc: func(ctx context.Context, getInfo func(context.Context) *system.Info, _ func(*mgmtProto.SyncResponse) error) error {
+			infos <- getInfo(ctx)
+			return nil
+		},
+	}
+
+	relayMgr := relayClient.NewManager(ctx, nil, key.PublicKey().String(), iface.DefaultMTU)
+	engine := NewEngine(ctx, cancel, &EngineConfig{
+		WgIfaceName:  "utun104",
+		WgAddr:       wgaddr.MustParseWGAddress("100.64.0.1/24"),
+		WgPrivateKey: key,
+		WgPort:       33100,
+		MTU:          iface.DefaultMTU,
+	}, EngineServices{
+		SignalClient:   &signal.MockClient{},
+		MgmClient:      mgmClient,
+		RelayManager:   relayMgr,
+		StatusRecorder: peer.NewRecorder("https://mgm"),
+		Checks:         []*mgmtProto.Checks{{Files: []string{exe}}},
+	}, MobileDependency{})
+
+	engine.receiveManagementEvents()
+
+	select {
+	case info := <-infos:
+		require.Len(t, info.Files, 1)
+		assert.Equal(t, exe, info.Files[0].Path)
+		assert.True(t, info.Files[0].Exist)
+	case <-time.After(20 * time.Second):
+		t.Fatal("timeout waiting for the first sync info")
+	}
+	engine.shutdownWg.Wait()
+}
+
+func TestEngine_SyncInfoFuncReusesRefreshedInfoOnce(t *testing.T) {
+	engine := &Engine{config: &EngineConfig{}}
+
+	refreshed := &system.Info{Hostname: "from-refresh"}
+	getInfo := engine.syncInfoFunc(refreshed)
+
+	first := getInfo(context.Background())
+	assert.Same(t, refreshed, first, "the first connect should send the refreshed info instead of gathering again")
+
+	second := getInfo(context.Background())
+	assert.NotSame(t, refreshed, second, "the reconnect should gather a fresh info")
+	assert.NotEqual(t, "from-refresh", second.Hostname, "the fresh info should not carry the refreshed hostname")
+}
+
+func TestEngine_SyncInfoFuncGathersWhenRefreshFailed(t *testing.T) {
+	engine := &Engine{config: &EngineConfig{}}
+
+	info := engine.syncInfoFunc(nil)(context.Background())
+	require.NotNil(t, info, "a failed refresh should fall back to gathering the info")
+	assert.NotEmpty(t, info.Hostname, "the gathered info should carry the hostname")
+}
+
+func TestEngine_UpdateChecksIfNewRetriesAfterFailedSyncMeta(t *testing.T) {
+	key, err := wgtypes.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(CtxInitState(context.Background()))
+	defer cancel()
+
+	syncMetaCalls := 0
+	mgmClient := &mgmt.MockClient{
+		SyncMetaFunc: func(*system.Info) error {
+			syncMetaCalls++
+			if syncMetaCalls == 1 {
+				return errors.New("management unavailable")
+			}
+			return nil
+		},
+	}
+
+	relayMgr := relayClient.NewManager(ctx, nil, key.PublicKey().String(), iface.DefaultMTU)
+	engine := NewEngine(ctx, cancel, &EngineConfig{
+		WgIfaceName:  "utun105",
+		WgAddr:       wgaddr.MustParseWGAddress("100.64.0.1/24"),
+		WgPrivateKey: key,
+		WgPort:       33100,
+		MTU:          iface.DefaultMTU,
+	}, EngineServices{
+		SignalClient:   &signal.MockClient{},
+		MgmClient:      mgmClient,
+		RelayManager:   relayMgr,
+		StatusRecorder: peer.NewRecorder("https://mgm"),
+	}, MobileDependency{})
+
+	checks := []*mgmtProto.Checks{{Files: []string{exe}}}
+
+	require.Error(t, engine.updateChecksIfNew(checks))
+	require.NoError(t, engine.updateChecksIfNew(checks))
+	require.NoError(t, engine.updateChecksIfNew(checks))
+
+	assert.Equal(t, 2, syncMetaCalls)
+}
+
+// TestEngine_FailedUpdateReplacesOlderPendingChecks: checks A time out and stay pending,
+// then checks B fail to sync for another reason. B must replace A as pending, or the
+// watcher would later apply the superseded A.
+func TestEngine_FailedUpdateReplacesOlderPendingChecks(t *testing.T) {
+	key, err := wgtypes.GeneratePrivateKey()
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(CtxInitState(context.Background()))
+	defer cancel()
+
+	relayMgr := relayClient.NewManager(ctx, nil, key.PublicKey().String(), iface.DefaultMTU)
+	engine := NewEngine(ctx, cancel, &EngineConfig{
+		WgIfaceName:  "utun107",
+		WgAddr:       wgaddr.MustParseWGAddress("100.64.0.1/24"),
+		WgPrivateKey: key,
+		WgPort:       33102,
+		MTU:          iface.DefaultMTU,
+	}, EngineServices{
+		SignalClient:   &signal.MockClient{},
+		MgmClient:      &mgmt.MockClient{SyncMetaFunc: func(*system.Info) error { return errors.New("management unavailable") }},
+		RelayManager:   relayMgr,
+		StatusRecorder: peer.NewRecorder("https://mgm"),
+	}, MobileDependency{})
+
+	checksA := []*mgmtProto.Checks{{Files: []string{"/checks/a"}}}
+	checksB := []*mgmtProto.Checks{{Files: []string{"/checks/b"}}}
+
+	engine.infoTimeout = time.Nanosecond
+	require.NoError(t, engine.updateChecksIfNew(checksA))
+	require.Equal(t, checksA, engine.pendingChecks, "precondition: the timed-out checks are pending")
+
+	// Let the abandoned gathering finish so B gets as far as the meta sync.
+	engine.infoTimeout = 0
+	require.Eventually(t, func() bool {
+		_, ok := engine.infoSource.Refresh(ctx, 10*time.Second, nil)
+		return ok
+	}, 10*time.Second, 10*time.Millisecond)
+
+	require.Error(t, engine.updateChecksIfNew(checksB), "the meta sync of B fails")
+	assert.Equal(t, checksB, engine.pendingChecks, "the newest checks replace the older pending ones")
+}
+
+// TestEngine_PendingChecksRetriedAfterInfoTimeout covers a check update whose system info
+// gathering times out: the update is kept pending rather than dropped, and the posture
+// watcher's retry sends it and applies the checks, without waiting for management to
+// send different checks.
+func TestEngine_PendingChecksRetriedAfterInfoTimeout(t *testing.T) {
+	key, err := wgtypes.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(CtxInitState(context.Background()))
+	defer cancel()
+
+	var synced []*system.Info
+	mgmClient := &mgmt.MockClient{
+		SyncMetaFunc: func(info *system.Info) error {
+			synced = append(synced, info)
+			return nil
+		},
+	}
+
+	relayMgr := relayClient.NewManager(ctx, nil, key.PublicKey().String(), iface.DefaultMTU)
+	engine := NewEngine(ctx, cancel, &EngineConfig{
+		WgIfaceName:  "utun106",
+		WgAddr:       wgaddr.MustParseWGAddress("100.64.0.1/24"),
+		WgPrivateKey: key,
+		WgPort:       33101,
+		MTU:          iface.DefaultMTU,
+	}, EngineServices{
+		SignalClient:   &signal.MockClient{},
+		MgmClient:      mgmClient,
+		RelayManager:   relayMgr,
+		StatusRecorder: peer.NewRecorder("https://mgm"),
+	}, MobileDependency{})
+
+	checks := []*mgmtProto.Checks{{Files: []string{exe}}}
+
+	// Gathering cannot finish within a nanosecond, so the sync times out.
+	engine.infoTimeout = time.Nanosecond
+	require.NoError(t, engine.updateChecksIfNew(checks), "a timed-out gathering is not an error")
+	assert.Empty(t, synced, "nothing is sent when gathering timed out")
+	assert.Nil(t, engine.checks, "timed-out checks are not applied")
+	require.True(t, engine.hasPendingChecks.Load(), "timed-out checks are kept pending")
+
+	// The timed-out gathering keeps running in the background, and no new one starts
+	// until it exits, so the retry may time out again before it goes through.
+	engine.infoTimeout = 0
+	var retryErr error
+	require.Eventually(t, func() bool {
+		retryErr = engine.retryPendingChecks()
+		return retryErr == nil || !errors.Is(retryErr, errSystemInfoTimeout)
+	}, 10*time.Second, 10*time.Millisecond, "the pending checks are sent once the earlier gathering exits")
+	require.NoError(t, retryErr)
+	require.Len(t, synced, 1, "the retry sends the meta sync")
+	assert.Len(t, synced[0].Files, 1, "the retry evaluates the pending checks")
+	assert.Equal(t, checks, engine.checks, "the retried checks are applied")
+	assert.False(t, engine.hasPendingChecks.Load(), "nothing is pending after the retry")
+
+	require.NoError(t, engine.retryPendingChecks())
+	require.NoError(t, engine.updateChecksIfNew(checks))
+	assert.Len(t, synced, 1, "applied checks are not sent again")
+}
+
+func TestEngine_UpdateNetworkMap(t *testing.T) {
+	// test setup
+	key, err := wgtypes.GeneratePrivateKey()
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+
+	ctx, cancel := context.WithCancel(CtxInitState(context.Background()))
+	defer cancel()
+
+	relayMgr := relayClient.NewManager(ctx, nil, key.PublicKey().String(), iface.DefaultMTU)
+	engine := NewEngine(ctx, cancel, &EngineConfig{
+		WgIfaceName:  "utun102",
+		WgAddr:       wgaddr.MustParseWGAddress("100.64.0.1/24"),
+		WgPrivateKey: key,
+		WgPort:       33100,
+		MTU:          iface.DefaultMTU,
+	}, EngineServices{
+		SignalClient:   &signal.MockClient{},
+		MgmClient:      &mgmt.MockClient{},
+		RelayManager:   relayMgr,
+		StatusRecorder: peer.NewRecorder("https://mgm"),
+	}, MobileDependency{})
+
+	wgIface := &MockWGIface{
+		NameFunc:            func() string { return "utun102" },
+		IsUserspaceBindFunc: func() bool { return true },
+		RemovePeerFunc: func(peerKey string) error {
+			return nil
+		},
+		AddressFunc: func() wgaddr.Address {
+			return wgaddr.Address{
+				IP:      netip.MustParseAddr("10.20.0.1"),
+				Network: netip.MustParsePrefix("10.20.0.0/24"),
+			}
+		},
+		UpdatePeerFunc: func(peerKey string, allowedIps []netip.Prefix, keepAlive time.Duration, endpoint *net.UDPAddr, preSharedKey *wgtypes.Key) error {
+			return nil
+		},
+	}
+	engine.wgInterface = wgIface
+	engine.routeManager = routemanager.NewManager(routemanager.ManagerConfig{
+		Context:          ctx,
+		PublicKey:        key.PublicKey().String(),
+		DNSRouteInterval: time.Minute,
+		WGInterface:      engine.wgInterface,
+		StatusRecorder:   engine.statusRecorder,
+		RelayManager:     relayMgr,
+	})
+	err = engine.routeManager.Init()
+	require.NoError(t, err)
+	engine.dnsServer = &dns.MockServer{
+		UpdateDNSServerFunc: func(serial uint64, update nbdns.Config) error { return nil },
+	}
+	conn, err := net.ListenUDP("udp4", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine.udpMux = udpmux.NewUniversalUDPMuxDefault(udpmux.UniversalUDPMuxParams{UDPConn: conn, MTU: 1280})
+	engine.ctx = ctx
+	engine.srWatcher = guard.NewSRWatcher(nil, nil, nil, icemaker.Config{})
+	engine.connMgr = NewConnMgr(engine.config, engine.statusRecorder, engine.peerStore, wgIface)
+	engine.connMgr.Start(ctx)
+
+	type testCase struct {
+		name       string
+		networkMap *mgmtProto.NetworkMap
+
+		expectedLen    int
+		expectedPeers  []*mgmtProto.RemotePeerConfig
+		expectedSerial uint64
+	}
+
+	peer1 := &mgmtProto.RemotePeerConfig{
+		WgPubKey:   "RRHf3Ma6z6mdLbriAJbqhX7+nM/B71lgw2+91q3LfhU=",
+		AllowedIps: []string{"100.64.0.10/24"},
+	}
+
+	peer2 := &mgmtProto.RemotePeerConfig{
+		WgPubKey:   "LLHf3Ma6z6mdLbriAJbqhX7+nM/B71lgw2+91q3LfhU=",
+		AllowedIps: []string{"100.64.0.11/24"},
+	}
+
+	peer3 := &mgmtProto.RemotePeerConfig{
+		WgPubKey:   "GGHf3Ma6z6mdLbriAJbqhX7+nM/B71lgw2+91q3LfhU=",
+		AllowedIps: []string{"100.64.0.12/24"},
+	}
+
+	modifiedPeer3 := &mgmtProto.RemotePeerConfig{
+		WgPubKey:   "GGHf3Ma6z6mdLbriAJbqhX7+nM/B71lgw2+91q3LfhU=",
+		AllowedIps: []string{"100.64.0.20/24"},
+	}
+
+	case1 := testCase{
+		name: "input with a new peer to add",
+		networkMap: &mgmtProto.NetworkMap{
+			Serial:     1,
+			PeerConfig: nil,
+			RemotePeers: []*mgmtProto.RemotePeerConfig{
+				peer1,
+			},
+			RemotePeersIsEmpty: false,
+		},
+		expectedLen:    1,
+		expectedPeers:  []*mgmtProto.RemotePeerConfig{peer1},
+		expectedSerial: 1,
+	}
+
+	// 2nd case - one extra peer added and network map has CurrentSerial grater than local => apply the update
+	case2 := testCase{
+		name: "input with an old peer and a new peer to add",
+		networkMap: &mgmtProto.NetworkMap{
+			Serial:     2,
+			PeerConfig: nil,
+			RemotePeers: []*mgmtProto.RemotePeerConfig{
+				peer1, peer2,
+			},
+			RemotePeersIsEmpty: false,
+		},
+		expectedLen:    2,
+		expectedPeers:  []*mgmtProto.RemotePeerConfig{peer1, peer2},
+		expectedSerial: 2,
+	}
+
+	case3 := testCase{
+		name: "input with outdated (old) update to ignore",
+		networkMap: &mgmtProto.NetworkMap{
+			Serial:     0,
+			PeerConfig: nil,
+			RemotePeers: []*mgmtProto.RemotePeerConfig{
+				peer1, peer2, peer3,
+			},
+			RemotePeersIsEmpty: false,
+		},
+		expectedLen:    2,
+		expectedPeers:  []*mgmtProto.RemotePeerConfig{peer1, peer2},
+		expectedSerial: 2,
+	}
+
+	case4 := testCase{
+		name: "input with one peer to remove and one new to add",
+		networkMap: &mgmtProto.NetworkMap{
+			Serial:     4,
+			PeerConfig: nil,
+			RemotePeers: []*mgmtProto.RemotePeerConfig{
+				peer2, peer3,
+			},
+			RemotePeersIsEmpty: false,
+		},
+		expectedLen:    2,
+		expectedPeers:  []*mgmtProto.RemotePeerConfig{peer2, peer3},
+		expectedSerial: 4,
+	}
+
+	case5 := testCase{
+		name: "input with one peer to modify",
+		networkMap: &mgmtProto.NetworkMap{
+			Serial:     4,
+			PeerConfig: nil,
+			RemotePeers: []*mgmtProto.RemotePeerConfig{
+				modifiedPeer3, peer2,
+			},
+			RemotePeersIsEmpty: false,
+		},
+		expectedLen:    2,
+		expectedPeers:  []*mgmtProto.RemotePeerConfig{peer2, modifiedPeer3},
+		expectedSerial: 4,
+	}
+
+	case6 := testCase{
+		name: "input with all peers to remove",
+		networkMap: &mgmtProto.NetworkMap{
+			Serial:             5,
+			PeerConfig:         nil,
+			RemotePeers:        []*mgmtProto.RemotePeerConfig{},
+			RemotePeersIsEmpty: true,
+		},
+		expectedLen:    0,
+		expectedPeers:  nil,
+		expectedSerial: 5,
+	}
+
+	for _, c := range []testCase{case1, case2, case3, case4, case5, case6} {
+		t.Run(c.name, func(t *testing.T) {
+			err = engine.updateNetworkMap(c.networkMap)
+			if err != nil {
+				t.Fatal(err)
+				return
+			}
+
+			if len(engine.peerStore.PeersPubKey()) != c.expectedLen {
+				t.Errorf("expecting Engine.peerConns to be of size %d, got %d", c.expectedLen, len(engine.peerStore.PeersPubKey()))
+			}
+
+			if engine.networkSerial != c.expectedSerial {
+				t.Errorf("expecting Engine.networkSerial to be equal to %d, actual %d", c.expectedSerial, engine.networkSerial)
+			}
+
+			for _, p := range c.expectedPeers {
+				conn, ok := engine.peerStore.PeerConn(p.GetWgPubKey())
+				if !ok {
+					t.Errorf("expecting Engine.peerConns to contain peer %s", p)
+				}
+				expectedAllowedIPs := strings.Join(p.AllowedIps, ",")
+				if !compareNetIPLists(conn.WgConfig().AllowedIps, p.AllowedIps) {
+					t.Errorf("expecting peer %s to have AllowedIPs= %s, got %s", p.GetWgPubKey(),
+						expectedAllowedIPs, conn.WgConfig().AllowedIps)
+				}
+			}
+		})
+	}
+}
+
+func TestEngine_UpdateNetworkMapWithRoutes(t *testing.T) {
+	testCases := []struct {
+		name                 string
+		inputErr             error
+		networkMap           *mgmtProto.NetworkMap
+		expectedLen          int
+		expectedClientRoutes route.HAMap
+		expectedSerial       uint64
+	}{
+		{
+			name: "Routes Config Should Be Passed To Manager",
+			networkMap: &mgmtProto.NetworkMap{
+				Serial:             1,
+				PeerConfig:         nil,
+				RemotePeersIsEmpty: false,
+				Routes: []*mgmtProto.Route{
+					{
+						ID:          "a",
+						Network:     "192.168.0.0/24",
+						NetID:       "n1",
+						Peer:        "p1",
+						NetworkType: 1,
+						Masquerade:  false,
+					},
+					{
+						ID:          "b",
+						Network:     "192.168.1.0/24",
+						NetID:       "n2",
+						Peer:        "p1",
+						NetworkType: 1,
+						Masquerade:  false,
+					},
+				},
+			},
+			expectedLen: 2,
+			expectedClientRoutes: route.HAMap{
+				"n1|192.168.0.0/24": []*route.Route{
+					{
+						ID:          "a",
+						Network:     netip.MustParsePrefix("192.168.0.0/24"),
+						NetID:       "n1",
+						Peer:        "p1",
+						NetworkType: 1,
+						Masquerade:  false,
+					},
+				},
+				"n2|192.168.1.0/24": []*route.Route{
+					{
+						ID:          "b",
+						Network:     netip.MustParsePrefix("192.168.1.0/24"),
+						NetID:       "n2",
+						Peer:        "p1",
+						NetworkType: 1,
+						Masquerade:  false,
+					},
+				},
+			},
+			expectedSerial: 1,
+		},
+		{
+			name: "Empty Routes Config Should Be Passed",
+			networkMap: &mgmtProto.NetworkMap{
+				Serial:             1,
+				PeerConfig:         nil,
+				RemotePeersIsEmpty: false,
+				Routes:             nil,
+			},
+			expectedLen:          0,
+			expectedClientRoutes: nil,
+			expectedSerial:       1,
+		},
+		{
+			name:     "Error Shouldn't Break Engine",
+			inputErr: fmt.Errorf("mocking error"),
+			networkMap: &mgmtProto.NetworkMap{
+				Serial:             1,
+				PeerConfig:         nil,
+				RemotePeersIsEmpty: false,
+				Routes:             nil,
+			},
+			expectedLen:          0,
+			expectedClientRoutes: nil,
+			expectedSerial:       1,
+		},
+	}
+
+	for n, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// test setup
+			key, err := wgtypes.GeneratePrivateKey()
+			if err != nil {
+				t.Fatal(err)
+				return
+			}
+
+			ctx, cancel := context.WithCancel(CtxInitState(context.Background()))
+			defer cancel()
+
+			wgIfaceName := fmt.Sprintf("utun%d", 104+n)
+			wgAddr := fmt.Sprintf("100.66.%d.1/24", n)
+
+			relayMgr := relayClient.NewManager(ctx, nil, key.PublicKey().String(), iface.DefaultMTU)
+			engine := NewEngine(ctx, cancel, &EngineConfig{
+				WgIfaceName:  wgIfaceName,
+				WgAddr:       wgaddr.MustParseWGAddress(wgAddr),
+				WgPrivateKey: key,
+				WgPort:       33100,
+				MTU:          iface.DefaultMTU,
+			}, EngineServices{
+				SignalClient:   &signal.MockClient{},
+				MgmClient:      &mgmt.MockClient{},
+				RelayManager:   relayMgr,
+				StatusRecorder: peer.NewRecorder("https://mgm"),
+			}, MobileDependency{})
+			engine.ctx = ctx
+			newNet := stdnet.NewNet(context.Background(), profilemanager.DefaultInterfaceBlacklist, nil)
+
+			opts := iface.WGIFaceOpts{
+				IFaceName:    wgIfaceName,
+				Address:      wgaddr.MustParseWGAddress(wgAddr),
+				WGPort:       engine.config.WgPort,
+				WGPrivKey:    key.String(),
+				MTU:          iface.DefaultMTU,
+				TransportNet: newNet,
+			}
+			engine.wgInterface, err = iface.NewWGIFace(opts)
+			assert.NoError(t, err, "shouldn't return error")
+			input := struct {
+				inputSerial  uint64
+				clientRoutes route.HAMap
+			}{}
+
+			mockRouteManager := &routemanager.MockManager{
+				UpdateRoutesFunc: func(updateSerial uint64, serverRoutes map[route.ID]*route.Route, clientRoutes route.HAMap, useNewDNSRoute bool) error {
+					input.inputSerial = updateSerial
+					input.clientRoutes = clientRoutes
+					return testCase.inputErr
+				},
+				ClassifyRoutesFunc: func(newRoutes []*route.Route) (map[route.ID]*route.Route, route.HAMap) {
+					if len(newRoutes) == 0 {
+						return nil, nil
+					}
+
+					// Classify all routes as client routes (not matching our public key)
+					clientRoutes := make(route.HAMap)
+					for _, r := range newRoutes {
+						haID := r.GetHAUniqueID()
+						clientRoutes[haID] = append(clientRoutes[haID], r)
+					}
+					return nil, clientRoutes
+				},
+			}
+
+			engine.routeManager = mockRouteManager
+			engine.dnsServer = &dns.MockServer{}
+			engine.connMgr = NewConnMgr(engine.config, engine.statusRecorder, engine.peerStore, engine.wgInterface)
+			engine.connMgr.Start(ctx)
+
+			defer func() {
+				exitErr := engine.Stop()
+				if exitErr != nil {
+					return
+				}
+			}()
+
+			err = engine.updateNetworkMap(testCase.networkMap)
+			assert.NoError(t, err, "shouldn't return error")
+			assert.Equal(t, testCase.expectedSerial, input.inputSerial, "serial should match")
+			assert.Len(t, input.clientRoutes, testCase.expectedLen, "clientRoutes len should match")
+			assert.Equal(t, testCase.expectedClientRoutes, input.clientRoutes, "clientRoutes should match")
+		})
+	}
+}
+
+func TestEngine_UpdateNetworkMapWithDNSUpdate(t *testing.T) {
+	testCases := []struct {
+		name                string
+		inputErr            error
+		networkMap          *mgmtProto.NetworkMap
+		expectedZonesLen    int
+		expectedZones       []nbdns.CustomZone
+		expectedNSGroupsLen int
+		expectedNSGroups    []*nbdns.NameServerGroup
+		expectedSerial      uint64
+	}{
+		{
+			name: "DNS Config Should Be Passed To DNS Server",
+			networkMap: &mgmtProto.NetworkMap{
+				Serial:             1,
+				PeerConfig:         nil,
+				RemotePeersIsEmpty: false,
+				Routes:             nil,
+				DNSConfig: &mgmtProto.DNSConfig{
+					ServiceEnable: true,
+					CustomZones: []*mgmtProto.CustomZone{
+						{
+							Domain: "netbird.cloud.",
+							Records: []*mgmtProto.SimpleRecord{
+								{
+									Name:  "peer-a.netbird.cloud.",
+									Type:  1,
+									Class: nbdns.DefaultClass,
+									TTL:   300,
+									RData: "100.64.0.1",
+								},
+							},
+						},
+						{
+							Domain: "0.66.100.in-addr.arpa.",
+						},
+					},
+					NameServerGroups: []*mgmtProto.NameServerGroup{
+						{
+							Primary: true,
+							NameServers: []*mgmtProto.NameServer{
+								{
+									IP:     "8.8.8.8",
+									NSType: 1,
+									Port:   53,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedZonesLen: 1,
+			expectedZones: []nbdns.CustomZone{
+				{
+					Domain: "netbird.cloud.",
+					Records: []nbdns.SimpleRecord{
+						{
+							Name:  "peer-a.netbird.cloud.",
+							Type:  1,
+							Class: nbdns.DefaultClass,
+							TTL:   300,
+							RData: "100.64.0.1",
+						},
+					},
+				},
+				{
+					Domain: "0.66.100.in-addr.arpa.",
+				},
+			},
+			expectedNSGroupsLen: 1,
+			expectedNSGroups: []*nbdns.NameServerGroup{
+				{
+					Primary: true,
+					NameServers: []nbdns.NameServer{
+						{
+							IP:     netip.MustParseAddr("8.8.8.8"),
+							NSType: 1,
+							Port:   53,
+						},
+					},
+				},
+			},
+			expectedSerial: 1,
+		},
+		{
+			name: "Empty DNS Config Should Be OK",
+			networkMap: &mgmtProto.NetworkMap{
+				Serial:             1,
+				PeerConfig:         nil,
+				RemotePeersIsEmpty: false,
+				Routes:             nil,
+				DNSConfig:          nil,
+			},
+			expectedZonesLen:    0,
+			expectedZones:       []nbdns.CustomZone{},
+			expectedNSGroupsLen: 0,
+			expectedNSGroups:    []*nbdns.NameServerGroup{},
+			expectedSerial:      1,
+		},
+		{
+			name:     "Error Shouldn't Break Engine",
+			inputErr: fmt.Errorf("mocking error"),
+			networkMap: &mgmtProto.NetworkMap{
+				Serial:             1,
+				PeerConfig:         nil,
+				RemotePeersIsEmpty: false,
+				Routes:             nil,
+			},
+			expectedZonesLen:    0,
+			expectedZones:       []nbdns.CustomZone{},
+			expectedNSGroupsLen: 0,
+			expectedNSGroups:    []*nbdns.NameServerGroup{},
+			expectedSerial:      1,
+		},
+	}
+
+	for n, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// test setup
+			key, err := wgtypes.GeneratePrivateKey()
+			if err != nil {
+				t.Fatal(err)
+				return
+			}
+
+			ctx, cancel := context.WithCancel(CtxInitState(context.Background()))
+			defer cancel()
+
+			wgIfaceName := fmt.Sprintf("utun%d", 104+n)
+			wgAddr := fmt.Sprintf("100.66.%d.1/24", n)
+
+			relayMgr := relayClient.NewManager(ctx, nil, key.PublicKey().String(), iface.DefaultMTU)
+			engine := NewEngine(ctx, cancel, &EngineConfig{
+				WgIfaceName:  wgIfaceName,
+				WgAddr:       wgaddr.MustParseWGAddress(wgAddr),
+				WgPrivateKey: key,
+				WgPort:       33100,
+				MTU:          iface.DefaultMTU,
+			}, EngineServices{
+				SignalClient:   &signal.MockClient{},
+				MgmClient:      &mgmt.MockClient{},
+				RelayManager:   relayMgr,
+				StatusRecorder: peer.NewRecorder("https://mgm"),
+			}, MobileDependency{})
+			engine.ctx = ctx
+
+			newNet := stdnet.NewNet(context.Background(), profilemanager.DefaultInterfaceBlacklist, nil)
+			opts := iface.WGIFaceOpts{
+				IFaceName:    wgIfaceName,
+				Address:      wgaddr.MustParseWGAddress(wgAddr),
+				WGPort:       33100,
+				WGPrivKey:    key.String(),
+				MTU:          iface.DefaultMTU,
+				TransportNet: newNet,
+			}
+			engine.wgInterface, err = iface.NewWGIFace(opts)
+			assert.NoError(t, err, "shouldn't return error")
+
+			mockRouteManager := &routemanager.MockManager{
+				UpdateRoutesFunc: func(updateSerial uint64, serverRoutes map[route.ID]*route.Route, clientRoutes route.HAMap, useNewDNSRoute bool) error {
+					return nil
+				},
+			}
+
+			engine.routeManager = mockRouteManager
+
+			input := struct {
+				inputSerial   uint64
+				inputNSGroups []*nbdns.NameServerGroup
+				inputZones    []nbdns.CustomZone
+			}{}
+
+			mockDNSServer := &dns.MockServer{
+				UpdateDNSServerFunc: func(serial uint64, update nbdns.Config) error {
+					input.inputSerial = serial
+					input.inputZones = update.CustomZones
+					input.inputNSGroups = update.NameServerGroups
+					return testCase.inputErr
+				},
+			}
+
+			engine.dnsServer = mockDNSServer
+			engine.connMgr = NewConnMgr(engine.config, engine.statusRecorder, engine.peerStore, engine.wgInterface)
+			engine.connMgr.Start(ctx)
+
+			defer func() {
+				exitErr := engine.Stop()
+				if exitErr != nil {
+					return
+				}
+			}()
+
+			err = engine.updateNetworkMap(testCase.networkMap)
+			assert.NoError(t, err, "shouldn't return error")
+			assert.Equal(t, testCase.expectedSerial, input.inputSerial, "serial should match")
+			assert.Len(t, input.inputNSGroups, testCase.expectedZonesLen, "zones len should match")
+			assert.Equal(t, testCase.expectedZones, input.inputZones, "custom zones should match")
+			assert.Len(t, input.inputNSGroups, testCase.expectedNSGroupsLen, "ns groups len should match")
+			assert.Equal(t, testCase.expectedNSGroups, input.inputNSGroups, "ns groups should match")
+		})
+	}
+}
+
+func Test_ParseNATExternalIPMappings(t *testing.T) {
+	ifaceList, err := net.Interfaces()
+	if err != nil {
+		t.Fatalf("could get the interface list, got error: %s", err)
+	}
+
+	var testingIP string
+	var testingInterface string
+
+	for _, iface := range ifaceList {
+		addrList, err := iface.Addrs()
+		if err != nil {
+			t.Fatalf("could get the addr list, got error: %s", err)
+		}
+		for _, addr := range addrList {
+			prefix := netip.MustParsePrefix(addr.String())
+			if prefix.Addr().Is4() && !prefix.Addr().IsLoopback() {
+				testingIP = prefix.Addr().String()
+				testingInterface = iface.Name
+			}
+		}
+	}
+
+	testCases := []struct {
+		name                    string
+		inputMapList            []string
+		inputBlacklistInterface []string
+		expectedOutput          []string
+	}{
+		{
+			name:                    "Parse Valid List Should Be OK",
+			inputBlacklistInterface: profilemanager.DefaultInterfaceBlacklist,
+			inputMapList:            []string{"1.1.1.1", "8.8.8.8/" + testingInterface},
+			expectedOutput:          []string{"1.1.1.1", "8.8.8.8/" + testingIP},
+		},
+		{
+			name:                    "Only Interface name Should Return Nil",
+			inputBlacklistInterface: profilemanager.DefaultInterfaceBlacklist,
+			inputMapList:            []string{testingInterface},
+			expectedOutput:          nil,
+		},
+		{
+			name:                    "Invalid IP Return Nil",
+			inputBlacklistInterface: profilemanager.DefaultInterfaceBlacklist,
+			inputMapList:            []string{"1.1.1.1000"},
+			expectedOutput:          nil,
+		},
+		{
+			name:                    "Invalid Mapping Element Should return Nil",
+			inputBlacklistInterface: profilemanager.DefaultInterfaceBlacklist,
+			inputMapList:            []string{"1.1.1.1/10.10.10.1/eth0"},
+			expectedOutput:          nil,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			engine := &Engine{
+				config: &EngineConfig{
+					IFaceBlackList: testCase.inputBlacklistInterface,
+					NATExternalIPs: testCase.inputMapList,
+					MTU:            iface.DefaultMTU,
+				},
+			}
+			parsedList := engine.parseNATExternalIPMappings()
+			require.ElementsMatchf(t, testCase.expectedOutput, parsedList, "elements of parsed list should match expected list")
+		})
+	}
+}
+
+func Test_CheckFilesEqual(t *testing.T) {
+	testCases := []struct {
+		name         string
+		inputChecks1 []*mgmtProto.Checks
+		inputChecks2 []*mgmtProto.Checks
+		expectedBool bool
+	}{
+		{
+			name: "Equal Files In Equal Order Should Return True",
+			inputChecks1: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile1",
+						"testfile2",
+					},
+				},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile1",
+						"testfile2",
+					},
+				},
+			},
+			expectedBool: true,
+		},
+		{
+			name: "Equal Files In Reverse Order Should Return True",
+			inputChecks1: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile1",
+						"testfile2",
+					},
+				},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile2",
+						"testfile1",
+					},
+				},
+			},
+			expectedBool: true,
+		},
+		{
+			name: "Unequal Files Should Return False",
+			inputChecks1: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile1",
+						"testfile2",
+					},
+				},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile1",
+						"testfile3",
+					},
+				},
+			},
+			expectedBool: false,
+		},
+		{
+			name: "Compared With Empty Should Return False",
+			inputChecks1: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile1",
+						"testfile2",
+					},
+				},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{
+					Files: []string{},
+				},
+			},
+			expectedBool: false,
+		},
+		{
+			name: "Compared Slices with same files but different order should return true",
+			inputChecks1: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile1",
+						"testfile2",
+					},
+				},
+				{
+					Files: []string{
+						"testfile4",
+						"testfile3",
+					},
+				},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile3",
+						"testfile4",
+					},
+				},
+				{
+					Files: []string{
+						"testfile2",
+						"testfile1",
+					},
+				},
+			},
+			expectedBool: true,
+		},
+		{
+			name: "Compared Slices with same files but different order while first is equal should return true",
+			inputChecks1: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile0",
+						"testfile1",
+					},
+				},
+				{
+					Files: []string{
+						"testfile0",
+						"testfile2",
+					},
+				},
+				{
+					Files: []string{
+						"testfile0",
+						"testfile3",
+					},
+				},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{
+					Files: []string{
+						"testfile0",
+						"testfile1",
+					},
+				},
+				{
+					Files: []string{
+						"testfile0",
+						"testfile3",
+					},
+				},
+				{
+					Files: []string{
+						"testfile0",
+						"testfile2",
+					},
+				},
+			},
+			expectedBool: true,
+		},
+		{
+			name: "Same files with rotated certificate challenge nonce should return false",
+			inputChecks1: []*mgmtProto.Checks{
+				{
+					Files:                []string{"testfile1"},
+					CertificateChallenge: &mgmtProto.CertificateChallenge{Nonce: []byte{1}, CaCertificates: []string{"ca-a"}},
+				},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{
+					Files:                []string{"testfile1"},
+					CertificateChallenge: &mgmtProto.CertificateChallenge{Nonce: []byte{2}, CaCertificates: []string{"ca-a"}},
+				},
+			},
+			expectedBool: false,
+		},
+		{
+			name: "Same certificate challenge with CA certificates in different order should return true",
+			inputChecks1: []*mgmtProto.Checks{
+				{CertificateChallenge: &mgmtProto.CertificateChallenge{Nonce: []byte{1}, CaCertificates: []string{"ca-a", "ca-b"}}},
+			},
+			inputChecks2: []*mgmtProto.Checks{
+				{CertificateChallenge: &mgmtProto.CertificateChallenge{Nonce: []byte{1}, CaCertificates: []string{"ca-b", "ca-a"}}},
+			},
+			expectedBool: true,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := isChecksEqual(testCase.inputChecks1, testCase.inputChecks2)
+			assert.Equal(t, testCase.expectedBool, result, "result should match expected bool")
+		})
+	}
+}
+
+func TestCompareNetIPLists(t *testing.T) {
+	tests := []struct {
+		name     string
+		list1    []netip.Prefix
+		list2    []string
+		expected bool
+	}{
+		{
+			name:     "both empty",
+			list1:    []netip.Prefix{},
+			list2:    []string{},
+			expected: true,
+		},
+		{
+			name:     "single match ipv4",
+			list1:    []netip.Prefix{netip.MustParsePrefix("192.168.0.0/24")},
+			list2:    []string{"192.168.0.0/24"},
+			expected: true,
+		},
+		{
+			name:     "multiple match ipv4, different order",
+			list1:    []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24"), netip.MustParsePrefix("10.0.0.0/8")},
+			list2:    []string{"10.0.0.0/8", "192.168.1.0/24"},
+			expected: true,
+		},
+		{
+			name:     "ipv4 mismatch due to extra element in list2",
+			list1:    []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")},
+			list2:    []string{"192.168.1.0/24", "10.0.0.0/8"},
+			expected: false,
+		},
+		{
+			name:     "ipv4 mismatch due to duplicate count",
+			list1:    []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24"), netip.MustParsePrefix("192.168.1.0/24")},
+			list2:    []string{"192.168.1.0/24"},
+			expected: false,
+		},
+		{
+			name:     "invalid prefix in list2",
+			list1:    []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")},
+			list2:    []string{"invalid-prefix"},
+			expected: false,
+		},
+		{
+			name:     "ipv4 mismatch because different prefixes",
+			list1:    []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")},
+			list2:    []string{"10.0.0.0/8"},
+			expected: false,
+		},
+		{
+			name:     "single match ipv6",
+			list1:    []netip.Prefix{netip.MustParsePrefix("2001:db8::/32")},
+			list2:    []string{"2001:db8::/32"},
+			expected: true,
+		},
+		{
+			name:     "multiple match ipv6, different order",
+			list1:    []netip.Prefix{netip.MustParsePrefix("2001:db8::/32"), netip.MustParsePrefix("fe80::/10")},
+			list2:    []string{"fe80::/10", "2001:db8::/32"},
+			expected: true,
+		},
+		{
+			name:     "mixed ipv4 and ipv6 match",
+			list1:    []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24"), netip.MustParsePrefix("2001:db8::/32")},
+			list2:    []string{"2001:db8::/32", "192.168.1.0/24"},
+			expected: true,
+		},
+		{
+			name:     "ipv6 mismatch with invalid prefix",
+			list1:    []netip.Prefix{netip.MustParsePrefix("2001:db8::/32")},
+			list2:    []string{"invalid-ipv6"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := compareNetIPLists(tt.list1, tt.list2)
+			if result != tt.expected {
+				t.Errorf("compareNetIPLists(%v, %v) = %v; want %v", tt.list1, tt.list2, result, tt.expected)
+			}
+		})
+	}
+}
+
+func mustEncodePrefix(t *testing.T, p netip.Prefix) []byte {
+	t.Helper()
+	b, err := netiputil.EncodePrefix(p)
+	require.NoError(t, err)
+	return b
+}
+
+func TestEngine_hasIPv6Changed(t *testing.T) {
+	v4Only := wgaddr.MustParseWGAddress("100.64.0.1/16")
+
+	v4v6 := wgaddr.MustParseWGAddress("100.64.0.1/16")
+	v4v6.IPv6 = netip.MustParseAddr("fd00::1")
+	v4v6.IPv6Net = netip.MustParsePrefix("fd00::1/64").Masked()
+
+	tests := []struct {
+		name     string
+		current  wgaddr.Address
+		confV6   []byte
+		expected bool
+	}{
+		{
+			name:     "no v6 before, no v6 now",
+			current:  v4Only,
+			confV6:   nil,
+			expected: false,
+		},
+		{
+			name:     "no v6 before, v6 added",
+			current:  v4Only,
+			confV6:   mustEncodePrefix(t, netip.MustParsePrefix("fd00::1/64")),
+			expected: true,
+		},
+		{
+			name:     "had v6, now removed",
+			current:  v4v6,
+			confV6:   nil,
+			expected: true,
+		},
+		{
+			name:     "had v6, same v6",
+			current:  v4v6,
+			confV6:   mustEncodePrefix(t, netip.MustParsePrefix("fd00::1/64")),
+			expected: false,
+		},
+		{
+			name:     "had v6, different v6",
+			current:  v4v6,
+			confV6:   mustEncodePrefix(t, netip.MustParsePrefix("fd00::2/64")),
+			expected: true,
+		},
+		{
+			name:     "same v6 addr, different prefix length",
+			current:  v4v6,
+			confV6:   mustEncodePrefix(t, netip.MustParsePrefix("fd00::1/80")),
+			expected: true,
+		},
+		{
+			name:     "decode error keeps status quo",
+			current:  v4Only,
+			confV6:   []byte{1, 2, 3},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := &Engine{
+				config: &EngineConfig{WgAddr: tt.current},
+			}
+			conf := &mgmtProto.PeerConfig{
+				AddressV6: tt.confV6,
+			}
+			assert.Equal(t, tt.expected, engine.hasIPv6Changed(conf))
+		})
+	}
+}
+
+func TestFilterAllowedIPs(t *testing.T) {
+	v4v6Addr := wgaddr.MustParseWGAddress("100.64.0.1/16")
+	v4v6Addr.IPv6 = netip.MustParseAddr("fd00::1")
+	v4v6Addr.IPv6Net = netip.MustParsePrefix("fd00::1/64").Masked()
+
+	v4OnlyAddr := wgaddr.MustParseWGAddress("100.64.0.1/16")
+
+	tests := []struct {
+		name     string
+		addr     wgaddr.Address
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "interface has v6, keep all",
+			addr:     v4v6Addr,
+			input:    []string{"100.64.0.1/32", "fd00::1/128"},
+			expected: []string{"100.64.0.1/32", "fd00::1/128"},
+		},
+		{
+			name:     "no v6, strip v6",
+			addr:     v4OnlyAddr,
+			input:    []string{"100.64.0.1/32", "fd00::1/128"},
+			expected: []string{"100.64.0.1/32"},
+		},
+		{
+			name:     "no v6, only v4",
+			addr:     v4OnlyAddr,
+			input:    []string{"100.64.0.1/32", "10.0.0.0/8"},
+			expected: []string{"100.64.0.1/32", "10.0.0.0/8"},
+		},
+		{
+			name:     "no v6, only v6 input",
+			addr:     v4OnlyAddr,
+			input:    []string{"fd00::1/128", "::/0"},
+			expected: []string{},
+		},
+		{
+			name:     "no v6, invalid prefix preserved",
+			addr:     v4OnlyAddr,
+			input:    []string{"100.64.0.1/32", "garbage"},
+			expected: []string{"100.64.0.1/32", "garbage"},
+		},
+		{
+			name:     "no v6, empty input",
+			addr:     v4OnlyAddr,
+			input:    []string{},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			addr := tt.addr
+			engine := &Engine{
+				config: &EngineConfig{},
+				wgInterface: &MockWGIface{
+					AddressFunc: func() wgaddr.Address { return addr },
+				},
+			}
+			result := engine.filterAllowedIPs(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestOverlayAddrsFromAllowedIPs(t *testing.T) {
+	ourV6Net := netip.MustParsePrefix("fd00:1234:5678:abcd::/64")
+
+	tests := []struct {
+		name       string
+		allowedIPs []string
+		ourV6Net   netip.Prefix
+		wantV4     string
+		wantV6     string
+	}{
+		{
+			name:       "v4 only",
+			allowedIPs: []string{"100.64.0.1/32"},
+			ourV6Net:   ourV6Net,
+			wantV4:     "100.64.0.1",
+			wantV6:     "",
+		},
+		{
+			name:       "v4 and v6 overlay",
+			allowedIPs: []string{"100.64.0.1/32", "fd00:1234:5678:abcd::1/128"},
+			ourV6Net:   ourV6Net,
+			wantV4:     "100.64.0.1",
+			wantV6:     "fd00:1234:5678:abcd::1",
+		},
+		{
+			name:       "v4, routed v6, overlay v6",
+			allowedIPs: []string{"100.64.0.1/32", "2001:db8::1/128", "fd00:1234:5678:abcd::1/128"},
+			ourV6Net:   ourV6Net,
+			wantV4:     "100.64.0.1",
+			wantV6:     "fd00:1234:5678:abcd::1",
+		},
+		{
+			name:       "routed v6 /128 outside our subnet is ignored",
+			allowedIPs: []string{"100.64.0.1/32", "2001:db8::1/128"},
+			ourV6Net:   ourV6Net,
+			wantV4:     "100.64.0.1",
+			wantV6:     "",
+		},
+		{
+			name:       "routed v6 prefix is ignored",
+			allowedIPs: []string{"100.64.0.1/32", "fd00:1234:5678:abcd::/64"},
+			ourV6Net:   ourV6Net,
+			wantV4:     "100.64.0.1",
+			wantV6:     "",
+		},
+		{
+			name:       "no v6 subnet configured",
+			allowedIPs: []string{"100.64.0.1/32", "fd00:1234:5678:abcd::1/128"},
+			ourV6Net:   netip.Prefix{},
+			wantV4:     "100.64.0.1",
+			wantV6:     "",
+		},
+		{
+			name:       "v4 /24 route is ignored",
+			allowedIPs: []string{"100.64.0.0/24", "100.64.0.1/32"},
+			ourV6Net:   ourV6Net,
+			wantV4:     "100.64.0.1",
+			wantV6:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v4, v6 := overlayAddrsFromAllowedIPs(tt.allowedIPs, tt.ourV6Net)
+			if tt.wantV4 == "" {
+				assert.False(t, v4.IsValid(), "expected no v4")
+			} else {
+				assert.Equal(t, tt.wantV4, v4.String(), "v4")
+			}
+			if tt.wantV6 == "" {
+				assert.False(t, v6.IsValid(), "expected no v6")
+			} else {
+				assert.Equal(t, tt.wantV6, v6.String(), "v6")
+			}
+		})
+	}
+}
+
+func TestEngine_SyncResponsePersistence(t *testing.T) {
+	e := &Engine{}
+
+	_, err := e.GetLatestSyncResponse()
+	require.Error(t, err, "persistence is disabled by default")
+
+	e.SetSyncResponsePersistence(true)
+	e.persistSyncResponse(&mgmtProto.SyncResponse{NetworkMap: &mgmtProto.NetworkMap{Serial: 7}})
+
+	got, err := e.GetLatestSyncResponse()
+	require.NoError(t, err)
+	assert.Equal(t, uint64(7), got.GetNetworkMap().GetSerial())
+
+	e.SetSyncResponsePersistence(false)
+	_, err = e.GetLatestSyncResponse()
+	require.Error(t, err)
+}

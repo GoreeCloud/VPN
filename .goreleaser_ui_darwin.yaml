@@ -1,0 +1,53 @@
+version: 2
+
+project_name: netbird-ui
+
+before:
+  hooks:
+    # Bindings are gitignored; regenerate before the frontend build so
+    # the @wailsio/runtime Vite plugin can resolve them (vite refuses to
+    # build without them).
+    - sh -c 'cd client/ui && wails3 generate bindings -clean=true -ts'
+    - sh -c 'cd client/ui/frontend && pnpm install --frozen-lockfile && pnpm build'
+
+builds:
+  - id: netbird-ui-darwin
+    dir: client/ui
+    binary: netbird-ui
+    env:
+      - CGO_ENABLED=1
+      - MACOSX_DEPLOYMENT_TARGET=11.0
+      - MACOS_DEPLOYMENT_TARGET=11.0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    gomips:
+      - hardfloat
+      - softfloat
+    ldflags:
+      - -s -w -X github.com/netbirdio/netbird/version.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.CommitDate}} -X main.builtBy=goreleaser
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    tags:
+      - production
+
+universal_binaries:
+  - id: netbird-ui-darwin
+
+archives:
+  - builds:
+      - netbird-ui-darwin
+
+checksum:
+  name_template: "{{ .ProjectName }}_darwin_checksums.txt"
+changelog:
+  disable: true
+
+release:
+  # Uploads into the release created by the main .goreleaser.yaml run.
+  # make_latest stays false everywhere: the signing pipeline
+  # (netbirdio/sign-pipelines) marks the release latest after the Windows
+  # and macOS artifacts are signed.
+  make_latest: false
+  prerelease: auto
