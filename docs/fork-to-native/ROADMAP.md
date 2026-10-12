@@ -7,7 +7,8 @@
 - [x] Retained upstream legal notices and archived upstream README
 - [x] Prevented unaudited upstream workflows from being imported
 - [x] Added scope-limited foundation validation
-- [ ] Go compile, module/test matrix and clean build evidence (requires Go >=1.26.7 or compatible toolchain)
+- [x] Established initial portable Go unit-test scope (`base62`, `monotime`, `shared/netiputil`) and invalid-IP-prefix regression coverage, validated locally with Go 1.27.0 (full build unverified)
+- [ ] Full Go compile, broader module/test matrix and clean build evidence (requires Go >=1.26.7 or compatible toolchain)
 - [ ] Dependency/license and vulnerability scan with triage
 - [ ] Feature and outbound-network-communications inventories
 

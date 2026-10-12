@@ -27,5 +27,7 @@ The imported NetBird repository applies **BSD-3-Clause** to most directories, bu
 
 ## Developer checks
 
-Run `bash scripts/check-ftn-baseline.sh` for source/provenance/license guardrails. This does **not** replace Go compilation, unit or integration tests, penetration review, GUI acceptance, privacy validation, or release certification. Do not use this repository as a deployable VPN without completing the required tests and review.
+Run `bash scripts/check-ftn-baseline.sh` for source/provenance/license guardrails. Run `go test -count=1 ./base62 ./monotime ./shared/netiputil` with Go 1.27.0 or another compatible, validated toolchain for a **limited Go test baseline**. The scoped GitHub Actions workflow executes these tests on pull requests without invoking inherited upstream release automation.
+
+The `shared/netiputil` serializer now rejects invalid prefixes before serialization; this protection has regression tests for malformed IPv4/IPv6 prefix inputs. These checks do **not** replace full Go compilation, integration tests, independent penetration review, GUI acceptance, privacy validation, or release certification. Do not use this repository as a deployable VPN without completing the required tests and review.
 
