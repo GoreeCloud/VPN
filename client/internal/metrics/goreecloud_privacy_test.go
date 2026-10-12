@@ -31,7 +31,7 @@ func TestForcedMetricsPushAcceptsExplicitDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 	push, err := NewPush(nil, nil, PushConfig{
-		ForceSending: true,
+		ForceSending:  true,
 		ServerAddress: destination,
 	}, "1.0.0")
 	if err != nil || push == nil {
