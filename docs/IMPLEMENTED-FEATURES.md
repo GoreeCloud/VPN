@@ -8,13 +8,13 @@ The current repository is an imported NetBird source foundation undergoing Fork-
 
 | Evidence identifier | Current evidence | Scope and limitations |
 | --- | --- | --- |
-| FTN-M0-001 | GoreeCloud/VPN source snapshot and upstream provenance recorded; licenses and inherited notice files preserved | Fork-to-Native foundation; independent native implementation unverified |
-| FTN-M0-002 | Upstream GitHub workflow automation intentionally excluded; scope-limited source guardrails added | Does not verify every inherited endpoint or future workflow |
-| FTN-M0-003 | Repo reports portable Go tests for `base62`, `monotime` and `shared/netiputil`, including invalid-prefix regression coverage | Scoped tests only; not full product build or network verification |
-| FTN-M0-004 | Repo reports inherited `signal` and `relay` Go entrypoints compiled in an isolated headless environment | Compilation does not establish service startup, connectivity, correctness or deployability |
-| FTN-M1-001 | Repo reports ACL source-prefix decoder changes preserving IPv4/IPv6 CIDR and `/0` wildcards, with scoped regression tests | Runtime control-plane propagation, real firewall application and revocation remain unverified |
+| M0 — provenance | GoreeCloud/VPN source snapshot and upstream provenance recorded; licenses and inherited notice files preserved | Fork-to-Native foundation; independent native implementation unverified |
+| M0 — workflow isolation | Upstream GitHub workflow automation intentionally excluded; scope-limited source guardrails added | Does not verify every inherited endpoint or future workflow |
+| M0 — limited tests | Repo reports portable Go tests for `base62`, `monotime` and `shared/netiputil`, including invalid-prefix regression coverage | Scoped tests only; not full product build or network verification |
+| M0 — scoped builds | Repo reports inherited `signal` and `relay` Go entrypoints compiled in an isolated headless environment | Compilation does not establish service startup, connectivity, correctness or deployability |
+| M1 — ACL decoding | Repo reports ACL source-prefix decoder changes preserving IPv4/IPv6 CIDR and `/0` wildcards, with scoped regression tests | Runtime control-plane propagation, real firewall application and revocation remain unverified |
 
-These entries preserve the existing identifiers/milestones from [Fork-to-Native roadmap](fork-to-native/ROADMAP.md), [Security baseline](fork-to-native/SECURITY.md) and [README](../README.md). The review establishes that these claims exist in current repository records, **not** that all tests were independently rerun in this documentation-only change.
+These entries map to the existing M0/M1 milestones in [Fork-to-Native roadmap](fork-to-native/ROADMAP.md), [Security baseline](fork-to-native/SECURITY.md) and [README](../README.md). The review establishes that these claims exist in current repository records, **not** that all tests were independently rerun in this documentation-only change.
 
 ## Not established by current evidence
 
