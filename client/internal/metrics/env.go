@@ -31,7 +31,6 @@ const (
 	// Format: duration string like "1h", "30m", "4h"
 	EnvMetricsInterval = "NB_METRICS_INTERVAL"
 
-	defaultMetricsConfigURL = "https://ingest.netbird.io/config"
 )
 
 // IsMetricsPushEnabled returns true if metrics push is enabled via NB_METRICS_PUSH_ENABLED env var.
@@ -74,10 +73,7 @@ func isForceSending() bool {
 
 // getMetricsConfigURL returns the URL to fetch push configuration from
 func getMetricsConfigURL() string {
-	if envURL := os.Getenv(EnvMetricsConfigURL); envURL != "" {
-		return envURL
-	}
-	return defaultMetricsConfigURL
+	return os.Getenv(EnvMetricsConfigURL)
 }
 
 // getMetricsServerURL returns the metrics server URL from NB_METRICS_SERVER_URL env var.
