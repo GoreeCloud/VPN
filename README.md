@@ -4,6 +4,12 @@
 
 GoreeCloud VPN is a planned GoreeCloud-native, privacy-conscious VPN and private-networking product. This repository contains a **source snapshot from [NetBird](https://github.com/netbirdio/netbird)** as the initial engineering foundation. Its inherited components are not yet a standalone, independently rebranded, tested, or production-ready GoreeCloud implementation.
 
+## Coordinated networking platform
+
+On October 12, 2026, the GoreeCloud owner designated **GoreeCloud Gateway, GoreeCloud VPN, and GoreeCloud DNS** as the **GoreeCloud Coordinated Networking Platform**. Within that coordinated family, VPN is responsible for encrypted private connectivity and approved device and remote access; [Gateway](https://github.com/GoreeCloud/gateway) owns HTTP/HTTPS ingress, reverse proxying, and controlled service publication; and [DNS](https://github.com/GoreeCloud/DNS) owns name resolution, filtering, and DNS policy. Coordination must preserve each product's independent authority and private-by-default access and publication boundaries.
+
+This designation records the intended product architecture. It does **not** establish completed cross-product integration, validated GoreeCloud-native VPN behavior, deployment, or production readiness.
+
 ## Current scope
 
 - Inherited upstream networking implementation includes WireGuard-based private networking, peer connectivity, and infrastructure components.
