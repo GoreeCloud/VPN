@@ -194,3 +194,16 @@ func TestDecodePrefixUnmapsV6Input(t *testing.T) {
 	assert.True(t, decoded.Addr().Is4(), "should be unmapped to v4")
 	assert.Equal(t, netip.MustParsePrefix("192.168.1.1/32"), decoded)
 }
+
+// DecodeAddr must not silently accept a network prefix as a peer address.
+func TestDecodeAddrRejectsNetworkPrefixes(t *testing.T) {
+	for _, prefix := range []string{"10.0.0.1/24", "0.0.0.0/0", "fd00::1/64", "::/0"} {
+		t.Run(prefix, func(t *testing.T) {
+			encoded, err := EncodePrefix(netip.MustParsePrefix(prefix))
+			require.NoError(t, err)
+			addr, err := DecodeAddr(encoded)
+			require.Error(t, err)
+			assert.False(t, addr.IsValid())
+		})
+	}
+}
