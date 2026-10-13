@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"sync/atomic"
+	"strings"
 	"testing"
 )
 
@@ -93,5 +94,28 @@ func TestMetricsOutboundGuardAndMissingProvider(t *testing.T) {
 		if err := p.push(context.Background(), raw); err == nil {
 			t.Error("unsafe telemetry outbound destination accepted")
 		}
+	}
+}
+
+func TestMetricsTransportErrorsRedactURL(t *testing.T) {
+	closed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	destination, err := url.Parse(closed.URL + "/metrics?private_key=synthetic-secret")
+	closed.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := NewPush(&mockMetrics{exportData: "synthetic_count 1\n"}, nil,
+		PushConfig{ServerAddress: destination, ForceSending: true}, "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = p.push(context.Background(), destination.String())
+	if err == nil {
+		t.Fatal("closed telemetry server unexpectedly accepted delivery")
+	}
+	if strings.Contains(err.Error(), "synthetic-secret") || strings.Contains(err.Error(), "private_key") {
+		t.Fatalf("metrics transport error revealed URL query parameters: %v", err)
 	}
 }
