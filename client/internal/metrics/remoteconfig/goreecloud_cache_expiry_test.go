@@ -53,3 +53,15 @@ func TestGoreeCloudFutureDatedConfigLeaseFailsClosed(t *testing.T) {
 		t.Fatal("future-dated cached telemetry destination was retained")
 	}
 }
+
+func TestGoreeCloudLeaseBoundary(t *testing.T) {
+	now := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
+	mgr := &Manager{lastConfig: &Config{}, lastSucceeded: now.Add(-maxCachedConfigAge)}
+	if mgr.cacheLeaseValid(now) {
+		t.Fatal("expired configuration must be rejected")
+	}
+	mgr.lastSucceeded = now.Add(-maxCachedConfigAge + time.Nanosecond)
+	if !mgr.cacheLeaseValid(now) {
+		t.Fatal("valid configuration expired too early")
+	}
+}
