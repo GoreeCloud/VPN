@@ -235,6 +235,11 @@ func TestGoreeCloudConfigTransportPolicy(t *testing.T) {
 		{"https://config.example.invalid/settings#fragment", false},
 		{"https://config.example.invalid/settings?x=1", false},
 		{"https://config.example.invalid/settings?", false},
+		{"https://config.example.invalid:0/settings", false},
+		{"https://config.example.invalid:65536/settings", false},
+		{"https://config.example.invalid:abc/settings", false},
+		{"https://config.example.invalid:/settings", false},
+		{"https://config.example.invalid:443/settings", true},
 		{"file:///etc/hosts", false},
 		{"", false},
 	}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -201,6 +202,15 @@ func validConfigEndpoint(raw string) bool {
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
 		u.Fragment != "" || u.RawFragment != "" || u.RawQuery != "" || u.ForceQuery {
 		return false
+	}
+	if strings.HasSuffix(u.Host, ":") {
+		return false
+	}
+	if portText := u.Port(); portText != "" {
+		port, portErr := strconv.Atoi(portText)
+		if portErr != nil || port < 1 || port > 65535 {
+			return false
+		}
 	}
 	if u.Scheme == "https" {
 		return true
