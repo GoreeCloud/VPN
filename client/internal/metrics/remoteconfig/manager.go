@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -142,15 +143,25 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 	case http.StatusNoContent, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusGone:
 		return nil, errConfigRevoked
 	}
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		return nil, fmt.Errorf("%w: config redirect refused", errConfigInvalid)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4097))
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 
+	if len(body) > 4096 {
+		return nil, fmt.Errorf("%w: response exceeds 4096 bytes", errConfigInvalid)
+	}
+
+	if !uniqueConfigFields(body) {
+		return nil, fmt.Errorf("%w: ambiguous or invalid config object", errConfigInvalid)
+	}
 	var raw rawConfig
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("%w: parse config: %v", errConfigInvalid, err)
@@ -182,6 +193,10 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("%w: invalid version-until", errConfigInvalid)
 	}
 
+	if since.GreaterThan(until) {
+		return nil, fmt.Errorf("%w: inverted version range", errConfigInvalid)
+	}
+
 	return &Config{
 		ServerURL:    *serverURL,
 		VersionSince: since,
@@ -191,12 +206,21 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 }
 
 // validConfigEndpoint permits explicit credential-free HTTPS endpoints, plus
-// loopback HTTP for development; never allow fragments or URL userinfo.
+// loopback HTTP for development; reject query parameters, fragments and URL userinfo.
 func validConfigEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
-		u.Fragment != "" || u.RawFragment != "" {
+		u.Fragment != "" || u.RawFragment != "" || u.RawQuery != "" || u.ForceQuery {
 		return false
+	}
+	if strings.HasSuffix(u.Host, ":") {
+		return false
+	}
+	if portText := u.Port(); portText != "" {
+		port, portErr := strconv.Atoi(portText)
+		if portErr != nil || port < 1 || port > 65535 {
+			return false
+		}
 	}
 	if u.Scheme == "https" {
 		return true
