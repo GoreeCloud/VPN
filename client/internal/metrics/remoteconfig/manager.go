@@ -195,11 +195,11 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 }
 
 // validConfigEndpoint permits explicit credential-free HTTPS endpoints, plus
-// loopback HTTP for development; never allow fragments or URL userinfo.
+// loopback HTTP for development; reject query parameters, fragments and URL userinfo.
 func validConfigEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
-		u.Fragment != "" || u.RawFragment != "" {
+		u.Fragment != "" || u.RawFragment != "" || u.RawQuery != "" || u.ForceQuery {
 		return false
 	}
 	if u.Scheme == "https" {

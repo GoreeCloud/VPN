@@ -222,7 +222,7 @@ func TestGoreeCloudConfigRejectsRedirect(t *testing.T) {
 func TestGoreeCloudConfigTransportPolicy(t *testing.T) {
 	cases := []struct {
 		target string
-		allow bool
+		allow  bool
 	}{
 		{"https://config.example.invalid/settings", true},
 		{"http://config.example.invalid/settings", false},
@@ -233,6 +233,8 @@ func TestGoreeCloudConfigTransportPolicy(t *testing.T) {
 		{"http://localhost.evil.invalid/settings", false},
 		{"https://user:pass@config.example.invalid/settings", false},
 		{"https://config.example.invalid/settings#fragment", false},
+		{"https://config.example.invalid/settings?x=1", false},
+		{"https://config.example.invalid/settings?", false},
 		{"file:///etc/hosts", false},
 		{"", false},
 	}
@@ -250,6 +252,7 @@ func TestGoreeCloudConfigRejectsUnsafeAdvertisedServer(t *testing.T) {
 		"http://collector.example.invalid/metrics",
 		"https://user:secret@collector.example.invalid/metrics",
 		"https://collector.example.invalid/metrics#fragment",
+		"https://collector.example.invalid/metrics?api_key=private",
 		"file:///tmp/metrics",
 	} {
 		t.Run(target, func(t *testing.T) {
