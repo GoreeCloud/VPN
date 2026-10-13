@@ -3,6 +3,7 @@ package remoteconfig
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -21,6 +22,10 @@ const (
 	DefaultMinRefreshInterval = 30 * time.Minute
 	maxCachedConfigAge        = 2 * time.Hour
 )
+
+// Sentinel for terminal server responses that explicitly withdraw a remote
+// telemetry destination. Never include endpoint URLs or credentials.
+var errConfigRevoked = errors.New("remote metrics configuration revoked")
 
 // Config holds the parsed remote push configuration
 type Config struct {
@@ -77,6 +82,12 @@ func (m *Manager) RefreshIfNeeded(ctx context.Context) *Config {
 	now := time.Now()
 	m.lastFetched = now
 	if err != nil {
+		if errors.Is(err, errConfigRevoked) {
+			m.lastConfig = nil
+			m.lastSucceeded = time.Time{}
+			log.Warn("metrics remote configuration revoked; discarding cached destination")
+			return nil
+		}
 		if m.cacheLeaseValid(now) {
 			log.Warn("metrics remote config unavailable; retaining time-bounded cached configuration")
 			return m.lastConfig
@@ -125,6 +136,10 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		}
 	}()
 
+	switch resp.StatusCode {
+	case http.StatusNoContent, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusGone:
+		return nil, errConfigRevoked
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
