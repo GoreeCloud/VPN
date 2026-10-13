@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -194,4 +195,88 @@ func newConfigServer(t *testing.T, config rawConfig) *httptest.Server {
 		err := json.NewEncoder(w).Encode(config)
 		require.NoError(t, err)
 	}))
+}
+
+func TestGoreeCloudConfigRejectsRedirect(t *testing.T) {
+	var forwarded atomic.Int32
+	redirected := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer redirected.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", redirected.URL+"/unapproved")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+
+	manager := NewManager(origin.URL, time.Minute)
+	if result := manager.RefreshIfNeeded(context.Background()); result != nil {
+		t.Fatal("configuration redirect was accepted")
+	}
+	if got := forwarded.Load(); got != 0 {
+		t.Fatalf("configuration fetch followed redirect %d times", got)
+	}
+}
+
+func TestGoreeCloudConfigTransportPolicy(t *testing.T) {
+	cases := []struct {
+		target string
+		allow bool
+	}{
+		{"https://config.example.invalid/settings", true},
+		{"http://config.example.invalid/settings", false},
+		{"http://localhost:9050/settings", true},
+		{"http://127.0.0.1:9050/settings", true},
+		{"http://[::1]:9050/settings", true},
+		{"http://192.0.2.8/settings", false},
+		{"http://localhost.evil.invalid/settings", false},
+		{"https://user:pass@config.example.invalid/settings", false},
+		{"https://config.example.invalid/settings#fragment", false},
+		{"file:///etc/hosts", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.target, func(t *testing.T) {
+			if got := validConfigEndpoint(tc.target); got != tc.allow {
+				t.Errorf("URL policy got %v, want %v", got, tc.allow)
+			}
+		})
+	}
+}
+
+func TestGoreeCloudConfigRejectsUnsafeAdvertisedServer(t *testing.T) {
+	for _, target := range []string{
+		"http://collector.example.invalid/metrics",
+		"https://user:secret@collector.example.invalid/metrics",
+		"https://collector.example.invalid/metrics#fragment",
+		"file:///tmp/metrics",
+	} {
+		t.Run(target, func(t *testing.T) {
+			server := newConfigServer(t, rawConfig{
+				ServerURL: target, VersionSince: "1.0.0", VersionUntil: "2.0.0", PeriodMinutes: 10,
+			})
+			defer server.Close()
+			if got := NewManager(server.URL, time.Minute).RefreshIfNeeded(context.Background()); got != nil {
+				t.Fatalf("unsafe advertised destination was accepted")
+			}
+		})
+	}
+}
+
+func TestGoreeCloudConfigTransportErrorsOmitSecrets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	target := server.URL + "/settings?token=synthetic-secret-token"
+	server.Close()
+
+	m := NewManager(target, time.Minute)
+	_, err := m.fetch(context.Background())
+	if err == nil {
+		t.Fatal("closed endpoint unexpectedly returned a configuration")
+	}
+	if strings.Contains(err.Error(), "synthetic-secret-token") || strings.Contains(err.Error(), "token=") {
+		t.Fatal("transport error disclosed sensitive config URL")
+	}
 }
