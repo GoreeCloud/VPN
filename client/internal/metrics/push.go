@@ -103,6 +103,11 @@ func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, 
 		cfgAddress:      cfgAddress,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			// Never forward potentially identifying metrics to an unreviewed
+			// redirect destination. A redirect is a failed delivery.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}, nil
 }
