@@ -6,7 +6,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,13 +22,6 @@ const (
 	// defaultPushInterval is the default interval for pushing metrics
 	defaultPushInterval = 5 * time.Minute
 )
-
-// defaultMetricsServerURL is used as fallback when NB_METRICS_FORCE_SENDING is true
-var defaultMetricsServerURL *url.URL
-
-func init() {
-	defaultMetricsServerURL, _ = url.Parse("https://ingest.netbird.io")
-}
 
 // PushConfig holds configuration for metrics push
 type PushConfig struct {
@@ -69,8 +64,29 @@ type Push struct {
 	cfgAddress      *url.URL
 }
 
+// validMetricsDestination allows only explicit, credential-free HTTPS URLs.
+// Plain HTTP is restricted to loopback development endpoints.
+func validMetricsDestination(target *url.URL) bool {
+	if target == nil || (target.Scheme != "http" && target.Scheme != "https") ||
+		target.Hostname() == "" || target.User != nil || target.Opaque != "" ||
+		target.Fragment != "" || target.RawFragment != "" {
+		return false
+	}
+	if target.Scheme == "https" {
+		return true
+	}
+	if strings.EqualFold(target.Hostname(), "localhost") {
+		return true
+	}
+	address, err := netip.ParseAddr(target.Hostname())
+	return err == nil && address.Unmap().IsLoopback()
+}
+
 // NewPush creates a new Push instance with configuration resolution
 func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, config PushConfig, agentVersion string) (*Push, error) {
+	if config.ServerAddress != nil && !validMetricsDestination(config.ServerAddress) {
+		return nil, fmt.Errorf("metrics push server URL must use HTTPS, except loopback HTTP, without credentials or fragments")
+	}
 	var cfgInterval time.Duration
 	var cfgAddress *url.URL
 
@@ -82,7 +98,7 @@ func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, 
 
 		cfgAddress = config.ServerAddress
 		if cfgAddress == nil {
-			cfgAddress = defaultMetricsServerURL
+			return nil, fmt.Errorf("forced metrics push requires an explicitly configured server URL")
 		}
 	} else {
 		cfgAddress = config.ServerAddress
@@ -110,6 +126,11 @@ func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, 
 		cfgAddress:      cfgAddress,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			// Never forward potentially identifying metrics to an unreviewed
+			// redirect destination. A redirect is a failed delivery.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}, nil
 }
@@ -128,9 +149,9 @@ func (p *Push) Start(ctx context.Context) {
 	// Log initial state
 	switch {
 	case p.cfgForceSending:
-		log.Infof("started metrics push with force sending to %s, interval %s", p.cfgAddress, p.cfgInterval)
+		log.Infof("started metrics push with forced delivery, interval %s", p.cfgInterval)
 	case p.cfgAddress != nil:
-		log.Infof("started metrics push with server URL override: %s", p.cfgAddress.String())
+		log.Info("started metrics push with explicit server URL override")
 	default:
 		log.Infof("started metrics push, server URL will be resolved from remote config")
 	}
@@ -167,6 +188,10 @@ func (p *Push) resolve(ctx context.Context) (pushURL string, interval time.Durat
 		return p.resolveServerURL(nil), p.cfgInterval
 	}
 
+	if p.configManager == nil {
+		log.Debug("metrics configuration provider unavailable; not sending")
+		return "", defaultPushInterval
+	}
 	config := p.configManager.RefreshIfNeeded(ctx)
 	if config == nil {
 		log.Debug("no metrics push config available, waiting to retry")
@@ -195,6 +220,9 @@ func (p *Push) resolve(ctx context.Context) (pushURL string, interval time.Durat
 
 // push exports metrics and sends them to the metrics server
 func (p *Push) push(ctx context.Context, pushURL string) error {
+	if !safeMetricsPushURL(pushURL) {
+		return fmt.Errorf("metrics push destination rejected by transport policy")
+	}
 	// Export metrics without clearing
 	var buf bytes.Buffer
 	if err := p.metrics.Export(&buf); err != nil {
@@ -231,7 +259,10 @@ func (p *Push) push(ctx context.Context, pushURL string) error {
 	// Send request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send request: %w", err)
+		// http.Client may wrap failures in url.Error, whose string contains
+		// the complete configured URL (including sensitive query parameters).
+		// The destination is intentionally not included in telemetry errors.
+		return fmt.Errorf("metrics transport request failed (%T)", err)
 	}
 	defer func() {
 		if resp.Body == nil {
@@ -247,7 +278,7 @@ func (p *Push) push(ctx context.Context, pushURL string) error {
 		return fmt.Errorf("push failed with status %d", resp.StatusCode)
 	}
 
-	log.Debugf("successfully pushed metrics to %s", pushURL)
+	log.Debug("metrics push succeeded")
 	p.metrics.Reset()
 	return nil
 }
@@ -265,7 +296,10 @@ func (p *Push) resolveServerURL(remoteServerURL *url.URL) string {
 	if baseURL == nil {
 		return ""
 	}
-
+	if !validMetricsDestination(baseURL) {
+		log.Warn("metrics destination invalid; skipping telemetry")
+		return ""
+	}
 	return baseURL.String()
 }
 

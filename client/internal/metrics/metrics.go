@@ -264,7 +264,12 @@ func (c *ClientMetrics) startPushLocked(ctx context.Context, config PushConfig) 
 	peerID := c.agentInfo.peerID
 	c.mu.RUnlock()
 
-	configManager := remoteconfig.NewManager(getMetricsConfigURL(), remoteconfig.DefaultMinRefreshInterval)
+	configURL := getMetricsConfigURL()
+	if !config.ForceSending && configURL == "" {
+		log.Warn("metrics push requires an explicit config URL; staying disabled")
+		return
+	}
+	configManager := remoteconfig.NewManager(configURL, remoteconfig.DefaultMinRefreshInterval)
 	push, err := NewPush(c.impl, configManager, config, agentVersion)
 	if err != nil {
 		log.Errorf("failed to create metrics push: %v", err)

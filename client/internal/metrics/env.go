@@ -30,8 +30,6 @@ const (
 	// and version range checks are still respected.
 	// Format: duration string like "1h", "30m", "4h"
 	EnvMetricsInterval = "NB_METRICS_INTERVAL"
-
-	defaultMetricsConfigURL = "https://ingest.netbird.io/config"
 )
 
 // IsMetricsPushEnabled returns true if metrics push is enabled via NB_METRICS_PUSH_ENABLED env var.
@@ -74,10 +72,7 @@ func isForceSending() bool {
 
 // getMetricsConfigURL returns the URL to fetch push configuration from
 func getMetricsConfigURL() string {
-	if envURL := os.Getenv(EnvMetricsConfigURL); envURL != "" {
-		return envURL
-	}
-	return defaultMetricsConfigURL
+	return os.Getenv(EnvMetricsConfigURL)
 }
 
 // getMetricsServerURL returns the metrics server URL from NB_METRICS_SERVER_URL env var.
@@ -87,13 +82,10 @@ func getMetricsServerURL() *url.URL {
 	if envURL == "" {
 		return nil
 	}
-	parsed, err := url.ParseRequestURI(envURL)
-	if err != nil || parsed.Host == "" {
-		log.Warnf("invalid metrics server URL %q: must be an absolute HTTP(S) URL", envURL)
-		return nil
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		log.Warnf("invalid metrics server URL %q: unsupported scheme %q", envURL, parsed.Scheme)
+	parsed, err := url.Parse(envURL)
+	if err != nil || !validMetricsDestination(parsed) {
+		// Never log endpoint strings: they may contain tokens or credentials.
+		log.Warn("metrics server URL rejected: HTTPS required except loopback HTTP; no credentials or fragments")
 		return nil
 	}
 	return parsed

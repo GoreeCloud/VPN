@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +53,9 @@ func NewManager(configURL string, minRefreshInterval time.Duration) *Manager {
 		minRefreshInterval: minRefreshInterval,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}
 }
@@ -68,7 +73,7 @@ func (m *Manager) RefreshIfNeeded(ctx context.Context) *Config {
 	fetchedConfig, err := m.fetch(ctx)
 	m.lastFetched = time.Now()
 	if err != nil {
-		log.Warnf("failed to fetch metrics remote config: %v", err)
+		log.Warn("metrics remote config unavailable; keeping cached configuration")
 		return m.lastConfig // return cached (may be nil)
 	}
 
@@ -88,14 +93,17 @@ func (m *Manager) isConfigFresh() bool {
 }
 
 func (m *Manager) fetch(ctx context.Context) (*Config, error) {
+	if !validConfigEndpoint(m.configURL) {
+		return nil, fmt.Errorf("metrics configuration URL rejected by transport policy")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.configURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("cannot construct metrics config request")
 	}
 
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return nil, fmt.Errorf("metrics config transport request failed")
 	}
 	defer func() {
 		if resp.Body != nil {
@@ -125,9 +133,12 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("server_url is required")
 	}
 
+	if !validConfigEndpoint(raw.ServerURL) {
+		return nil, fmt.Errorf("invalid metrics server destination")
+	}
 	serverURL, err := url.Parse(raw.ServerURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse server_url %q: %w", raw.ServerURL, err)
+		return nil, fmt.Errorf("invalid metrics server destination")
 	}
 
 	since, err := goversion.NewVersion(raw.VersionSince)
@@ -146,4 +157,25 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		VersionUntil: until,
 		Interval:     time.Duration(raw.PeriodMinutes) * time.Minute,
 	}, nil
+}
+
+// validConfigEndpoint permits explicit credential-free HTTPS endpoints, plus
+// loopback HTTP for development; never allow fragments or URL userinfo.
+func validConfigEndpoint(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
+		u.Fragment != "" || u.RawFragment != "" {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	if strings.EqualFold(u.Hostname(), "localhost") {
+		return true
+	}
+	addr, err := netip.ParseAddr(u.Hostname())
+	return err == nil && addr.Unmap().IsLoopback()
 }
