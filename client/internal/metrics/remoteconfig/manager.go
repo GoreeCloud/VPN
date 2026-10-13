@@ -146,9 +146,13 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4097))
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	if len(body) > 4096 {
+		return nil, fmt.Errorf("%w: response exceeds 4096 bytes", errConfigInvalid)
 	}
 
 	var raw rawConfig
