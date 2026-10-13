@@ -47,7 +47,7 @@ func TestMetricsDeliveryRejectsRedirect(t *testing.T) {
 func TestMetricsDestinationSecurity(t *testing.T) {
 	for _, tc := range []struct {
 		endpoint string
-		allow bool
+		allow    bool
 	}{
 		{"https://collector.example.invalid/metrics", true},
 		{"http://collector.example.invalid/metrics", false},
@@ -68,7 +68,7 @@ func TestMetricsDestinationSecurity(t *testing.T) {
 			if got := validMetricsDestination(target); got != tc.allow {
 				t.Errorf("accepted=%v want=%v", got, tc.allow)
 			}
-			_, err = NewPush(nil, nil, PushConfig{ForceSending:true, ServerAddress:target}, "1.0.0")
+			_, err = NewPush(nil, nil, PushConfig{ForceSending: true, ServerAddress: target}, "1.0.0")
 			if (err == nil) != tc.allow {
 				t.Errorf("constructor accepted=%v want=%v", err == nil, tc.allow)
 			}
@@ -77,8 +77,10 @@ func TestMetricsDestinationSecurity(t *testing.T) {
 }
 
 func TestMetricsOutboundGuardAndMissingProvider(t *testing.T) {
-	p, err := NewPush(&mockMetrics{exportData:"synthetic_count 1\n"}, nil, PushConfig{}, "1.0.0")
-	if err != nil { t.Fatal(err) }
+	p, err := NewPush(&mockMetrics{exportData: "synthetic_count 1\n"}, nil, PushConfig{}, "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	target, interval := p.resolve(context.Background())
 	if target != "" || interval != defaultPushInterval {
 		t.Errorf("unexpected fallback: target=%q interval=%s", target, interval)
