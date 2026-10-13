@@ -156,6 +156,9 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("%w: response exceeds 4096 bytes", errConfigInvalid)
 	}
 
+	if !uniqueConfigFields(body) {
+		return nil, fmt.Errorf("%w: ambiguous or invalid config object", errConfigInvalid)
+	}
 	var raw rawConfig
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("%w: parse config: %v", errConfigInvalid, err)
