@@ -187,6 +187,10 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("%w: invalid version-until", errConfigInvalid)
 	}
 
+	if since.GreaterThan(until) {
+		return nil, fmt.Errorf("%w: inverted version range", errConfigInvalid)
+	}
+
 	return &Config{
 		ServerURL:    *serverURL,
 		VersionSince: since,
