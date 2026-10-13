@@ -82,13 +82,10 @@ func getMetricsServerURL() *url.URL {
 	if envURL == "" {
 		return nil
 	}
-	parsed, err := url.ParseRequestURI(envURL)
-	if err != nil || parsed.Host == "" {
-		log.Warnf("invalid metrics server URL %q: must be an absolute HTTP(S) URL", envURL)
-		return nil
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		log.Warnf("invalid metrics server URL %q: unsupported scheme %q", envURL, parsed.Scheme)
+	parsed, err := url.Parse(envURL)
+	if err != nil || !validMetricsDestination(parsed) {
+		// Never log endpoint strings: they may contain tokens or credentials.
+		log.Warn("metrics server URL rejected: HTTPS required except loopback HTTP; no credentials or fragments")
 		return nil
 	}
 	return parsed
