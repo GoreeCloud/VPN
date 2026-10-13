@@ -174,12 +174,12 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 
 	since, err := goversion.NewVersion(raw.VersionSince)
 	if err != nil {
-		return nil, fmt.Errorf("parse version-since %q: %w", raw.VersionSince, err)
+		return nil, fmt.Errorf("%w: invalid version-since", errConfigInvalid)
 	}
 
 	until, err := goversion.NewVersion(raw.VersionUntil)
 	if err != nil {
-		return nil, fmt.Errorf("parse version-until %q: %w", raw.VersionUntil, err)
+		return nil, fmt.Errorf("%w: invalid version-until", errConfigInvalid)
 	}
 
 	return &Config{
