@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
+	"strings"
 	"net/url"
 	"testing"
 )
