@@ -19,6 +19,7 @@ import (
 
 const (
 	DefaultMinRefreshInterval = 30 * time.Minute
+	maxCachedConfigAge        = 2 * time.Hour
 )
 
 // Config holds the parsed remote push configuration
@@ -43,9 +44,10 @@ type Manager struct {
 	minRefreshInterval time.Duration
 	client             *http.Client
 
-	mu          sync.Mutex
-	lastConfig  *Config
-	lastFetched time.Time
+	mu            sync.Mutex
+	lastConfig    *Config
+	lastFetched   time.Time
+	lastSucceeded time.Time
 }
 
 func NewManager(configURL string, minRefreshInterval time.Duration) *Manager {
@@ -72,13 +74,20 @@ func (m *Manager) RefreshIfNeeded(ctx context.Context) *Config {
 	}
 
 	fetchedConfig, err := m.fetch(ctx)
-	m.lastFetched = time.Now()
+	now := time.Now()
+	m.lastFetched = now
 	if err != nil {
-		log.Warn("metrics remote config unavailable; keeping cached configuration")
-		return m.lastConfig // return cached (may be nil)
+		if m.cacheLeaseValid(now) {
+			log.Warn("metrics remote config unavailable; retaining time-bounded cached configuration")
+			return m.lastConfig
+		}
+		m.lastConfig = nil
+		log.Warn("metrics configuration expired; stopping optional telemetry")
+		return nil
 	}
 
 	m.lastConfig = fetchedConfig
+	m.lastSucceeded = now
 
 	log.Tracef("fetched metrics remote config: version-since=%s version-until=%s period=%s",
 		fetchedConfig.VersionSince, fetchedConfig.VersionUntil, fetchedConfig.Interval)
@@ -87,10 +96,14 @@ func (m *Manager) RefreshIfNeeded(ctx context.Context) *Config {
 }
 
 func (m *Manager) isConfigFresh() bool {
-	if m.lastConfig == nil {
-		return false
-	}
-	return time.Since(m.lastFetched) < m.minRefreshInterval
+	return m.cacheLeaseValid(time.Now()) && time.Since(m.lastFetched) < m.minRefreshInterval
+}
+
+// Cached telemetry destinations expire relative to the most recent success,
+// even if failures keep occurring and retries are spaced far apart.
+func (m *Manager) cacheLeaseValid(now time.Time) bool {
+	return m.lastConfig != nil && !m.lastSucceeded.IsZero() &&
+		!m.lastSucceeded.After(now) && now.Sub(m.lastSucceeded) < maxCachedConfigAge
 }
 
 func (m *Manager) fetch(ctx context.Context) (*Config, error) {
