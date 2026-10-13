@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -125,7 +126,7 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
-	if raw.PeriodMinutes <= 0 {
+	if raw.PeriodMinutes <= 0 || int64(raw.PeriodMinutes) > math.MaxInt64/int64(time.Minute) {
 		return nil, fmt.Errorf("invalid period_minutes: %d", raw.PeriodMinutes)
 	}
 
