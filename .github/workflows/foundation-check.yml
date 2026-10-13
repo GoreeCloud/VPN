@@ -65,4 +65,6 @@ jobs:
       - name: Assert explicit telemetry destinations and run metrics regressions
         env:
           GOTOOLCHAIN: local
-        run: go test -p 2 -count=1 ./client/internal/metrics
+        run: |
+          go test -p 2 -count=1 ./client/internal/metrics ./client/internal/metrics/remoteconfig
+          go vet -p 2 ./client/internal/metrics/remoteconfig
