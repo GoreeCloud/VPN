@@ -27,6 +27,8 @@ const (
 // telemetry destination. Never include endpoint URLs or credentials.
 var errConfigRevoked = errors.New("remote metrics configuration revoked")
 
+var errConfigInvalid = errors.New("remote metrics configuration invalid")
+
 // Config holds the parsed remote push configuration
 type Config struct {
 	ServerURL    url.URL
@@ -82,10 +84,10 @@ func (m *Manager) RefreshIfNeeded(ctx context.Context) *Config {
 	now := time.Now()
 	m.lastFetched = now
 	if err != nil {
-		if errors.Is(err, errConfigRevoked) {
+		if errors.Is(err, errConfigRevoked) || errors.Is(err, errConfigInvalid) {
 			m.lastConfig = nil
 			m.lastSucceeded = time.Time{}
-			log.Warn("metrics remote configuration revoked; discarding cached destination")
+			log.Warn("metrics remote configuration revoked or invalid; discarding cached destination")
 			return nil
 		}
 		if m.cacheLeaseValid(now) {
@@ -151,23 +153,23 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 
 	var raw rawConfig
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+		return nil, fmt.Errorf("%w: parse config: %v", errConfigInvalid, err)
 	}
 
 	if raw.PeriodMinutes <= 0 || int64(raw.PeriodMinutes) > math.MaxInt64/int64(time.Minute) {
-		return nil, fmt.Errorf("invalid period_minutes: %d", raw.PeriodMinutes)
+		return nil, fmt.Errorf("%w: invalid period_minutes", errConfigInvalid)
 	}
 
 	if raw.ServerURL == "" {
-		return nil, fmt.Errorf("server_url is required")
+		return nil, fmt.Errorf("%w: server_url is required", errConfigInvalid)
 	}
 
 	if !validConfigEndpoint(raw.ServerURL) {
-		return nil, fmt.Errorf("invalid metrics server destination")
+		return nil, fmt.Errorf("%w: invalid metrics server destination", errConfigInvalid)
 	}
 	serverURL, err := url.Parse(raw.ServerURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid metrics server destination")
+		return nil, fmt.Errorf("%w: invalid metrics server destination", errConfigInvalid)
 	}
 
 	since, err := goversion.NewVersion(raw.VersionSince)
