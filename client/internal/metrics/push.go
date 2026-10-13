@@ -259,7 +259,10 @@ func (p *Push) push(ctx context.Context, pushURL string) error {
 	// Send request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send request: %w", err)
+		// http.Client may wrap failures in url.Error, whose string contains
+		// the complete configured URL (including sensitive query parameters).
+		// The destination is intentionally not included in telemetry errors.
+		return fmt.Errorf("metrics transport request failed (%T)", err)
 	}
 	defer func() {
 		if resp.Body == nil {
