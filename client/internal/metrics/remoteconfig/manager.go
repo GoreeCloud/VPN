@@ -1,6 +1,7 @@
 package remoteconfig
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -168,8 +169,14 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("%w: ambiguous or invalid config object", errConfigInvalid)
 	}
 	var raw rawConfig
-	if err := json.Unmarshal(body, &raw); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("%w: parse config: %v", errConfigInvalid, err)
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("%w: trailing config content", errConfigInvalid)
 	}
 
 	if raw.PeriodMinutes <= 0 || int64(raw.PeriodMinutes) > math.MaxInt64/int64(time.Minute) {
