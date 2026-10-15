@@ -146,7 +146,10 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		return nil, fmt.Errorf("%w: config redirect refused", errConfigInvalid)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return nil, fmt.Errorf("%w: unexpected successful config status %d", errConfigInvalid, resp.StatusCode)
+		}
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
