@@ -172,7 +172,9 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&raw); err != nil {
-		return nil, fmt.Errorf("%w: parse config: %v", errConfigInvalid, err)
+		// The decoder error may echo an attacker-controlled member name.
+		// Keep remote JSON contents out of observable error strings.
+		return nil, fmt.Errorf("%w: configuration JSON rejected", errConfigInvalid)
 	}
 	var extra json.RawMessage
 	if err := decoder.Decode(&extra); err != io.EOF {
