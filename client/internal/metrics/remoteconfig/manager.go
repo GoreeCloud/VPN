@@ -150,6 +150,13 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return nil, fmt.Errorf("%w: unexpected successful config status %d", errConfigInvalid, resp.StatusCode)
 		}
+		// Permanent client-side configuration errors must not extend an
+		// optional telemetry destination's authorization lease. Rate limits
+		// and request timeouts remain transient, subject to the cache TTL.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 &&
+			resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests {
+			return nil, fmt.Errorf("%w: config client error status %d", errConfigInvalid, resp.StatusCode)
+		}
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
