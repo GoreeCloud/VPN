@@ -152,7 +152,9 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4097))
 	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
+		// A successful response with an unreadable body cannot renew or
+		// preserve the previous telemetry authorization.
+		return nil, fmt.Errorf("%w: failed to read config body", errConfigInvalid)
 	}
 
 	if len(body) > 4096 {
