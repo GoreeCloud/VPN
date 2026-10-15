@@ -222,7 +222,7 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 func validConfigEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
-		u.Fragment != "" || u.RawFragment != "" || u.RawQuery != "" || u.ForceQuery {
+		strings.Contains(raw, "#") || u.RawQuery != "" || u.ForceQuery {
 		return false
 	}
 	if strings.HasSuffix(u.Host, ":") {
