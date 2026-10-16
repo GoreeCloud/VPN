@@ -47,6 +47,7 @@ export function SettingsTroubleshooting() {
         setSystemInfo,
         upload,
         setUpload,
+        uploadAvailable,
         trace,
         setTrace,
         capture,
@@ -119,7 +120,12 @@ export function SettingsTroubleshooting() {
                 value={upload}
                 onChange={setUpload}
                 label={t("settings.troubleshooting.upload.label")}
-                helpText={t("settings.troubleshooting.upload.help")}
+                helpText={
+                    uploadAvailable
+                        ? t("settings.troubleshooting.upload.help")
+                        : "Uploads are disabled until a trusted GoreeCloud HTTPS endpoint is configured. Bundles are saved locally."
+                }
+                disabled={!uploadAvailable}
             />
             <FancyToggleSwitch
                 value={trace}
