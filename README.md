@@ -26,6 +26,7 @@ This designation records the intended product architecture. It does **not** esta
 - [Upstream provenance, modifications, and license obligations](docs/fork-to-native/UPSTREAM.md)
 - [Migration and acceptance milestones](docs/fork-to-native/ROADMAP.md)
 - [Security baseline and release restrictions](docs/fork-to-native/SECURITY.md)
+- [Read-only VPS preflight and controlled NetBird migration gates](docs/fork-to-native/MIGRATION.md)
 - [Nine platform-system integration assessment](docs/fork-to-native/INTEGRATIONS.md)
 - [Original upstream README, retained for provenance](docs/upstream/NETBIRD_README.md)
 
