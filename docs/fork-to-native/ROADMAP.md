@@ -7,9 +7,10 @@
 - [x] Retained upstream legal notices and archived upstream README
 - [x] Prevented unaudited upstream workflows from being imported
 - [x] Added scope-limited foundation validation
-- [x] Established initial portable Go unit-test scope (`base62`, `monotime`, `shared/netiputil`) and invalid-IP-prefix regression coverage, validated locally with Go 1.27.0 (full build unverified)
+- [x] Established initial portable Go unit-test scope (`base62`, `monotime`, `shared/netiputil`) and invalid-IP-prefix regression coverage, validated locally with Go 1.27.0 (cross-platform runtime release unverified)
 - [x] Compiled inherited `signal` and `relay` Go entrypoint packages in isolated Go 1.27.0 development container (headless build only, no service started)
-- [ ] Full client/management/combined Go compile, broader module/test matrix and clean build evidence (requires Go >=1.26.7 or compatible toolchain); five-component concurrent build attempt timed out without a verified result
+- [x] Compiled inherited `client`, `management`, and `combined` Linux Go entrypoints in exact-head GitHub CI run 38888371667 (Go 1.27, compile-only, no service started); with signal/relay, all five primary headless entrypoints now have Linux compile evidence
+- [ ] Reproducible release binaries, cross-platform build matrix, runtime acceptance and full integration/security test coverage; successful package builds are not a deployable VPN release
 - [ ] Dependency/license and vulnerability scan with triage
 - [ ] Feature and outbound-network-communications inventories
 
@@ -17,6 +18,8 @@
 
 - [x] Correct inherited client ACL decoding to preserve management-specified IPv4/IPv6 CIDR masks and /0 wildcards; add malformed-deny and mixed-family regression tests (scoped Go test evidence only)
 - [ ] Validate policy propagation from running management service through clients, real firewall backends, and revocation under network changes
+- [x] Removed inherited default NetBird metrics config and forced-send destinations, with opt-in and no-URL regression tests (PR #23; other upstream endpoint paths remain under audit)
+- [x] Added read-only VPS NetBird baseline preflight, synthetic tests, and controlled migration/rollback runbook (PR #24; actual cutover readiness unverified)
 
 Inventory peer connectivity, WireGuard key handling, enrollment/SSO/MFA, NAT traversal, DNS, routing, policy, daemon, management/signal/relay services, UI clients and installers. Document feature parity and unsupported behavior. Build an inbound/outbound endpoint and telemetry matrix, secret-handling review, AGPL obligations, STRIDE-style threat model, and security-response plan. Set fail-closed defaults and no implicit affiliation with upstream hosted control planes.
 
@@ -36,5 +39,5 @@ Replace inherited product-defining workflows and service control with GoreeCloud
 
 Require reproducible builds, complete platform test matrix, VPN networking/IPv4/IPv6/DNS leak tests, auth and authorization tests, secure secret/key lifecycle checks, fail-closed/network-transition tests, accessibility, privacy and AGPL compliance, migration/backup/rollback trials, signed artifacts, documentation and clean-install checks. Promotion to **Stable** needs independent release approval and observed runtime evidence. Classification becomes **Native** only when inherited product-defining architecture has passed native acceptance.
 
-**Status:** M0 partly achieved; M1 contains only scoped ACL policy-decoding improvements, with runtime firewall behavior and service integration still unverified. Milestones M2–M5 are **planned, not implemented**. Never report planned integrations, privacy protections or native apps as deployed.
+**Status:** M0 partly achieved; M1 has only scoped ACL and metrics-default safeguards; runtime firewall behavior, all upstream endpoint dependencies and service integration remain unverified. Milestones M2–M5 are **planned, not implemented**. Never report planned integrations, privacy protections or native apps as deployed.
 
