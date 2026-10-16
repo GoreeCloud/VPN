@@ -69,3 +69,12 @@ jobs:
         run: |
           go test -p 2 -count=1 ./client/internal/metrics ./client/internal/metrics/remoteconfig
           go vet -p 2 ./client/internal/metrics ./client/internal/metrics/remoteconfig
+  migration-preflight-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate read-only NetBird migration inventory
+        run: |
+          bash -n scripts/preflight-netbird-migration.sh
+          python3 scripts/test-preflight-netbird-migration.py
