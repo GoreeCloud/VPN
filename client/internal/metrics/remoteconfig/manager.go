@@ -1,6 +1,7 @@
 package remoteconfig
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -146,7 +147,10 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		return nil, fmt.Errorf("%w: config redirect refused", errConfigInvalid)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return nil, fmt.Errorf("%w: unexpected successful config status %d", errConfigInvalid, resp.StatusCode)
+		}
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
@@ -165,8 +169,16 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("%w: ambiguous or invalid config object", errConfigInvalid)
 	}
 	var raw rawConfig
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("%w: parse config: %v", errConfigInvalid, err)
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&raw); err != nil {
+		// The decoder error may echo an attacker-controlled member name.
+		// Keep remote JSON contents out of observable error strings.
+		return nil, fmt.Errorf("%w: configuration JSON rejected", errConfigInvalid)
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("%w: trailing config content", errConfigInvalid)
 	}
 
 	if raw.PeriodMinutes <= 0 || int64(raw.PeriodMinutes) > math.MaxInt64/int64(time.Minute) {
@@ -212,7 +224,7 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 func validConfigEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
-		u.Fragment != "" || u.RawFragment != "" || u.RawQuery != "" || u.ForceQuery {
+		strings.Contains(raw, "#") || u.RawQuery != "" || u.ForceQuery {
 		return false
 	}
 	if strings.HasSuffix(u.Host, ":") {
