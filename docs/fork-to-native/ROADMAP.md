@@ -17,6 +17,8 @@
 ## M1 — Behavior, data, privacy, and security baseline
 
 - [x] Correct inherited client ACL decoding to preserve management-specified IPv4/IPv6 CIDR masks and /0 wildcards; add malformed-deny and mixed-family regression tests (scoped Go test evidence only)
+- [x] Development candidate (pending review): reject non-host IPv4/IPv6 prefix wire values when decoding a single peer address, while keeping network-prefix decoding available for ACL routes; scoped `shared/netiputil`, `base62`, and `monotime` tests passed locally on Go 1.27.1 (source evidence only)
+- [x] Development candidate (pending review): security toolchain patch maintenance selects Go 1.26.9 for source defaults and Go 1.27.2 in scoped GitHub CI (new exact-head checks still required)
 - [ ] Validate policy propagation from running management service through clients, real firewall backends, and revocation under network changes
 - [x] Removed inherited default NetBird metrics config and forced-send destinations, with opt-in and no-URL regression tests (PR #23; other upstream endpoint paths remain under audit)
 - [x] Added read-only VPS NetBird baseline preflight, synthetic tests, and controlled migration/rollback runbook (PR #24; actual cutover readiness unverified)
