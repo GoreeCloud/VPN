@@ -58,6 +58,9 @@ func NewManager(configURL string, minRefreshInterval time.Duration) *Manager {
 // RefreshIfNeeded fetches new config if the cached one is stale.
 // Returns the current config (possibly just fetched) or nil if unavailable.
 func (m *Manager) RefreshIfNeeded(ctx context.Context) *Config {
+	if m.configURL == "" {
+		return nil // No implicit remote telemetry configuration endpoint.
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

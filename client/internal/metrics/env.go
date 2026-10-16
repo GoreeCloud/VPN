@@ -15,7 +15,8 @@ const (
 	// Disabled by default. Set NB_METRICS_PUSH_ENABLED=true to enable push.
 	EnvMetricsPushEnabled = "NB_METRICS_PUSH_ENABLED"
 
-	// EnvMetricsForceSending if set to true, skips remote configuration fetch and forces metric sending
+	// EnvMetricsForceSending skips remote configuration fetch. It requires
+	// NB_METRICS_SERVER_URL to identify an explicit destination.
 	EnvMetricsForceSending = "NB_METRICS_FORCE_SENDING"
 
 	// EnvMetricsConfigURL is the environment variable to override the metrics push config ServerAddress
@@ -31,7 +32,10 @@ const (
 	// Format: duration string like "1h", "30m", "4h"
 	EnvMetricsInterval = "NB_METRICS_INTERVAL"
 
-	defaultMetricsConfigURL = "https://ingest.netbird.io/config"
+	// GoreeCloud VPN intentionally has no inherited remote metrics endpoint.
+	// Operators must explicitly configure NB_METRICS_CONFIG_URL before any
+	// remotely configured metrics transmission can be attempted.
+	defaultMetricsConfigURL = ""
 )
 
 // IsMetricsPushEnabled returns true if metrics push is enabled via NB_METRICS_PUSH_ENABLED env var.
