@@ -1,6 +1,6 @@
 # Security baseline and release restrictions
 
-**Source-import development stage only.** Limited Go package tests, static analysis, and headless source builds of the inherited `signal` and `relay` packages have been introduced. No full-product compilation, independent vulnerability assessment, VPN runtime verification, packet-level validation, or production acceptance has been completed.
+**Source-import development stage only.** Scoped Go tests and static analysis pass, and exact-head CI compiled all five inherited primary Linux Go entrypoint packages without starting services. No full cross-platform product compilation, independent vulnerability assessment, VPN runtime verification, packet-level validation, or production acceptance has been completed.
 
 ## Non-negotiable release gates
 
@@ -28,3 +28,6 @@ The snapshot is inherited upstream code with upstream product names, URLs, Go mo
 
 All acceptance evidence must identify exact commit, test environment and results. Security claims without evidence are prohibited.
 
+## Desktop diagnostic upload safety (development only)
+
+The inherited desktop diagnostics UI previously enabled uploads by default to a NetBird-hosted service. The source now defaults to local-only bundles and requires both an explicit user opt-in and an operator-defined HTTPS destination through `VITE_GOREECLOUD_DEBUG_UPLOAD_URL`. Inherited NetBird/Wiretrustee domains are rejected. Scoped Node tests validate these source-level guards. This does not establish all upload pathways, package runtime behavior, or product-wide privacy acceptance.
