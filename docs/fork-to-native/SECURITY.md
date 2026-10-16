@@ -12,6 +12,10 @@
 - Assess supply-chain attack paths, build signing and SBOM before owner-facing binaries.
 - Treat AGPL-covered `management/`, `signal/`, `relay/` and `combined/` components and their modifications as requiring license-specific distribution/network-service compliance review.
 
+## Reverse proxy management defaults (development only)
+
+The inherited reverse proxy had a NetBird-hosted management URL default. The development source now requires an explicit `--mgmt` or `NB_PROXY_MANAGEMENT_ADDRESS` for startup, with regression tests. Other endpoints, deployments and runtime behavior remain unverified.
+
 ## Metrics privacy progress (development only)
 
 The inherited NetBird metrics push integration now requires an explicit remote configuration endpoint (`NB_METRICS_CONFIG_URL`) for remote configuration fetching. Setting `NB_METRICS_FORCE_SENDING=true` without an explicit `NB_METRICS_SERVER_URL` causes an error rather than selecting the upstream NetBird ingestion service. Regression tests cover these cases. Operators must still deliberately evaluate and configure any optional metric collection and upload, including server-controlled push settings.
