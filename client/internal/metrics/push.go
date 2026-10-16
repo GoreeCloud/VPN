@@ -21,12 +21,8 @@ const (
 	defaultPushInterval = 5 * time.Minute
 )
 
-// defaultMetricsServerURL is used as fallback when NB_METRICS_FORCE_SENDING is true
-var defaultMetricsServerURL *url.URL
-
-func init() {
-	defaultMetricsServerURL, _ = url.Parse("https://ingest.netbird.io")
-}
+// GoreeCloud VPN does not silently fall back to an inherited hosted
+// metrics destination. Force-sending requires an explicitly configured URL.
 
 // PushConfig holds configuration for metrics push
 type PushConfig struct {
@@ -82,7 +78,7 @@ func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, 
 
 		cfgAddress = config.ServerAddress
 		if cfgAddress == nil {
-			cfgAddress = defaultMetricsServerURL
+			return nil, fmt.Errorf("forced metrics push requires explicit server URL")
 		}
 	} else {
 		cfgAddress = config.ServerAddress
