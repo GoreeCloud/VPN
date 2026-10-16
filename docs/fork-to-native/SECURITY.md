@@ -24,3 +24,6 @@ The snapshot is inherited upstream code with upstream product names, URLs, Go mo
 
 All acceptance evidence must identify exact commit, test environment and results. Security claims without evidence are prohibited.
 
+## Desktop diagnostic upload safety (development only)
+
+The inherited desktop diagnostics UI previously enabled uploads by default to a NetBird-hosted service. The source now defaults to local-only bundles and requires both an explicit user opt-in and an operator-defined HTTPS destination through `VITE_GOREECLOUD_DEBUG_UPLOAD_URL`. Inherited NetBird/Wiretrustee domains are rejected. Scoped Node tests validate these source-level guards. This does not establish all upload pathways, package runtime behavior, or product-wide privacy acceptance.

@@ -4,8 +4,10 @@ import type { DebugBundleResult } from "@bindings/services/models.js";
 import i18next from "@/lib/i18n";
 import { errorDialog, formatErrorMessage } from "@/lib/errors.ts";
 import { startConnection } from "@/lib/connection.ts";
+import { resolveDebugUploadUrl } from "@/lib/debugUploadUrl.ts";
 
-const NETBIRD_UPLOAD_URL = "https://upload.debug.netbird.io/upload-url";
+// No inherited remote upload destination: build operators must configure a trusted HTTPS endpoint.
+const DEBUG_UPLOAD_URL = resolveDebugUploadUrl(import.meta.env.VITE_GOREECLOUD_DEBUG_UPLOAD_URL);
 const TRACE_LOG_FILE_COUNT = 5;
 const PLAIN_LOG_FILE_COUNT = 1;
 const TRACE_LOG_LEVEL = "trace";
@@ -205,7 +207,8 @@ const runBundleFlow = async (
 const useDebugBundle = () => {
     const [anonymizeLevel, setAnonymizeLevel] = useState<AnonymizeLevel>("none");
     const [systemInfo, setSystemInfo] = useState(true);
-    const [upload, setUpload] = useState(true);
+    // Uploading potentially sensitive support diagnostics requires opt-in.
+    const [upload, setUpload] = useState(false);
     const [trace, setTrace] = useState(true);
     const [capture, setCapture] = useState(false);
     const [traceMinutes, setTraceMinutes] = useState(1);
@@ -244,7 +247,7 @@ const useDebugBundle = () => {
             capturePackets,
             hasWindow: capture && totalSec > 0,
             totalSec,
-            uploadUrl: upload ? NETBIRD_UPLOAD_URL : "",
+            uploadUrl: upload && DEBUG_UPLOAD_URL ? DEBUG_UPLOAD_URL : "",
             anonymizeLevel,
             systemInfo,
         };
@@ -283,6 +286,7 @@ const useDebugBundle = () => {
         setSystemInfo,
         upload,
         setUpload,
+        uploadAvailable: Boolean(DEBUG_UPLOAD_URL),
         trace,
         setTrace,
         capture,
