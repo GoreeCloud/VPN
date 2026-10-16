@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,7 +36,9 @@ const (
 	applicationName = "proxy"
 )
 
-const DefaultManagementURL = "https://api.netbird.io:443"
+// A proxy must be explicitly pointed at an operator-approved management plane.
+// Never silently enroll a GoreeCloud proxy with NetBird's hosted control plane.
+const DefaultManagementURL = ""
 
 // envProxyToken is the environment variable name for the proxy access token.
 //
@@ -147,7 +150,17 @@ func SetVersionInfo(version, commit, buildDate, goVersion string) {
 	rootCmd.SetVersionTemplate("Version: {{.Version}}, Commit: " + Commit + ", BuildDate: " + BuildDate + ", Go: " + GoVersion + "\n")
 }
 
+func requireExplicitManagementAddress(address string) error {
+	if strings.TrimSpace(address) == "" {
+		return fmt.Errorf("proxy management address required: set --mgmt or NB_PROXY_MANAGEMENT_ADDRESS")
+	}
+	return nil
+}
+
 func runServer(cmd *cobra.Command, args []string) error {
+	if err := requireExplicitManagementAddress(mgmtAddr); err != nil {
+		return err
+	}
 	proxyToken := os.Getenv(envProxyToken)
 	if proxyToken == "" {
 		return fmt.Errorf("proxy token is required: set %s environment variable", envProxyToken)
