@@ -10,8 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/netbirdio/netbird/client/internal/profilemanager"
 )
 
 // envPrefix matches the prefix the agent uses, so an operator who already sets
@@ -81,6 +79,9 @@ func (r *rawConfig) Resolve() (*Config, error) {
 
 	var problems []string
 	cfg.AllowedHosts, problems = parseAllowedHosts(r.allowedHosts)
+	if strings.TrimSpace(r.managementURL) == "" {
+		problems = append(problems, "management URL required: set --management-url or NB_MANAGEMENT_URL")
+	}
 
 	seen := make(map[string]string, len(r.forwards))
 	for _, spec := range r.forwards {
@@ -144,8 +145,8 @@ func BindFlags(cmd *cobra.Command) *rawConfig {
 		"extra name a listener may be reached under, repeatable (env: comma separated)")
 	f.StringVar(&raw.setupKey, "setup-key", "",
 		"setup key for non-interactive login, accepts a file: prefix")
-	f.StringVar(&raw.managementURL, "management-url", profilemanager.DefaultManagementURL,
-		"management server URL")
+	f.StringVar(&raw.managementURL, "management-url", "",
+		"explicit management server URL (required; or set NB_MANAGEMENT_URL)")
 	f.StringVar(&raw.hostname, "hostname", "", "peer name in the network")
 	f.StringVar(&raw.stateDir, "state-dir", "",
 		"directory for config and state, kept in memory when empty")

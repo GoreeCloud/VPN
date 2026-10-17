@@ -18,8 +18,14 @@ is no installer and no service to register.
 A forward is one self-describing argument, and the flag repeats:
 
 ```sh
-nblink --forward 'http://8080=https://grafana.internal'
+nblink --management-url 'https://control.example.invalid:443' \
+       --forward 'http://8080=https://grafana.internal'
 ```
+
+Replace `control.example.invalid` with your operator-approved/self-hosted
+management endpoint. `--management-url` (or `NB_MANAGEMENT_URL`) is required;
+there is no inherited hosted default. Without it, validation fails before any
+VPN session starts.
 
 The scheme on the left selects the listener type. The right side is the
 upstream reached over the network. Giving only a port binds loopback, so the
@@ -30,14 +36,17 @@ it also works over SSH.
 
 ```sh
 # several forwards from one session
-nblink --forward 'http://8080=https://grafana.internal' \
+nblink --management-url 'https://control.example.invalid:443' \
+       --forward 'http://8080=https://grafana.internal' \
        --forward 'http://9090=https://prometheus.internal'
 
 # non-interactive
-nblink --forward 'http://8080=https://grafana.internal' --setup-key "$NB_SETUP_KEY"
+nblink --management-url 'https://control.example.invalid:443' \
+       --forward 'http://8080=https://grafana.internal' --setup-key "$NB_SETUP_KEY"
 
 # check the configuration without touching the network
-nblink --forward 'http://8080=https://grafana.internal' --check
+nblink --management-url 'https://control.example.invalid:443' \
+       --forward 'http://8080=https://grafana.internal' --check
 ```
 
 Port `0` asks the operating system for a free port. The address actually bound
@@ -52,6 +61,7 @@ image is configured. `NB_FORWARD` takes a comma separated list.
 docker run --rm -p 127.0.0.1:8080:8080 \
   --mount type=bind,src="$(pwd)/nb_setup_key",dst=/run/secrets/nb_setup_key,readonly \
   -e NB_SETUP_KEY=file:/run/secrets/nb_setup_key \
+  -e NB_MANAGEMENT_URL=https://control.example.invalid:443 \
   -e NB_FORWARD='http://0.0.0.0:8080=https://grafana.internal' \
   -e NB_ALLOW_PUBLIC_BIND=true \
   netbirdio/nblink
@@ -123,6 +133,8 @@ containers:
     env:
       - name: NB_FORWARD
         value: http://8080=https://grafana.internal
+      - name: NB_MANAGEMENT_URL
+        value: https://control.example.invalid:443
       - name: NB_SETUP_KEY
         value: file:/run/secrets/nblink/setup-key
     volumeMounts:
@@ -165,7 +177,7 @@ an Ingress.
 | --- | --- | --- | --- |
 | `--forward` | `NB_FORWARD` | | Forward spec, repeatable. Comma separated in the environment. |
 | `--setup-key` | `NB_SETUP_KEY` | | Non-interactive login. Accepts a `file:` prefix. |
-| `--management-url` | `NB_MANAGEMENT_URL` | NetBird cloud | Management server. |
+| `--management-url` | `NB_MANAGEMENT_URL` | **Required (unset)** | Explicit operator-approved management server. |
 | `--hostname` | `NB_HOSTNAME` | host name | Peer name in the network. |
 | `--state-dir` | `NB_STATE_DIR` | memory | Where identity and state persist. |
 | `--log-level` | `NB_LOG_LEVEL` | `info` | Log level. |

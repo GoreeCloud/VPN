@@ -82,6 +82,7 @@ func TestResolveGatesPublicBind(t *testing.T) {
 
 func TestResolveAllowsPublicBindWhenOptedIn(t *testing.T) {
 	_, raw := newTestCommand()
+	raw.managementURL = "https://mgmt.example.invalid:443"
 	raw.forwards = []string{"http://0.0.0.0:8080=https://grafana.internal"}
 	raw.allowPublicBind = true
 
@@ -124,6 +125,7 @@ func TestResolveReportsEveryProblem(t *testing.T) {
 
 func TestResolveAllowedHosts(t *testing.T) {
 	_, raw := newTestCommand()
+	raw.managementURL = "https://mgmt.example.invalid:443"
 	raw.forwards = []string{"http://0.0.0.0:8080=https://a.internal", "http://8081=https://b.internal"}
 	raw.allowPublicBind = true
 	raw.allowedHosts = []string{"NBLink.LAN.", "svc.ns.svc.cluster.local"}
@@ -158,6 +160,7 @@ func TestResolveSetupKeyFromFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("A1B2C3D4-SETUP-KEY\n"), 0o600))
 
 	_, raw := newTestCommand()
+	raw.managementURL = "https://mgmt.example.invalid:443"
 	raw.forwards = []string{"http://8080=https://a.internal"}
 	raw.setupKey = "file:" + path
 
@@ -171,6 +174,7 @@ func TestResolveSetupKeyFromFile(t *testing.T) {
 // not a collision.
 func TestResolveAllowsSeveralEphemeralPorts(t *testing.T) {
 	_, raw := newTestCommand()
+	raw.managementURL = "https://mgmt.example.invalid:443"
 	raw.forwards = []string{
 		"http://0=https://a.internal",
 		"http://0=https://b.internal",
@@ -216,4 +220,24 @@ func TestStatePathsFollowStateDir(t *testing.T) {
 	cfg.StateDir = "/var/lib/nblink"
 	assert.Equal(t, filepath.Join("/var/lib/nblink", "config.json"), cfg.ConfigPath())
 	assert.Equal(t, filepath.Join("/var/lib/nblink", "state.json"), cfg.StatePath())
+}
+
+// The forwarder must not inherit a hosted management endpoint.
+func TestManagementEndpointRequiresExplicitConfiguration(t *testing.T) {
+	cmd, raw := newTestCommand()
+	assert.Empty(t, raw.managementURL, "nblink must not default to a hosted control plane")
+	raw.forwards = []string{"http://8080=https://a.internal"}
+
+	for _, value := range []string{"", " ", "\t"} {
+		raw.managementURL = value
+		_, err := raw.Resolve()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--management-url")
+	}
+
+	t.Setenv("NB_MANAGEMENT_URL", "https://mgmt.example.invalid:443")
+	require.NoError(t, SetFlagsFromEnvVars(cmd))
+	cfg, err := raw.Resolve()
+	require.NoError(t, err)
+	assert.Equal(t, "https://mgmt.example.invalid:443", cfg.ManagementURL)
 }
