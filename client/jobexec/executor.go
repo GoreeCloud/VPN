@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/netbirdio/netbird/client/internal/debug"
-	"github.com/netbirdio/netbird/upload-server/types"
 )
 
 const (
@@ -29,8 +30,8 @@ func NewExecutor() *Executor {
 }
 
 func (e *Executor) BundleJob(ctx context.Context, debugBundleDependencies debug.GeneratorDependencies, params debug.BundleConfig, waitForDuration time.Duration, mgmURL, uploadURL string) (string, error) {
-	if uploadURL == "" {
-		uploadURL = types.DefaultBundleURL
+	if err := requireExplicitDebugUploadURL(uploadURL); err != nil {
+		return "", err
 	}
 
 	if waitForDuration > MaxBundleWaitTime {
@@ -66,6 +67,26 @@ func (e *Executor) BundleJob(ctx context.Context, debugBundleDependencies debug.
 
 	log.Infof("debug bundle has been generated successfully")
 	return key, nil
+}
+
+// requireExplicitDebugUploadURL prevents a remote management job from
+// silently transmitting diagnostic bundles to the inherited NetBird cloud.
+// An explicit HTTPS endpoint is required before even generating a bundle.
+func requireExplicitDebugUploadURL(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return fmt.Errorf("remote debug bundle upload requires an explicitly configured HTTPS endpoint")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || strings.Contains(raw, "#") {
+		return fmt.Errorf("remote debug bundle upload requires a valid HTTPS endpoint without credentials or fragments")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	for _, upstream := range []string{"netbird.io", "wiretrustee.com", "netbird.cloud"} {
+		if host == upstream || strings.HasSuffix(host, "."+upstream) {
+			return fmt.Errorf("inherited upstream diagnostic upload host is not permitted")
+		}
+	}
+	return nil
 }
 
 func waitFor(ctx context.Context, duration time.Duration) error {

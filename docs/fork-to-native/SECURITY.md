@@ -22,6 +22,10 @@ The inherited NetBird metrics push integration now requires an explicit remote c
 
 These checks address one inherited telemetry pathway only. They do not certify that other client, UI, control-plane, update or debug-upload destinations are GoreeCloud-owned or offline-safe. See the endpoint audit in GitHub issue #5.
 
+## Remote diagnostic job upload guard
+
+Remote diagnostic jobs now require an explicitly configured HTTPS upload endpoint. Invalid or inherited upstream addresses fail before collecting logs. Scoped regression tests cover this path. Other mobile, CLI and SDK upload paths remain unverified and require independent authorization review.
+
 ## Current known limitations
 
 The snapshot is inherited upstream code with upstream product names, URLs, Go module identity, policies, and dependencies. It is **not** independently hardened, not a verified privacy shield, and not suitable for representation as a GoreeCloud production VPN. Upstream workflows are excluded but any future workflow added to this repository must receive a separate security audit.
