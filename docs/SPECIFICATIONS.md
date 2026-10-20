@@ -17,7 +17,7 @@ The complete owner-proposed, **not-yet-verified** requirements catalog belongs i
 3. **Encrypted transport and safe keys:** Rely on reviewed cryptographic protocols; protect private key material and support secure rotation and revocation.
 4. **Infrastructure independence:** Design self-hosted, managed and hybrid options without locking basic safe operation to an unverified hosted service.
 5. **Censorship resistance where viable:** Modular alternative transports should degrade safely, be measurable and not promise invisibility.
-6. **Native cross-platform experience:** Use real platform APIs, appropriate privileged agents, Glaze standards and accessible controls, accounting for OS restrictions.
+6. **Native cross-platform experience:** Use real platform APIs, appropriate privileged agents, GoreeCloud UI standards and accessible controls, accounting for OS restrictions.
 7. **Least privilege and clear boundaries:** Separate private resource access, public egress, management-plane authority and client privileges.
 8. **Performance and recovery:** Prefer direct tunnels, use encrypted relays when needed and recover safely across network changes.
 9. **Extensibility and auditability:** Modular transport, identity, policy and network components; documented APIs and integration contracts.
@@ -49,7 +49,7 @@ Modes should expose exact route and exit scope, DNS behavior, tunnel and kill-sw
 - **Trust models:** Maintain separate privacy-oriented internet egress and enterprise access policy/logging models. “Anonymous” must not imply absolute anonymity.
 - **Stealth:** Pluggable transports are advanced objectives; evaluate compatibility, adversary model, legal restrictions, performance and fallback without claiming undetectability.
 - **DNS ownership:** Coordinate with GoreeCloud DNS only after platform contracts and verified functionality exist.
-- **Security platform integration:** Identity, Mesh, Policy, Observability, Manager, Privacy Shield, Wardveil, Glaze and other proposed integrations remain unverified; use the [Integration assessment](fork-to-native/INTEGRATIONS.md).
+- **Security platform integration:** Identity, Mesh, Policy, Observability, Manager, Privacy Shield, Wardveil, GoreeCloud UI and other proposed integrations remain unverified; use the [Integration assessment](fork-to-native/INTEGRATIONS.md).
 - **Platform support:** Windows, macOS, Linux, Android, iOS/iPadOS, ChromeOS, headless and network appliances are targets, not supported release claims.
 - **Credentials and secrets:** Do not check active credentials, private keys, device identifiers or production endpoints into public source or documentation.
 - **Release and licensing:** Verify BSD-3-Clause / AGPL-3.0 obligations, source provenance, security controls, privacy claims and operational behavior before any release or hosted service.
@@ -59,7 +59,7 @@ Modes should expose exact route and exit scope, DNS behavior, tunnel and kill-sw
 1. **M0 — Source foundation:** Audited upstream snapshot, licensing, guarded automation and scoped build/test evidence. Partly achieved.
 2. **M1 — Security and functional inventory:** Map actual inherited behavior and endpoints; test policy, key, routing/DNS, firewall, IPv4/IPv6 and device enrollment behavior. Incomplete.
 3. **M2 — Native trust contracts:** Establish GoreeCloud identity, policy, cryptographic boundary, management and integration evidence. Planned.
-4. **M3 — Native application experience:** Native platform clients, Glaze design, accessible onboarding, trustworthy permission UX and signing. Planned.
+4. **M3 — Native application experience:** Native platform clients, GoreeCloud UI design, accessible onboarding, trustworthy permission UX and signing. Planned.
 5. **M4 — Independent architecture:** Progressive migration from inherited product-defining workflows, with compatibility and rollback. Planned.
 6. **M5 — Release acceptance:** Reproducible builds, full tests, real-network and leak verification, security/privacy/licensing review, fail-closed recovery, signed packages and guarded release approval. Planned.
 
