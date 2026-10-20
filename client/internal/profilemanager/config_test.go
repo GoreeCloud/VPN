@@ -350,6 +350,8 @@ func TestApplyMDMPolicyRemoteJobs(t *testing.T) {
 }
 
 func TestUpdateOldManagementURL(t *testing.T) {
+	// Legacy migration remains available only when specifically requested.
+	t.Setenv("GOREECLOUD_ENABLE_LEGACY_CLOUD_MIGRATION", "true")
 	origProber := newMgmProber
 	newMgmProber = func(_ context.Context, _ string, _ wgtypes.Key, _ bool) (mgmProber, error) {
 		return &mockMgmProber{}, nil

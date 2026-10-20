@@ -1265,6 +1265,13 @@ func GetExistingConfig(configPath string) (*Config, error) {
 // If it can switch, then it updates the config and returns a new one. Otherwise, it returns the provided config.
 // The check is performed only for the NetBird's managed version.
 func UpdateOldManagementURL(ctx context.Context, config *Config, configPath string) (*Config, error) {
+	// Legacy cloud URL migration can probe NetBird infrastructure and rewrite
+	// an existing profile. Never do that implicitly in GoreeCloud VPN.
+	// An operator must explicitly opt in to the legacy compatibility action.
+	if os.Getenv("GOREECLOUD_ENABLE_LEGACY_CLOUD_MIGRATION") != "true" {
+		return config, nil
+	}
+
 	defaultManagementURL, err := parseURL("Management URL", DefaultManagementURL)
 	if err != nil {
 		return nil, err
