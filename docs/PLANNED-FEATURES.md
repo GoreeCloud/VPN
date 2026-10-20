@@ -237,7 +237,7 @@ The source specification is arranged into 15 capability domains; the grouped ent
 | Privacy Shield | Leak protection, privacy controls and metadata minimization | Proposed; independent implementation evidence required |
 | GoreeCloud Manager | Centralized management, configuration and operational control | Proposed; independent implementation evidence required |
 
-Also evaluate the existing [Fork-to-Native integration assessment](fork-to-native/INTEGRATIONS.md), which tracks Everkeep and Glaze as separate applicable/evaluation integrations. Future GoreeCloud DNS integration is governed by verified platform contracts, not this catalog.
+Also evaluate the existing [Fork-to-Native integration assessment](fork-to-native/INTEGRATIONS.md), which tracks Everkeep and GoreeCloud UI as separate applicable/evaluation integrations. Future GoreeCloud DNS integration is governed by verified platform contracts, not this catalog.
 
 ## 15. Proposed unified operating modes
 
