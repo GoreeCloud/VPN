@@ -27,9 +27,9 @@ Inventory peer connectivity, WireGuard key handling, enrollment/SSO/MFA, NAT tra
 
 Implement and test independent GoreeCloud Identity and Policy boundaries; evaluate interoperability with GoreeCloud Mesh; isolate cryptographic material in appropriate platform stores; audit Privacy Shield, Wardveil, Everkeep, Manager and Observability hooks. Preserve safe cryptographic standards and justified low-level libraries.
 
-## M3 — Glaze user experience and real native clients
+## M3 — GoreeCloud UI user experience and real native clients
 
-Replace upstream-branded UX, onboarding, notifications, help, settings, icons and login with the currently approved Stable Glaze tokens/components. Build/test appropriate actual platform-native clients (not webview wrappers) with permissions, accessibility, secure upgrade/install and signing paths. Retain required legal attribution in About/licenses.
+Replace upstream-branded UX, onboarding, notifications, help, settings, icons and login with the currently GoreeCloud UI tokens/components. Build/test appropriate actual platform-native clients (not webview wrappers) with permissions, accessibility, secure upgrade/install and signing paths. Retain required legal attribution in About/licenses.
 
 ## M4 — Progressive independent architecture
 
