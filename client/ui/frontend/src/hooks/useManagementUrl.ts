@@ -64,7 +64,8 @@ export enum ManagementMode {
 }
 
 function modeFromUrl(url: string): ManagementMode {
-    return isNetbirdCloud(url) ? ManagementMode.Cloud : ManagementMode.SelfHosted;
+    // A missing URL is unconfigured, not authorization for NetBird cloud.
+    return Boolean(url.trim()) && isNetbirdCloud(url) ? ManagementMode.Cloud : ManagementMode.SelfHosted;
 }
 
 export function useManagementUrl() {
