@@ -27,7 +27,9 @@ export function WelcomeStepManagement({
     onContinue,
 }: Readonly<WelcomeStepManagementProps>) {
     const { t } = useTranslation();
-    const startsCloud = isNetbirdCloud(initialUrl);
+    // An empty URL is a fresh GoreeCloud setup, never consent to NetBird cloud.
+    // Preserve explicit legacy hosted profiles without rewriting their URL.
+    const startsCloud = Boolean(initialUrl.trim()) && isNetbirdCloud(initialUrl);
     const [mode, setMode] = useState<ManagementMode>(
         startsCloud ? ManagementMode.Cloud : ManagementMode.SelfHosted,
     );
@@ -98,9 +100,11 @@ export function WelcomeStepManagement({
                 </DialogDescription>
             </div>
 
-            <div className={"wails-no-draggable w-full"}>
-                <ManagementServerSwitch value={mode} onChange={setMode} fullWidth />
-            </div>
+            {startsCloud && (
+                <div className={"wails-no-draggable w-full"}>
+                    <ManagementServerSwitch value={mode} onChange={setMode} fullWidth />
+                </div>
+            )}
 
             {mode === ManagementMode.SelfHosted && (
                 <div className={"wails-no-draggable w-full text-start"}>

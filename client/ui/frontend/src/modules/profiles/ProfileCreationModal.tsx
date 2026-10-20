@@ -46,7 +46,7 @@ export const ProfileCreationModal = ({ open, onOpenChange, onSubmit, initial }: 
     const nameRef = useRef<HTMLInputElement>(null);
 
     const [mode, setMode] = useState<ManagementMode>(
-        initial ? initialModeFromUrl(initial.managementUrl) : ManagementMode.Cloud,
+        initial ? initialModeFromUrl(initial.managementUrl) : ManagementMode.SelfHosted,
     );
     const [url, setUrl] = useState(initial ? initialSelfHostedUrl(initial.managementUrl) : "");
     const [urlError, setUrlError] = useState<string | null>(null);
@@ -57,7 +57,7 @@ export const ProfileCreationModal = ({ open, onOpenChange, onSubmit, initial }: 
     useEffect(() => {
         if (open) {
             setName(initial?.name ?? "");
-            setMode(initial ? initialModeFromUrl(initial.managementUrl) : ManagementMode.Cloud);
+            setMode(initial ? initialModeFromUrl(initial.managementUrl) : ManagementMode.SelfHosted);
             setUrl(initial ? initialSelfHostedUrl(initial.managementUrl) : "");
             setNameError(null);
             setUrlError(null);
@@ -209,11 +209,13 @@ export const ProfileCreationModal = ({ open, onOpenChange, onSubmit, initial }: 
                                     </HelpText>
                                 </div>
                                 <div className={"flex flex-col gap-3"}>
-                                    <ManagementServerSwitch
-                                        value={mode}
-                                        onChange={setMode}
-                                        fullWidth
-                                    />
+                                    {isEdit && (
+                                        <ManagementServerSwitch
+                                            value={mode}
+                                            onChange={setMode}
+                                            fullWidth
+                                        />
+                                    )}
                                     {mode === ManagementMode.SelfHosted && (
                                         <Input
                                             id={urlId}
