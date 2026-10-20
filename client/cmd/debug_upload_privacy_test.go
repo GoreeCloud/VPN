@@ -26,6 +26,8 @@ func TestGoreeCloudDebugCLIRequiresExplicitTrustedUploadService(t *testing.T) {
 		{"whitespace", "  ", false, false},
 		{"NetBird hosted", "https://upload.debug.netbird.io/upload-url", false, false},
 		{"NetBird root", "https://netbird.io/upload", false, false},
+		{"NetBird trailing root dot", "https://upload.debug.netbird.io./upload-url", false, false},
+		{"NetBird uppercase host", "https://UPLOAD.DEBUG.NETBIRD.IO/upload-url", false, false},
 		{"legacy cloud", "https://admin.wiretrustee.com/upload", false, false},
 		{"other upstream", "https://netbird.cloud/upload", false, false},
 		{"plain HTTP", "http://support.example.test/upload", false, false},

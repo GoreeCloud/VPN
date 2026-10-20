@@ -167,7 +167,12 @@ func requireExplicitCLIUploadService() error {
 	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" || endpoint.User != nil || strings.Contains(uploadBundleURLFlag, "#") {
 		return fmt.Errorf("diagnostic upload requires an HTTPS service URL without credentials or fragments")
 	}
-	host := strings.ToLower(endpoint.Hostname())
+	// A trailing DNS root dot names the same host (netbird.io. == netbird.io).
+	// Normalize it before checking inherited service destinations.
+	host := strings.TrimRight(strings.ToLower(endpoint.Hostname()), ".")
+	if host == "" {
+		return fmt.Errorf("diagnostic upload service has no valid host")
+	}
 	for _, upstream := range []string{"netbird.io", "wiretrustee.com", "netbird.cloud"} {
 		if host == upstream || strings.HasSuffix(host, "."+upstream) {
 			return fmt.Errorf("inherited NetBird upload service %q is not permitted", host)
