@@ -38,9 +38,20 @@ func NewWithDir(tempDir string) *Installer {
 	}
 }
 
+// requireApprovedNativeReleaseChannel blocks inherited NetBird installer and
+// signing metadata until GoreeCloud has an independently verified native
+// update channel. There is intentionally no environment-variable bypass.
+func requireApprovedNativeReleaseChannel() error {
+	return fmt.Errorf("GoreeCloud automatic installation disabled: signed native update channel is not approved")
+}
+
 // RunInstallation starts the updater process to run the installation
 // This will run by the original service process
 func (u *Installer) RunInstallation(ctx context.Context, targetVersion string) (err error) {
+	// Deny before clearing update results, writing temp files or networking.
+	if err := requireApprovedNativeReleaseChannel(); err != nil {
+		return err
+	}
 	resultHandler := NewResultHandler(u.tempDir)
 	if err := resultHandler.ClearStaleResult(); err != nil {
 		log.Warnf("clear stale installer result: %v", err)

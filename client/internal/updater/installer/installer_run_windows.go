@@ -43,6 +43,10 @@ var (
 // Setup runs the installer with appropriate arguments and manages the daemon/UI state
 // This will be run by the updater process
 func (u *Installer) Setup(ctx context.Context, dryRun bool, installerFile string, daemonFolder string) (resultErr error) {
+	// The inherited installer manages NetBird binaries and services, not GoreeCloud.
+	if err := requireApprovedNativeReleaseChannel(); err != nil {
+		return err
+	}
 	resultHandler := NewResultHandler(u.tempDir)
 
 	var uiSessions []uint32
