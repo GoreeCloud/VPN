@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/netbirdio/netbird/client/proto"
 	"github.com/netbirdio/netbird/client/server"
 	mgmProto "github.com/netbirdio/netbird/shared/management/proto"
-	"github.com/netbirdio/netbird/upload-server/types"
 	"github.com/netbirdio/netbird/version"
 )
 
@@ -151,6 +151,31 @@ func debugConfigDump(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// requireExplicitCLIUploadService fails before daemon RPC or temporary state
+// changes. Generating a local-only debug bundle never requires this setting.
+func requireExplicitCLIUploadService() error {
+	if !uploadBundleFlag {
+		return nil
+	}
+	if uploadBundleInsecureFlag {
+		return fmt.Errorf("diagnostic uploads require trusted HTTPS; insecure transport is not supported")
+	}
+	if strings.TrimSpace(uploadBundleURLFlag) == "" {
+		return fmt.Errorf("upload requested without a service URL; specify --upload-bundle-url with an approved HTTPS endpoint")
+	}
+	endpoint, err := url.Parse(uploadBundleURLFlag)
+	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" || endpoint.User != nil || strings.Contains(uploadBundleURLFlag, "#") {
+		return fmt.Errorf("diagnostic upload requires an HTTPS service URL without credentials or fragments")
+	}
+	host := strings.ToLower(endpoint.Hostname())
+	for _, upstream := range []string{"netbird.io", "wiretrustee.com", "netbird.cloud"} {
+		if host == upstream || strings.HasSuffix(host, "."+upstream) {
+			return fmt.Errorf("inherited NetBird upload service %q is not permitted", host)
+		}
+	}
+	return nil
+}
+
 // debugBundle requests the daemon to create a debug bundle and prints
 // the resulting local file path and, if uploaded, the uploaded file
 // key. It uses the package flags (anonymize, system info, log file
@@ -158,6 +183,9 @@ func debugConfigDump(cmd *cobra.Command, _ []string) error {
 // request. Returns an error if the RPC fails or if the daemon reports
 // an upload failure reason.
 func debugBundle(cmd *cobra.Command, _ []string) error {
+	if err := requireExplicitCLIUploadService(); err != nil {
+		return err
+	}
 	anonymizeEnabled, anonymizeLevel, err := effectiveAnonymize()
 	if err != nil {
 		return err
@@ -232,6 +260,9 @@ func setLogLevel(cmd *cobra.Command, args []string) error {
 }
 
 func runForDuration(cmd *cobra.Command, args []string) error {
+	if err := requireExplicitCLIUploadService(); err != nil {
+		return err
+	}
 	duration, err := time.ParseDuration(args[0])
 	if err != nil {
 		return fmt.Errorf("invalid duration format: %v", err)
@@ -568,14 +599,14 @@ func init() {
 	debugBundleCmd.Flags().Uint32VarP(&logFileCount, "log-file-count", "C", 1, "Number of rotated log files to include in debug bundle")
 	debugBundleCmd.Flags().BoolVarP(&systemInfoFlag, "system-info", "S", true, "Adds system information to the debug bundle")
 	debugBundleCmd.Flags().BoolVarP(&uploadBundleFlag, "upload-bundle", "U", false, "Uploads the debug bundle to a server")
-	debugBundleCmd.Flags().StringVar(&uploadBundleURLFlag, "upload-bundle-url", types.DefaultBundleURL, "Service URL to get an URL to upload the debug bundle")
-	debugBundleCmd.Flags().BoolVar(&uploadBundleInsecureFlag, "upload-bundle-insecure", false, "Allow uploading to an http or untrusted-TLS upload server (self-hosted); requires root")
+	debugBundleCmd.Flags().StringVar(&uploadBundleURLFlag, "upload-bundle-url", "", "Explicit trusted HTTPS service for optional debug bundle upload (no default)")
+	debugBundleCmd.Flags().BoolVar(&uploadBundleInsecureFlag, "upload-bundle-insecure", false, "Not supported by GoreeCloud; diagnostic upload requires trusted HTTPS")
 
 	forCmd.Flags().Uint32VarP(&logFileCount, "log-file-count", "C", 1, "Number of rotated log files to include in debug bundle")
 	forCmd.Flags().BoolVarP(&systemInfoFlag, "system-info", "S", true, "Adds system information to the debug bundle")
 	forCmd.Flags().BoolVarP(&uploadBundleFlag, "upload-bundle", "U", false, "Uploads the debug bundle to a server")
-	forCmd.Flags().StringVar(&uploadBundleURLFlag, "upload-bundle-url", types.DefaultBundleURL, "Service URL to get an URL to upload the debug bundle")
-	forCmd.Flags().BoolVar(&uploadBundleInsecureFlag, "upload-bundle-insecure", false, "Allow uploading to an http or untrusted-TLS upload server (self-hosted); requires root")
+	forCmd.Flags().StringVar(&uploadBundleURLFlag, "upload-bundle-url", "", "Explicit trusted HTTPS service for optional debug bundle upload (no default)")
+	forCmd.Flags().BoolVar(&uploadBundleInsecureFlag, "upload-bundle-insecure", false, "Not supported by GoreeCloud; diagnostic upload requires trusted HTTPS")
 	forCmd.Flags().Bool("capture", false, "Capture packets during the debug duration and include in bundle")
 	forCmd.Flags().Bool(noUpDownFlag, false, "Keep the daemon running instead of bringing it down and up before collecting. The bundle only includes the network map if a sync arrives during the run")
 }
