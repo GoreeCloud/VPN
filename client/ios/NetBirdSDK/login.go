@@ -54,7 +54,11 @@ type Auth struct {
 func NewAuth(cfgPath string, mgmURL string, fetcher PolicyFetcher) (*Auth, error) {
 	policy := loaderFor(fetcher).Load()
 	inputCfg := profilemanager.ConfigInput{ConfigPath: cfgPath}
-	if _, managed := policy.GetString(mdm.KeyManagementURL); !managed {
+	if cfgPath == "" {
+		// Honor MDM before an in-memory peer identity is provisioned.
+		inputCfg.ManagementURL = profilemanager.ResolveInMemoryManagementURL(mgmURL, policy)
+	} else if _, managed := policy.GetString(mdm.KeyManagementURL); !managed {
+		// Preserve the existing disk-backed managed-policy lifecycle.
 		inputCfg.ManagementURL = mgmURL
 	}
 
