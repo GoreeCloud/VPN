@@ -116,8 +116,9 @@ func TestRequirePrivilegeForUploadURL(t *testing.T) {
 		rootAlso bool
 	}{
 		{name: "no upload", url: "", unprivOK: true},
-		{name: "default service", url: types.DefaultBundleURL, unprivOK: true},
-		{name: "default service, other path", url: "https://upload.debug.netbird.io/other", unprivOK: true},
+		{name: "inherited NetBird default service", url: types.DefaultBundleURL, rootAlso: true},
+		{name: "inherited NetBird service other path", url: "https://upload.debug.netbird.io/other", rootAlso: true},
+		{name: "inherited host with root DNS dot", url: "https://upload.debug.netbird.io./upload-url", rootAlso: true},
 		{name: "loopback exfiltration endpoint", url: "https://127.0.0.1:8080/upload-url", rootAlso: true},
 		{name: "custom upload service", url: "https://attacker.example/upload-url", rootAlso: true},
 		{name: "plaintext default host", url: "http://upload.debug.netbird.io/upload-url", invalid: true},

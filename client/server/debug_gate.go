@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
 
 	"google.golang.org/grpc/codes"
 	gstatus "google.golang.org/grpc/status"
@@ -15,7 +14,6 @@ import (
 	"github.com/netbirdio/netbird/client/configs"
 	"github.com/netbirdio/netbird/client/internal/debug"
 	"github.com/netbirdio/netbird/client/internal/ipcauth"
-	"github.com/netbirdio/netbird/upload-server/types"
 )
 
 // uiLogFileName is the only file name the daemon accepts as a UI log path. The
@@ -42,11 +40,10 @@ func uiLogOpener(id ipcauth.Identity, identified bool) debug.LogOpener {
 // into both an exfiltration channel and a request forwarder that reaches
 // services only it can talk to.
 //
-// The upload service NetBird publishes is open to any caller, since that is what
-// the CLI and the desktop UI use. Any other endpoint, self-hosted upload servers
-// included, requires a privileged caller. Plaintext is refused for everyone: the
-// daemon fetches the URL and then PUTs the bundle to whatever that fetch returns,
-// so an http hop is a place to intercept the bundle or the redirect.
+// GoreeCloud never trusts the inherited NetBird upload service by default.
+// Every remote upload, including the inherited host and self-hosted services,
+// requires a privileged caller. Plaintext is refused for everyone: the daemon
+// fetches the URL and PUTs the bundle where that fetch directs it.
 //
 // insecure relaxes transport security (http, or an untrusted TLS certificate)
 // for a self-hosted server. It weakens a root-privileged upload, so it is
@@ -78,22 +75,9 @@ func requirePrivilegeForUploadURL(ctx context.Context, rawURL string, insecure b
 		return gstatus.Errorf(codes.InvalidArgument, "upload URL must use https, got scheme %q", parsed.Scheme)
 	}
 
-	if isDefaultUploadService(parsed) {
-		return nil
-	}
-
+	// The inherited NetBird-hosted upload service is not a GoreeCloud trust
+	// exception. Every remote diagnostic upload needs a privileged requester.
 	return denyPrivileged(ctx,
-		"uploading a debug bundle to an upload service other than the default one",
+		"uploading a debug bundle to a remote upload service",
 		ipcauth.ElevatedCommand("netbird debug bundle -U --upload-bundle-url <url>"))
-}
-
-// isDefaultUploadService reports whether the URL points at the upload service
-// NetBird runs. Only the host is compared: the service's path may differ between
-// releases, and the host is what decides who receives the bundle.
-func isDefaultUploadService(parsed *url.URL) bool {
-	defaultURL, err := url.Parse(types.DefaultBundleURL)
-	if err != nil {
-		return false
-	}
-	return parsed.Scheme == defaultURL.Scheme && strings.EqualFold(parsed.Host, defaultURL.Host)
 }
