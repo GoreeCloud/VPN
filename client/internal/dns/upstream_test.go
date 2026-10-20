@@ -35,28 +35,28 @@ func TestUpstreamResolver_ServeDNS(t *testing.T) {
 		{
 			name:           "Should Resolve A Record",
 			inputMSG:       new(dns.Msg).SetQuestion("one.one.one.one.", dns.TypeA),
-			InputServers:   []string{"8.8.8.8:53", "8.8.4.4:53"},
+			InputServers:   []string{"192.0.2.10:53", "192.0.2.11:53"},
 			timeout:        UpstreamTimeout,
 			expectedAnswer: "1.1.1.1",
 		},
 		{
 			name:           "Should Resolve If First Upstream Times Out",
 			inputMSG:       new(dns.Msg).SetQuestion("one.one.one.one.", dns.TypeA),
-			InputServers:   []string{"8.0.0.0:53", "8.8.4.4:53"},
+			InputServers:   []string{"192.0.2.20:53", "192.0.2.11:53"},
 			timeout:        2 * time.Second,
 			expectedAnswer: "1.1.1.1",
 		},
 		{
 			name:           "Should Not Resolve If Can't Connect To Both Servers",
 			inputMSG:       new(dns.Msg).SetQuestion("one.one.one.one.", dns.TypeA),
-			InputServers:   []string{"8.0.0.0:53", "8.0.0.1:53"},
+			InputServers:   []string{"192.0.2.20:53", "192.0.2.21:53"},
 			timeout:        200 * time.Millisecond,
 			acceptNXDomain: true,
 		},
 		{
 			name:                "Should Not Resolve If Parent Context Is Canceled",
 			inputMSG:            new(dns.Msg).SetQuestion("one.one.one.one.", dns.TypeA),
-			InputServers:        []string{"8.0.0.0:53", "8.8.4.4:53"},
+			InputServers:        []string{"192.0.2.20:53", "192.0.2.11:53"},
 			cancelCTX:           true,
 			timeout:             UpstreamTimeout,
 			responseShouldBeNil: true,
@@ -67,6 +67,18 @@ func TestUpstreamResolver_ServeDNS(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.TODO())
 			resolver, _ := newUpstreamResolver(ctx, &mockNetstackProvider{}, nil, nil, ".")
+			// Use the existing synthetic upstream client instead of querying public
+			// DNS servers. These cases must run with no network access and produce
+			// stable results regardless of internet connectivity or DNS policies.
+			resolver.upstreamClient = &mockUpstreamResolverPerServer{
+				responses: map[string]mockUpstreamResponse{
+					"192.0.2.10:53": {msg: buildMockResponse(dns.RcodeSuccess, "1.1.1.1")},
+					"192.0.2.11:53": {msg: buildMockResponse(dns.RcodeSuccess, "1.1.1.1")},
+					"192.0.2.20:53": {err: context.DeadlineExceeded},
+					"192.0.2.21:53": {err: fmt.Errorf("synthetic upstream unavailable")},
+				},
+				rtt: time.Millisecond,
+			}
 			// Convert test servers to netip.AddrPort
 			var servers []netip.AddrPort
 			for _, server := range testCase.InputServers {
