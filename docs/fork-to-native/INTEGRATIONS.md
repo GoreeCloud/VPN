@@ -8,7 +8,7 @@ None of the following entries constitutes an implemented or validated GoreeCloud
 | Privacy Shield | Applicable | Endpoint minimization, opt-in telemetry, permission/privacy settings, traffic exposure analysis | Not implemented |
 | Wardveil Security | Applicable | Security posture, identity/authorization monitoring and incident boundaries | Not implemented |
 | Everkeep | Evaluate | Encrypted configuration backup, recovery, safe restore without exporting keys | Not implemented |
-| Glaze | Applicable | Platform-specific native client UI, settings, onboarding, states and accessibility | Not implemented |
+| GoreeCloud UI | Applicable | Platform-specific native client UI, settings, onboarding, states and accessibility | Not implemented |
 | GoreeCloud Mesh | Applicable | WireGuard peer/mesh interoperability, topology/identity and policy ownership | Not implemented |
 | GoreeCloud Identity | Applicable | Account federation, session lifecycle, MFA and enrollment | Not implemented |
 | GoreeCloud Policy | Applicable | Network access policy, per-peer scopes, auditability and revocation | Not implemented |
