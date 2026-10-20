@@ -14,7 +14,7 @@ This designation records the intended product architecture. It does **not** esta
 
 - Inherited upstream networking implementation includes WireGuard-based private networking, peer connectivity, and infrastructure components.
 - The original Go module path and many upstream product identifiers remain intact during the audited import stage. **Do not interpret inherited upstream behavior as a verified GoreeCloud feature.**
-- No GoreeCloud VPN service, native client release, user-facing Glaze transformation, or production configuration has been delivered by this import.
+- No GoreeCloud VPN service, native client release, user-facing GoreeCloud UI transformation, or production configuration has been delivered by this import.
 - Upstream automation workflows were intentionally **not imported** to avoid accidental upstream publishing, external operations, and secret use. GoreeCloud-specific checks require independent review.
 
 ## Documentation
