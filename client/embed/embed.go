@@ -208,6 +208,8 @@ func New(opts Options) (*Client, error) {
 		return nil, fmt.Errorf("invalid dns labels: %w", err)
 	}
 
+	// Resolve active managed policy before provisioning an in-memory identity.
+	policy := mdm.NewLoader(nil).Load()
 	t := true
 	var config *profilemanager.Config
 	input := profilemanager.ConfigInput{
@@ -228,6 +230,7 @@ func New(opts Options) (*Client, error) {
 	if opts.ConfigPath != "" {
 		config, err = profilemanager.UpdateOrCreateConfig(input)
 	} else {
+		input.ManagementURL = profilemanager.ResolveInMemoryManagementURL(input.ManagementURL, policy)
 		config, err = profilemanager.CreateInMemoryConfig(input)
 	}
 	if err != nil {
@@ -236,7 +239,7 @@ func New(opts Options) (*Client, error) {
 	// Embedded path runs without the daemon Server: apply the active
 	// MDM policy explicitly so a forced ManagementURL / PSK / other
 	// managed key takes effect on this embedded engine instance.
-	config.ApplyMDMPolicy(mdm.NewLoader(nil).Load())
+	config.ApplyMDMPolicy(policy)
 
 	if opts.PrivateKey != "" {
 		config.PrivateKey = opts.PrivateKey

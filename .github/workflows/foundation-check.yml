@@ -171,3 +171,18 @@ jobs:
           node-version: '24'
       - name: Guard fresh desktop setup against implicit hosted management
         run: node --test client/ui/frontend/src/lib/managementOnboardingDefault.test.mjs
+  inmemory-management-enrollment-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: '1.27.0'
+          cache: false
+      - name: Verify explicit management before in-memory peer enrollment
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go test -p 2 -count=1 ./client/internal/profilemanager ./client/embed
+          go vet -p 2 ./client/internal/profilemanager ./client/embed

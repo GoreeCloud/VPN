@@ -1347,9 +1347,24 @@ func UpdateOldManagementURL(ctx context.Context, config *Config, configPath stri
 	return newConfig, nil
 }
 
-// CreateInMemoryConfig generate a new config but do not write out it to the store.
-// It carries an identity: callers connect with what they get back.
+// ResolveInMemoryManagementURL uses a caller-provided address or the
+// management endpoint enforced by MDM. Do not select NetBird cloud implicitly.
+func ResolveInMemoryManagementURL(requested string, policy *mdm.Policy) string {
+	if policy != nil {
+		if managedURL, ok := policy.GetString(mdm.KeyManagementURL); ok {
+			return managedURL
+		}
+	}
+	return requested
+}
+
+// CreateInMemoryConfig generates an in-memory config for immediate connection.
+// Reject absent management before identity generation, rather than silently
+// provisioning against the inherited NetBird cloud endpoint.
 func CreateInMemoryConfig(input ConfigInput) (*Config, error) {
+	if strings.TrimSpace(input.ManagementURL) == "" {
+		return nil, fmt.Errorf("GoreeCloud in-memory client provisioning requires an explicit management URL")
+	}
 	return createProvisionedConfig(input)
 }
 
