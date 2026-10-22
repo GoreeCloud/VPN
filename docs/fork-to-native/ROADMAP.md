@@ -20,6 +20,8 @@
 - [ ] Validate policy propagation from running management service through clients, real firewall backends, and revocation under network changes
 - [x] Removed inherited default NetBird metrics config and forced-send destinations, with opt-in and no-URL regression tests (PR #23; other upstream endpoint paths remain under audit)
 - [x] Added read-only VPS NetBird baseline preflight, synthetic tests, and controlled migration/rollback runbook (PR #24; actual cutover readiness unverified)
+- [x] Blocked inherited automatic installation before daemon or detached-updater side effects (PR #39); native Linux/Windows/macOS policy tests passed with production and development signing tags. An owned signed update channel is still unimplemented (#32).
+- [x] Removed inherited version-discovery egress and added bounded, cancellable, single-use fetcher lifecycle (PR #40); race-enabled unit tests and source CI cover the scoped behavior, not a qualified update service.
 
 Inventory peer connectivity, WireGuard key handling, enrollment/SSO/MFA, NAT traversal, DNS, routing, policy, daemon, management/signal/relay services, UI clients and installers. Document feature parity and unsupported behavior. Build an inbound/outbound endpoint and telemetry matrix, secret-handling review, AGPL obligations, STRIDE-style threat model, and security-response plan. Set fail-closed defaults and no implicit affiliation with upstream hosted control planes.
 
@@ -37,7 +39,7 @@ Replace inherited product-defining workflows and service control with GoreeCloud
 
 ## M5 — Acceptance and release
 
-Require reproducible builds, complete platform test matrix, VPN networking/IPv4/IPv6/DNS leak tests, auth and authorization tests, secure secret/key lifecycle checks, fail-closed/network-transition tests, accessibility, privacy and AGPL compliance, migration/backup/rollback trials, signed artifacts, documentation and clean-install checks. Promotion to **Stable** needs independent release approval and observed runtime evidence. Classification becomes **Native** only when inherited product-defining architecture has passed native acceptance.
+Require reproducible builds, complete platform test matrix, VPN networking/IPv4/IPv6/DNS leak tests, auth and authorization tests, secure secret/key lifecycle checks, fail-closed/network-transition tests, accessibility, privacy and AGPL compliance, migration/backup/rollback trials, signed artifacts, documentation and clean-install checks. Promotion to **Stable** requires authorized release acceptance, proportionate maintainer or AI-assisted review, applicable provider checks, and observed runtime evidence. Outside reviewer approval is not a GoreeCloud gate; actual native-OS, security, privacy and recovery acceptance remain mandatory. Classification becomes **Native** only when inherited product-defining architecture has passed native acceptance.
 
-**Status:** M0 partly achieved; M1 has only scoped ACL and metrics-default safeguards; runtime firewall behavior, all upstream endpoint dependencies and service integration remain unverified. Milestones M2–M5 are **planned, not implemented**. Never report planned integrations, privacy protections or native apps as deployed.
+**Status:** M0 partly achieved; M1 includes scoped source safeguards for ACL, telemetry, enrollment, diagnostic uploads and updates; runtime firewall behavior, all upstream endpoint dependencies and service integration remain unverified. Milestones M2–M5 are **planned, not implemented**. Never report planned integrations, privacy protections or native apps as deployed.
 

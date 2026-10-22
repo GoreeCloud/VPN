@@ -1,6 +1,6 @@
 # GoreeCloud VPN — Implemented Features (Source-Level Evidence)
 
-> **Scope:** Verified repository evidence and scoped test history, **not** delivered GoreeCloud VPN product features. Last documentation review: 2026-10-16.
+> **Scope:** Verified repository evidence and scoped test history, **not** delivered GoreeCloud VPN product features. Baseline documentation review: 2026-10-16. Targeted update-policy evidence added: 2026-10-21.
 
 The current repository is an imported NetBird source foundation undergoing Fork-to-Native conversion. Its inherited functionality must not be represented as a verified, separately branded, released or production-ready GoreeCloud application.
 
@@ -13,6 +13,8 @@ The current repository is an imported NetBird source foundation undergoing Fork-
 | M0 — limited tests | Repo reports portable Go tests for `base62`, `monotime` and `shared/netiputil`, including invalid-prefix regression coverage | Scoped tests only; not full product build or network verification |
 | M0 — scoped builds | GitHub CI run [38888371667](https://github.com/GoreeCloud/VPN/actions/runs/38888371667) passed Go 1.27 source compilation of five inherited Linux entrypoints: `client`, `management`, `combined`, `signal`, `relay` | Compilation does not establish service startup, networking, cross-platform artifacts, security, correctness or deployability |
 | M1 — ACL decoding | Repo reports ACL source-prefix decoder changes preserving IPv4/IPv6 CIDR and `/0` wildcards, with scoped regression tests | Runtime control-plane propagation, real firewall application and revocation remain unverified |
+| M1 — automatic installer restriction | [PR #39](https://github.com/GoreeCloud/VPN/pull/39) blocks both daemon and detached updater entry points before side effects; all 21 checks passed, including native Linux/Windows/macOS rejection tests with production and development signing tags | Preventive development guard; owned signing roots, package identity, signed upgrades and rollback remain unqualified (#32) |
+| M1 — version-discovery privacy and lifecycle | [PR #40](https://github.com/GoreeCloud/VPN/pull/40) removes the inherited default endpoint, cancels and waits for in-flight fetches, prevents duplicate/late startup, and bounds request time and streamed response size; scoped race tests and CI passed | No discovery service or signed update channel is enabled; no product-wide endpoint or runtime privacy certification |
 
 These entries map to the existing M0/M1 milestones in [Fork-to-Native roadmap](fork-to-native/ROADMAP.md), [Security baseline](fork-to-native/SECURITY.md) and [README](../README.md). The review establishes that these claims exist in current repository records, **not** that all tests were independently rerun in this documentation-only change.
 
