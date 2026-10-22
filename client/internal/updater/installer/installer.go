@@ -4,7 +4,6 @@ package installer
 
 import (
 	"context"
-	"fmt"
 )
 
 const (
@@ -40,11 +39,11 @@ func (u *Installer) CleanUpInstallerFiles() error {
 }
 
 func (u *Installer) RunInstallation(ctx context.Context, targetVersion string) error {
-	return fmt.Errorf("unsupported platform")
+	return CheckUpdatePolicy()
 }
 
 // Setup runs the installer with appropriate arguments and manages the daemon/UI state
 // This will be run by the updater process
 func (u *Installer) Setup(ctx context.Context, dryRun bool, targetVersion string, daemonFolder string) (resultErr error) {
-	return fmt.Errorf("unsupported platform")
+	return CheckUpdatePolicy()
 }

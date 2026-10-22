@@ -3,6 +3,13 @@
 // the complete update lifecycle including artifact download, cryptographic verification,
 // installation execution, process management, and result reporting.
 //
+// # GoreeCloud Fork-to-Native restriction
+//
+// RunInstallation and Setup reject all requests before downloading, writing
+// results, launching processes or restarting services. No GoreeCloud signed
+// update channel has been qualified. The flow below documents inherited,
+// currently blocked implementation; it is not an available product capability.
+//
 // # Architecture
 //
 // The installer package uses a two-process architecture to enable self-updates:

@@ -41,6 +41,10 @@ func NewWithDir(tempDir string) *Installer {
 // RunInstallation starts the updater process to run the installation
 // This will run by the original service process
 func (u *Installer) RunInstallation(ctx context.Context, targetVersion string) (err error) {
+	if err := CheckUpdatePolicy(); err != nil {
+		return err
+	}
+
 	resultHandler := NewResultHandler(u.tempDir)
 	if err := resultHandler.ClearStaleResult(); err != nil {
 		log.Warnf("clear stale installer result: %v", err)
