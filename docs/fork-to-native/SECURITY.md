@@ -50,6 +50,12 @@ The inherited periodic version checker no longer defaults to `pkgs.netbird.io`. 
 
 For internal test endpoints, requests capture the endpoint at construction, have a ten-second deadline, support cancellation during shutdown, and reject responses over 100 bytes even without Content-Length. Fetcher startup is single-use; shutdown is idempotent, waits for in-flight work, and prevents a queued start from running after a stop. Run `go test -race -count=1 ./version` for default-egress, cancellation, duplicate-start, stop-before-start and oversized-response regressions. This covers only the version-discovery path; issue #5 still governs the wider endpoint audit.
 
+## Compact host-address boundary (development only)
+
+`DecodeAddr` accepts only full host prefixes: /32 for IPv4 and /128 for IPv6. Use `DecodePrefix` for ACL networks, which preserves subnet masks and /0 wildcards. The host decoder rejects network-prefix input instead of silently narrowing a policy network to a peer. Existing mapped-IPv4 /32 wire values remain compatible and normalize to IPv4.
+
+`EncodeAddrChecked` rejects invalid or interface-scoped addresses explicitly. Zones are checked before unmapping IPv4-mapped IPv6 so normalization cannot silently lose an interface scope. The legacy `EncodeAddr` API remains available and returns nil for unsupported values. Unit and ACL regressions, host-boundary fuzzing and a 32-bit CI test cover this source-level contract; actual management propagation and kernel firewall acceptance remain open in issue #2.
+
 ## Remote telemetry authorization lease (development only)
 
 An optional remote telemetry destination is valid for at most two hours after its latest successfully validated configuration. Temporary transport failures, HTTP 408/429 and server errors may reuse only the remaining lease; failures never renew it. The exact expiry boundary stops optional telemetry even when the requested refresh interval is longer than the lease. A subsequently validated response can authorize it again.
@@ -61,9 +67,3 @@ The metrics CI gate runs race-enabled regression tests. All foundation jobs pin 
 ## Metrics upload redirect boundary (development only)
 
 The metrics upload client refuses HTTP redirects, including 307/308 responses that could replay a compressed metrics body and peer-identity header to another recipient. Authorization for the configured upload destination does not authorize a redirect target. A redirect is a failed delivery, so the metrics batch is retained; a subsequent direct successful response may clear it normally. Regression fixtures cover 301, 302, 303, 307 and 308 without contacting the redirect target. This guard does not certify all explicit or forced-send destination settings or product-wide privacy behavior.
-
-## Compact host-address boundary (development only)
-
-`DecodeAddr` accepts only full host prefixes: /32 for IPv4 and /128 for IPv6. Use `DecodePrefix` for ACL networks, which preserves subnet masks and /0 wildcards. The host decoder rejects network-prefix input instead of silently narrowing a policy network to a peer. Existing mapped-IPv4 /32 wire values remain compatible and normalize to IPv4.
-
-`EncodeAddrChecked` rejects invalid or interface-scoped addresses explicitly. Zones are checked before unmapping IPv4-mapped IPv6 so normalization cannot silently lose an interface scope. The legacy `EncodeAddr` API remains available and returns nil for unsupported values. Unit and ACL regressions, host-boundary fuzzing and a 32-bit CI test cover this source-level contract; actual management propagation and kernel firewall acceptance remain open in issue #2.
