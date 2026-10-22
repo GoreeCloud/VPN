@@ -70,13 +70,16 @@ func EncodeAddr(a netip.Addr) []byte {
 	return b
 }
 
-// DecodeAddr decodes compact prefix bytes and returns only the address,
-// discarding the prefix length. Useful when the prefix length is implied
-// (e.g. peer overlay IPs are always /32 or /128).
+// DecodeAddr decodes a compact host prefix (/32 for IPv4 or /128 for IPv6).
+// Rejecting network prefixes prevents silently treating a network policy
+// prefix as an individual peer address.
 func DecodeAddr(b []byte) (netip.Addr, error) {
 	p, err := DecodePrefix(b)
 	if err != nil {
 		return netip.Addr{}, err
+	}
+	if p.Bits() != p.Addr().BitLen() {
+		return netip.Addr{}, fmt.Errorf("expected host prefix for address, got /%d", p.Bits())
 	}
 	return p.Addr(), nil
 }
