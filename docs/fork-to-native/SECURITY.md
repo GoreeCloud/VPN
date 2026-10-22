@@ -49,3 +49,9 @@ Run `go test -count=1 ./client/internal/updater ./client/internal/updater/instal
 The inherited periodic version checker no longer defaults to `pkgs.netbird.io`. With no qualified GoreeCloud discovery channel, its endpoint is empty and startup returns without creating a polling loop or making an HTTP request. There is no operator environment switch to revive the inherited destination. This is separate from automatic installation and does not establish a signed update channel.
 
 For internal test endpoints, requests capture the endpoint at construction, have a ten-second deadline, support cancellation during shutdown, and reject responses over 100 bytes even without Content-Length. Fetcher startup is single-use; shutdown is idempotent, waits for in-flight work, and prevents a queued start from running after a stop. Run `go test -race -count=1 ./version` for default-egress, cancellation, duplicate-start, stop-before-start and oversized-response regressions. This covers only the version-discovery path; issue #5 still governs the wider endpoint audit.
+
+## Compact host-address boundary (development only)
+
+`DecodeAddr` accepts only full host prefixes: /32 for IPv4 and /128 for IPv6. Use `DecodePrefix` for ACL networks, which preserves subnet masks and /0 wildcards. The host decoder rejects network-prefix input instead of silently narrowing a policy network to a peer. Existing mapped-IPv4 /32 wire values remain compatible and normalize to IPv4.
+
+`EncodeAddrChecked` rejects invalid or interface-scoped addresses explicitly. Zones are checked before unmapping IPv4-mapped IPv6 so normalization cannot silently lose an interface scope. The legacy `EncodeAddr` API remains available and returns nil for unsupported values. Unit and ACL regressions, host-boundary fuzzing and a 32-bit CI test cover this source-level contract; actual management propagation and kernel firewall acceptance remain open in issue #2.

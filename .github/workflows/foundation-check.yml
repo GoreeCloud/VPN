@@ -24,7 +24,9 @@ jobs:
       - name: Validate portable Go primitives and IP prefix encoding
         env:
           GOTOOLCHAIN: local
-        run: go test -count=1 ./base62 ./monotime ./shared/netiputil
+        run: |
+          go test -count=1 ./base62 ./monotime ./shared/netiputil
+          CGO_ENABLED=0 GOARCH=386 go test -count=1 ./shared/netiputil
   acl-policy-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
