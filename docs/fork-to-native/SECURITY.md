@@ -36,6 +36,14 @@ All acceptance evidence must identify exact commit, test environment and results
 
 The inherited desktop diagnostics UI previously enabled uploads by default to a NetBird-hosted service. The source now defaults to local-only bundles and requires both an explicit user opt-in and an operator-defined HTTPS destination through `VITE_GOREECLOUD_DEBUG_UPLOAD_URL`. Inherited NetBird/Wiretrustee domains are rejected. Scoped Node tests validate these source-level guards. This does not establish all upload pathways, package runtime behavior, or product-wide privacy acceptance.
 
+## Automatic installer restriction (development only)
+
+The inherited Windows and macOS automatic installers are disabled. Both the daemon's `RunInstallation` entry point and the detached updater's `Setup` entry point reject requests before downloading installers or signing metadata, modifying result files, launching processes, stopping applications, or restarting services. Direct updater invocation, dry-run settings and the `devartifactsign` build tag cannot enable installation. The manager reports automatic installation unsupported on all platforms, including when management requests forced installation.
+
+This guard is deliberately not an operator-toggleable update channel. Removing it requires a reviewed implementation with GoreeCloud-owned signing roots and revocation, verified product/package identity, explicit authorization, artifact integrity, anti-downgrade, upgrade and rollback acceptance. Inherited updater source and legal notices remain for audited migration; their presence does not authorize installing NetBird packages. See release blocker [#32](https://github.com/GoreeCloud/VPN/issues/32).
+
+Run `go test -count=1 ./client/internal/updater ./client/internal/updater/installer` for the manager and installer regression suites. CI also executes the installer policy tests natively on Linux, Windows and macOS with production and development signing build tags. This is a source-level restriction, not proof of a qualified signed update path. Version discovery and other outbound endpoints still require the separate audit in issue #5.
+
 ## Version discovery restriction (development only)
 
 The inherited periodic version checker no longer defaults to `pkgs.netbird.io`. With no qualified GoreeCloud discovery channel, its endpoint is empty and startup returns without creating a polling loop or making an HTTP request. There is no operator environment switch to revive the inherited destination. This is separate from automatic installation and does not establish a signed update channel.
