@@ -18,6 +18,22 @@ The current repository is an imported NetBird source foundation undergoing Fork-
 
 These entries map to the existing M0/M1 milestones in [Fork-to-Native roadmap](fork-to-native/ROADMAP.md), [Security baseline](fork-to-native/SECURITY.md) and [README](../README.md). The review establishes that these claims exist in current repository records, **not** that all tests were independently rerun in this documentation-only change.
 
+## Development candidate — checked IP address serialization
+
+The scoped Development branch `feature/prefix-validation-20261013`
+introduces `shared/netiputil.EncodeAddrChecked` as an explicit-error API for
+serializing host addresses. The new API rejects invalid and zone-scoped IP
+addresses and retains the five-byte IPv4/seventeen-byte IPv6 wire encoding.
+Existing `EncodeAddr` remains source-compatible and preserves its nil-on-invalid
+behavior; callers handling untrusted configuration should migrate to the
+checked API once relevant integration tests support that transition.
+
+Source regression tests cover IPv4, IPv6, IPv4-mapped IPv6, invalid input,
+zone-scoped IPv6, and legacy encoding compatibility. These tests are added to
+the branch, but a successful source commit is not evidence that CI, real
+VPN connectivity, or target-device testing has passed. Do not classify this
+as an accepted-main feature before merge and exact-head validation.
+
 ## Not established by current evidence
 
 No independently verified GoreeCloud VPN native client release, hosted service, production network, platform-system integration, secure internet exit, privacy/no-logs claim, obfuscated transport, full VPN acceptance suite, signed package or Stable lifecycle exists in the evidence reviewed.

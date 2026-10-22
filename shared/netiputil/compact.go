@@ -57,16 +57,29 @@ func DecodePrefix(b []byte) (netip.Prefix, error) {
 	}
 }
 
-// EncodeAddr encodes a netip.Addr into compact prefix bytes with a host prefix
-// length (/32 for v4, /128 for v6). The address is always unmapped before encoding.
-func EncodeAddr(a netip.Addr) []byte {
+// EncodeAddrChecked encodes a valid address into a compact host-prefix value.
+// Callers handling untrusted network configuration should prefer this function
+// to the legacy EncodeAddr API so invalid addresses return an explicit error.
+func EncodeAddrChecked(a netip.Addr) ([]byte, error) {
+	if !a.IsValid() {
+		return nil, fmt.Errorf("invalid IP address")
+	}
 	a = a.Unmap()
+	if a.Zone() != "" {
+		return nil, fmt.Errorf("zoned IPv6 addresses are not supported in prefix encoding")
+	}
 	bits := 128
 	if a.Is4() {
 		bits = 32
 	}
-	// Host prefix lengths are always valid for the address family, so error is impossible.
-	b, _ := EncodePrefix(netip.PrefixFrom(a, bits))
+	return EncodePrefix(netip.PrefixFrom(a, bits))
+}
+
+// EncodeAddr preserves the existing errorless API for legacy callers.
+// Invalid or unsupported addresses yield nil; new callers should use
+// EncodeAddrChecked and handle its explicit error.
+func EncodeAddr(a netip.Addr) []byte {
+	b, _ := EncodeAddrChecked(a)
 	return b
 }
 
