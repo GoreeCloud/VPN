@@ -57,26 +57,36 @@ func DecodePrefix(b []byte) (netip.Prefix, error) {
 	}
 }
 
-// EncodeAddr encodes a netip.Addr into compact prefix bytes with a host prefix
-// length (/32 for v4, /128 for v6). The address is always unmapped before encoding.
-func EncodeAddr(a netip.Addr) []byte {
-	a = a.Unmap()
-	bits := 128
-	if a.Is4() {
-		bits = 32
+// EncodeAddrChecked encodes a valid, zone-free address as a compact host
+// prefix. The wire format cannot retain an IPv6 interface zone.
+func EncodeAddrChecked(a netip.Addr) ([]byte, error) {
+	if !a.IsValid() {
+		return nil, fmt.Errorf("invalid IP address")
 	}
-	// Host prefix lengths are always valid for the address family, so error is impossible.
-	b, _ := EncodePrefix(netip.PrefixFrom(a, bits))
-	return b
+	// Check before Unmap: unmapping a scoped IPv4-mapped address loses its zone.
+	if a.Zone() != "" {
+		return nil, fmt.Errorf("scoped IP address cannot be encoded as a peer host")
+	}
+	a = a.Unmap()
+	return EncodePrefix(netip.PrefixFrom(a, a.BitLen()))
 }
 
-// DecodeAddr decodes compact prefix bytes and returns only the address,
-// discarding the prefix length. Useful when the prefix length is implied
-// (e.g. peer overlay IPs are always /32 or /128).
+// EncodeAddr retains the legacy errorless API. Unsupported addresses return
+// nil; callers that need an explicit failure should use EncodeAddrChecked.
+func EncodeAddr(a netip.Addr) []byte {
+	encoded, _ := EncodeAddrChecked(a)
+	return encoded
+}
+
+// DecodeAddr decodes only compact host prefixes (/32 or /128). Network
+// policies must use DecodePrefix so their CIDR masks are preserved.
 func DecodeAddr(b []byte) (netip.Addr, error) {
 	p, err := DecodePrefix(b)
 	if err != nil {
 		return netip.Addr{}, err
+	}
+	if p.Bits() != p.Addr().BitLen() {
+		return netip.Addr{}, fmt.Errorf("expected host prefix, got /%d", p.Bits())
 	}
 	return p.Addr(), nil
 }
