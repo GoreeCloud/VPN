@@ -25,8 +25,8 @@ import (
 const (
 	// PayloadEvent identifies an event type
 	PayloadEvent = "self-hosted stats"
-	// payloadEndpoint metrics defaultEndpoint to send anonymous data
-	payloadEndpoint = "https://metrics.netbird.io"
+	// No qualified GoreeCloud hosted statistics channel is configured.
+	payloadEndpoint = ""
 	// defaultPushInterval default interval to push metrics
 	defaultPushInterval = 12 * time.Hour
 	// requestTimeout http request timeout
@@ -90,6 +90,10 @@ func NewWorker(ctx context.Context, id string, dataSource DataSource, connManage
 
 // Run runs the metrics worker
 func (w *Worker) Run(ctx context.Context) {
+	if !hostedMetricsEnabled() {
+		log.WithContext(ctx).Debug("hosted management statistics are disabled in this development build")
+		return
+	}
 	interval := getMetricsInterval(ctx)
 
 	pushTicker := time.NewTicker(interval)
@@ -122,6 +126,9 @@ func getMetricsInterval(ctx context.Context) time.Duration {
 }
 
 func (w *Worker) sendMetrics(ctx context.Context) error {
+	if !hostedMetricsEnabled() {
+		return errHostedMetricsDisabled
+	}
 	apiKey, err := getAPIKey(w.ctx)
 	if err != nil {
 		return err
@@ -518,6 +525,9 @@ func (w *Worker) generateProperties(ctx context.Context) properties {
 }
 
 func getAPIKey(ctx context.Context) (string, error) {
+	if !hostedMetricsEnabled() {
+		return "", errHostedMetricsDisabled
+	}
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 

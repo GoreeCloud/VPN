@@ -73,3 +73,9 @@ The metrics upload client refuses HTTP redirects, including 307/308 responses th
 Remote configuration, explicit upload overrides and forced-send destinations share one URL policy: credential-free HTTPS, with loopback HTTP permitted for local development; query strings, fragments and invalid ports are rejected. Upload construction and resolution validate destinations, and the send boundary rejects unsafe URLs before exporting metrics or invoking HTTP transport. Constructor configuration is snapshotted so later caller URL mutation cannot redirect an existing push instance.
 
 An invalid explicit environment override fails push initialization rather than falling back to a remotely supplied destination. Missing optional configuration providers skip delivery safely. Startup, successful-delivery, transport and response-close diagnostics omit destination URLs and untrusted transport error details. Explicit opt-in and no-default-endpoint behavior remain in effect; this does not prove full outbound independence, observed network behavior or native release readiness.
+
+## Hosted management statistics (development only)
+
+The inherited management statistics worker is disabled while no independently qualified GoreeCloud collection channel exists. Startup returns before creating a timer; direct send and token-fetch entry points reject the operation before HTTP requests or account/peer collection. The inherited hosted endpoint is empty. Existing anonymous-metrics flags and interval environment settings cannot enable this path.
+
+This applies to management's outbound hosted statistics only. It does not disable local Prometheus metrics or client debug-bundle collection. The full management/instance/proxy/geolocation egress inventory, consent design and observed network acceptance remain open in issue #5. No hosted collection service or production configuration is enabled by this guard.
