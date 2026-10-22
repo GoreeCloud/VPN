@@ -77,7 +77,7 @@ func TestTelemetryEndpointPolicy(t *testing.T) {
 		"http://localhost.example.invalid", "http://192.0.2.1", "https:opaque",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
-			require.False(t, validConfigEndpoint(endpoint))
+			require.False(t, ValidEndpoint(endpoint))
 			mgr := NewManager(endpoint, 0)
 			var requests int
 			mgr.client.Transport = configTransport(func(*http.Request) (*http.Response, error) {
@@ -90,6 +90,6 @@ func TestTelemetryEndpointPolicy(t *testing.T) {
 		})
 	}
 	for _, endpoint := range []string{"https://metrics.example.invalid/api", "https://metrics.example.invalid:443", "http://localhost:8080", "http://127.0.0.1:8080", "http://[::1]:8080"} {
-		require.True(t, validConfigEndpoint(endpoint), endpoint)
+		require.True(t, ValidEndpoint(endpoint), endpoint)
 	}
 }

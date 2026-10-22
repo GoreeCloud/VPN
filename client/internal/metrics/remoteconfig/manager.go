@@ -130,7 +130,7 @@ func (m *Manager) cacheLeaseValid(now time.Time) bool {
 }
 
 func (m *Manager) fetch(ctx context.Context) (*Config, error) {
-	if !validConfigEndpoint(m.configURL) {
+	if !ValidEndpoint(m.configURL) {
 		return nil, fmt.Errorf("%w: metrics configuration URL rejected by transport policy", errConfigInvalid)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.configURL, nil)
@@ -189,7 +189,7 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("%w: server_url is required", errConfigInvalid)
 	}
 
-	if !validConfigEndpoint(raw.ServerURL) {
+	if !ValidEndpoint(raw.ServerURL) {
 		return nil, fmt.Errorf("%w: invalid metrics server destination", errConfigInvalid)
 	}
 	serverURL, err := url.Parse(raw.ServerURL)
@@ -219,9 +219,9 @@ func (m *Manager) fetch(ctx context.Context) (*Config, error) {
 	}, nil
 }
 
-// validConfigEndpoint permits explicit credential-free HTTPS endpoints, plus
-// loopback HTTP for development; reject query parameters, fragments and URL userinfo.
-func validConfigEndpoint(raw string) bool {
+// ValidEndpoint reports whether a telemetry destination uses credential-free HTTPS
+// or loopback HTTP, without query parameters or fragments.
+func ValidEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
 		strings.Contains(raw, "#") || u.Fragment != "" || u.RawFragment != "" ||
