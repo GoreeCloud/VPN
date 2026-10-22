@@ -35,3 +35,9 @@ All acceptance evidence must identify exact commit, test environment and results
 ## Desktop diagnostic upload safety (development only)
 
 The inherited desktop diagnostics UI previously enabled uploads by default to a NetBird-hosted service. The source now defaults to local-only bundles and requires both an explicit user opt-in and an operator-defined HTTPS destination through `VITE_GOREECLOUD_DEBUG_UPLOAD_URL`. Inherited NetBird/Wiretrustee domains are rejected. Scoped Node tests validate these source-level guards. This does not establish all upload pathways, package runtime behavior, or product-wide privacy acceptance.
+
+## Version discovery restriction (development only)
+
+The inherited periodic version checker no longer defaults to `pkgs.netbird.io`. With no qualified GoreeCloud discovery channel, its endpoint is empty and startup returns without creating a polling loop or making an HTTP request. There is no operator environment switch to revive the inherited destination. This is separate from automatic installation and does not establish a signed update channel.
+
+For internal test endpoints, requests capture the endpoint at construction, have a ten-second deadline, support cancellation during shutdown, and reject responses over 100 bytes even without Content-Length. Fetcher startup is single-use; shutdown is idempotent, waits for in-flight work, and prevents a queued start from running after a stop. Run `go test -race -count=1 ./version` for default-egress, cancellation, duplicate-start, stop-before-start and oversized-response regressions. This covers only the version-discovery path; issue #5 still governs the wider endpoint audit.

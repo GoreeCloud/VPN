@@ -12,6 +12,8 @@ import (
 const httpAgent = "pkg/test"
 
 func TestNewUpdate(t *testing.T) {
+	previousVersion, previousURL := version, versionURL
+	t.Cleanup(func() { version, versionURL = previousVersion, previousURL })
 	version = "1.0.0"
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "10.0.0")
@@ -37,6 +39,8 @@ func TestNewUpdate(t *testing.T) {
 }
 
 func TestDoNotUpdate(t *testing.T) {
+	previousVersion, previousURL := version, versionURL
+	t.Cleanup(func() { version, versionURL = previousVersion, previousURL })
 	version = "11.0.0"
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "10.0.0")
@@ -62,6 +66,8 @@ func TestDoNotUpdate(t *testing.T) {
 }
 
 func TestDaemonUpdate(t *testing.T) {
+	previousVersion, previousURL := version, versionURL
+	t.Cleanup(func() { version, versionURL = previousVersion, previousURL })
 	version = "11.0.0"
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "11.0.0")
