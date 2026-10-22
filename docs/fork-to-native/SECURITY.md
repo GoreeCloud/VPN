@@ -55,3 +55,11 @@ For internal test endpoints, requests capture the endpoint at construction, have
 `DecodeAddr` accepts only full host prefixes: /32 for IPv4 and /128 for IPv6. Use `DecodePrefix` for ACL networks, which preserves subnet masks and /0 wildcards. The host decoder rejects network-prefix input instead of silently narrowing a policy network to a peer. Existing mapped-IPv4 /32 wire values remain compatible and normalize to IPv4.
 
 `EncodeAddrChecked` rejects invalid or interface-scoped addresses explicitly. Zones are checked before unmapping IPv4-mapped IPv6 so normalization cannot silently lose an interface scope. The legacy `EncodeAddr` API remains available and returns nil for unsupported values. Unit and ACL regressions, host-boundary fuzzing and a 32-bit CI test cover this source-level contract; actual management propagation and kernel firewall acceptance remain open in issue #2.
+
+## Remote telemetry authorization lease (development only)
+
+An optional remote telemetry destination is valid for at most two hours after its latest successfully validated configuration. Temporary transport failures, HTTP 408/429 and server errors may reuse only the remaining lease; failures never renew it. The exact expiry boundary stops optional telemetry even when the requested refresh interval is longer than the lease. A subsequently validated response can authorize it again.
+
+Revocation responses, redirects, unexpected success statuses, permanent client errors, unreadable/oversized responses, malformed or duplicate JSON fields, invalid version windows and invalid destinations discard cached authorization immediately. Responses are limited to 4096 bytes, including streams without Content-Length, and minute-to-duration overflow is rejected. The configuration URL and remotely supplied upload destination must use credential-free HTTPS or explicit loopback HTTP for local development, without query strings or fragments. Redirects are not followed. An unset configuration endpoint still makes no request.
+
+The metrics CI gate runs race-enabled regression tests. All foundation jobs pin checkout to the pull-request head or dispatch SHA to identify the exact tested source. These are scoped source/privacy checks; forced-send transport, the full outbound inventory, real network behavior and product-wide privacy acceptance remain separately governed by issue #5.
