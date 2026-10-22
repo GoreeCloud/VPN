@@ -50,6 +50,14 @@ The inherited periodic version checker no longer defaults to `pkgs.netbird.io`. 
 
 For internal test endpoints, requests capture the endpoint at construction, have a ten-second deadline, support cancellation during shutdown, and reject responses over 100 bytes even without Content-Length. Fetcher startup is single-use; shutdown is idempotent, waits for in-flight work, and prevents a queued start from running after a stop. Run `go test -race -count=1 ./version` for default-egress, cancellation, duplicate-start, stop-before-start and oversized-response regressions. This covers only the version-discovery path; issue #5 still governs the wider endpoint audit.
 
+## Remote telemetry authorization lease (development only)
+
+An optional remote telemetry destination is valid for at most two hours after its latest successfully validated configuration. Temporary transport failures, HTTP 408/429 and server errors may reuse only the remaining lease; failures never renew it. The exact expiry boundary stops optional telemetry even when the requested refresh interval is longer than the lease. A subsequently validated response can authorize it again.
+
+Revocation responses, redirects, unexpected success statuses, permanent client errors, unreadable/oversized responses, malformed or duplicate JSON fields, invalid version windows and invalid destinations discard cached authorization immediately. Responses are limited to 4096 bytes, including streams without Content-Length, and minute-to-duration overflow is rejected. The configuration URL and remotely supplied upload destination must use credential-free HTTPS or explicit loopback HTTP for local development, without query strings or fragments. Redirects are not followed. An unset configuration endpoint still makes no request.
+
+The metrics CI gate runs race-enabled regression tests. All foundation jobs pin checkout to the pull-request head or dispatch SHA to identify the exact tested source. These are scoped source/privacy checks; forced-send transport, the full outbound inventory, real network behavior and product-wide privacy acceptance remain separately governed by issue #5.
+
 ## Metrics upload redirect boundary (development only)
 
 The metrics upload client refuses HTTP redirects, including 307/308 responses that could replay a compressed metrics body and peer-identity header to another recipient. Authorization for the configured upload destination does not authorize a redirect target. A redirect is a failed delivery, so the metrics batch is retained; a subsequent direct successful response may clear it normally. Regression fixtures cover 301, 302, 303, 307 and 308 without contacting the redirect target. This guard does not certify all explicit or forced-send destination settings or product-wide privacy behavior.
