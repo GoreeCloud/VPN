@@ -106,6 +106,11 @@ func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, 
 		cfgAddress:      cfgAddress,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			// Upload authorization covers only the configured destination.
+			// Even a same-host redirect may change the recipient or replay data.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}, nil
 }
