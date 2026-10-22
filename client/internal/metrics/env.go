@@ -1,12 +1,15 @@
 package metrics
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/netbirdio/netbird/client/internal/metrics/remoteconfig"
 )
 
 const (
@@ -84,21 +87,19 @@ func getMetricsConfigURL() string {
 	return defaultMetricsConfigURL
 }
 
-// getMetricsServerURL returns the metrics server URL from NB_METRICS_SERVER_URL env var.
-// Returns nil if not set or invalid.
-func getMetricsServerURL() *url.URL {
-	envURL := os.Getenv(EnvMetricsServerURL)
-	if envURL == "" {
-		return nil
+// getMetricsServerURL returns an explicitly configured, safe metrics destination.
+// Invalid overrides return an error so callers cannot fall back to another target.
+func getMetricsServerURL() (*url.URL, error) {
+	raw := os.Getenv(EnvMetricsServerURL)
+	if raw == "" {
+		return nil, nil
 	}
-	parsed, err := url.ParseRequestURI(envURL)
-	if err != nil || parsed.Host == "" {
-		log.Warnf("invalid metrics server URL %q: must be an absolute HTTP(S) URL", envURL)
-		return nil
+	if !remoteconfig.ValidEndpoint(raw) {
+		return nil, fmt.Errorf("metrics server URL rejected by transport policy")
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		log.Warnf("invalid metrics server URL %q: unsupported scheme %q", envURL, parsed.Scheme)
-		return nil
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse metrics server URL")
 	}
-	return parsed
+	return parsed, nil
 }

@@ -32,6 +32,8 @@ type PushConfig struct {
 	Interval time.Duration
 	// ForceSending skips remote configuration fetch and version checks, pushing unconditionally.
 	ForceSending bool
+
+	serverAddressErr error
 }
 
 // PushConfigFromEnv builds a PushConfig from environment variables.
@@ -39,7 +41,7 @@ func PushConfigFromEnv() PushConfig {
 	config := PushConfig{}
 
 	config.ForceSending = isForceSending()
-	config.ServerAddress = getMetricsServerURL()
+	config.ServerAddress, config.serverAddressErr = getMetricsServerURL()
 	config.Interval = getMetricsInterval()
 
 	return config
@@ -67,6 +69,12 @@ type Push struct {
 
 // NewPush creates a new Push instance with configuration resolution
 func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, config PushConfig, agentVersion string) (*Push, error) {
+	if config.serverAddressErr != nil {
+		return nil, config.serverAddressErr
+	}
+	if config.ServerAddress != nil && !remoteconfig.ValidEndpoint(config.ServerAddress.String()) {
+		return nil, fmt.Errorf("metrics destination rejected by transport policy")
+	}
 	var cfgInterval time.Duration
 	var cfgAddress *url.URL
 
@@ -88,6 +96,11 @@ func NewPush(metrics metricsImplementation, configManager remoteConfigProvider, 
 		} else {
 			cfgInterval = config.Interval
 		}
+	}
+
+	if cfgAddress != nil {
+		address := *cfgAddress
+		cfgAddress = &address
 	}
 
 	parsedVersion, err := goversion.NewVersion(agentVersion)
@@ -129,9 +142,9 @@ func (p *Push) Start(ctx context.Context) {
 	// Log initial state
 	switch {
 	case p.cfgForceSending:
-		log.Infof("started metrics push with force sending to %s, interval %s", p.cfgAddress, p.cfgInterval)
+		log.Infof("started metrics push with explicit force sending, interval %s", p.cfgInterval)
 	case p.cfgAddress != nil:
-		log.Infof("started metrics push with server URL override: %s", p.cfgAddress.String())
+		log.Info("started metrics push with explicit server override")
 	default:
 		log.Infof("started metrics push, server URL will be resolved from remote config")
 	}
@@ -168,6 +181,9 @@ func (p *Push) resolve(ctx context.Context) (pushURL string, interval time.Durat
 		return p.resolveServerURL(nil), p.cfgInterval
 	}
 
+	if p.configManager == nil {
+		return "", defaultPushInterval
+	}
 	config := p.configManager.RefreshIfNeeded(ctx)
 	if config == nil {
 		log.Debug("no metrics push config available, waiting to retry")
@@ -196,6 +212,9 @@ func (p *Push) resolve(ctx context.Context) (pushURL string, interval time.Durat
 
 // push exports metrics and sends them to the metrics server
 func (p *Push) push(ctx context.Context, pushURL string) error {
+	if !remoteconfig.ValidEndpoint(pushURL) {
+		return fmt.Errorf("metrics destination rejected by transport policy")
+	}
 	// Export metrics without clearing
 	var buf bytes.Buffer
 	if err := p.metrics.Export(&buf); err != nil {
@@ -217,7 +236,7 @@ func (p *Push) push(ctx context.Context, pushURL string) error {
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", pushURL, compressed)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return fmt.Errorf("cannot construct metrics upload request")
 	}
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
 	req.Header.Set("Content-Encoding", "gzip")
@@ -232,14 +251,14 @@ func (p *Push) push(ctx context.Context, pushURL string) error {
 	// Send request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send request: %w", err)
+		return fmt.Errorf("metrics upload transport failed")
 	}
 	defer func() {
 		if resp.Body == nil {
 			return
 		}
 		if err := resp.Body.Close(); err != nil {
-			log.Warnf("failed to close response body: %v", err)
+			log.Warn("failed to close metrics response body")
 		}
 	}()
 
@@ -248,7 +267,7 @@ func (p *Push) push(ctx context.Context, pushURL string) error {
 		return fmt.Errorf("push failed with status %d", resp.StatusCode)
 	}
 
-	log.Debugf("successfully pushed metrics to %s", pushURL)
+	log.Debug("successfully pushed metrics")
 	p.metrics.Reset()
 	return nil
 }
@@ -263,7 +282,7 @@ func (p *Push) resolveServerURL(remoteServerURL *url.URL) string {
 		baseURL = remoteServerURL
 	}
 
-	if baseURL == nil {
+	if baseURL == nil || !remoteconfig.ValidEndpoint(baseURL.String()) {
 		return ""
 	}
 
