@@ -30,6 +30,10 @@ This designation records the intended product architecture. It does **not** esta
 - [Nine platform-system integration assessment](docs/fork-to-native/INTEGRATIONS.md)
 - [Original upstream README, retained for provenance](docs/upstream/NETBIRD_README.md)
 
+## Automatic updates during development
+
+Inherited automatic installers are blocked on every platform until a GoreeCloud-owned signed update chain is qualified. Direct updater calls and management-forced updates cannot enable installation. See the [installer restriction](docs/fork-to-native/SECURITY.md#automatic-installer-restriction-development-only) and release blocker [#32](https://github.com/GoreeCloud/VPN/issues/32).
+
 ## Licensing
 
 The imported NetBird repository applies **BSD-3-Clause** to most directories, but **AGPL-3.0** to `management/`, `signal/`, `relay/`, and `combined/`. The root [LICENSE](LICENSE), [LICENSES](LICENSES), component license files, and [AUTHORS](AUTHORS) remain part of this source distribution. Retain applicable copyright, source availability, and other obligations in all future derivatives and distributions.

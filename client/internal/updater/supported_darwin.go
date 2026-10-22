@@ -1,22 +1,7 @@
 package updater
 
-import (
-	"context"
-	"time"
-
-	log "github.com/sirupsen/logrus"
-
-	"github.com/netbirdio/netbird/client/internal/updater/installer"
-)
-
+// Inherited platform installers must remain disabled until the GoreeCloud
+// signing, package identity, upgrade and rollback chain is qualified.
 func isAutoUpdateSupported() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	isBrew := !installer.TypeOfInstaller(ctx).Downloadable()
-	if isBrew {
-		log.Warnf("auto-update disabled on Homebrew installation")
-		return false
-	}
-	return true
+	return false
 }
