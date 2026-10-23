@@ -2,18 +2,12 @@ package instance
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/mail"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/dexidp/dex/storage"
-	goversion "github.com/hashicorp/go-version"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/netbirdio/netbird/management/server/idp"
@@ -22,33 +16,16 @@ import (
 	"github.com/netbirdio/netbird/version"
 )
 
-const (
-	// Version endpoints
-	managementVersionURL = "https://pkgs.netbird.io/releases/latest/version"
-	dashboardReleasesURL = "https://api.github.com/repos/netbirdio/dashboard/releases/latest"
-
-	// Cache TTL for version information
-	versionCacheTTL = 60 * time.Minute
-
-	// HTTP client timeout
-	httpTimeout = 5 * time.Second
-)
-
-// VersionInfo contains version information for NetBird components
+// VersionInfo preserves the management API shape while remote release discovery is disabled
 type VersionInfo struct {
 	// CurrentVersion is the running management server version
 	CurrentVersion string
-	// DashboardVersion is the latest available dashboard version from GitHub
+	// DashboardVersion is empty until a trusted GoreeCloud release feed is qualified
 	DashboardVersion string
-	// ManagementVersion is the latest available management version from GitHub
+	// ManagementVersion is empty until a trusted GoreeCloud release feed is qualified
 	ManagementVersion string
-	// ManagementUpdateAvailable indicates if a newer management version is available
+	// ManagementUpdateAvailable stays false without independently verified release metadata
 	ManagementUpdateAvailable bool
-}
-
-// githubRelease represents a GitHub release response
-type githubRelease struct {
-	TagName string `json:"tag_name"`
 }
 
 // Manager handles instance-level operations like initial setup.
@@ -89,12 +66,6 @@ type DefaultManager struct {
 
 	setupRequired bool
 	setupMu       sync.RWMutex
-
-	// Version caching
-	httpClient       *http.Client
-	versionMu        sync.RWMutex
-	cachedVersions   *VersionInfo
-	lastVersionFetch time.Time
 }
 
 // NewManager creates a new instance manager.
@@ -105,9 +76,6 @@ func NewManager(ctx context.Context, store store.Store, idpManager idp.Manager) 
 	m := &DefaultManager{
 		store:         store,
 		setupRequired: false,
-		httpClient: &http.Client{
-			Timeout: httpTimeout,
-		},
 	}
 
 	if ok && embeddedIdp != nil {
@@ -283,129 +251,10 @@ func (m *DefaultManager) validateSetupInfo(email, password, name string) error {
 	return nil
 }
 
-// GetVersionInfo returns version information for NetBird components.
-func (m *DefaultManager) GetVersionInfo(ctx context.Context) (*VersionInfo, error) {
-	m.versionMu.RLock()
-	if m.cachedVersions != nil && time.Since(m.lastVersionFetch) < versionCacheTTL {
-		cached := *m.cachedVersions
-		m.versionMu.RUnlock()
-		return &cached, nil
-	}
-	m.versionMu.RUnlock()
-
-	return m.fetchVersionInfo(ctx)
-}
-
-func (m *DefaultManager) fetchVersionInfo(ctx context.Context) (*VersionInfo, error) {
-	m.versionMu.Lock()
-	// Double-check after acquiring write lock
-	if m.cachedVersions != nil && time.Since(m.lastVersionFetch) < versionCacheTTL {
-		cached := *m.cachedVersions
-		m.versionMu.Unlock()
-		return &cached, nil
-	}
-	m.versionMu.Unlock()
-
-	info := &VersionInfo{
-		CurrentVersion: version.NetbirdVersion(),
-	}
-
-	// Fetch management version from pkgs.netbird.io (plain text)
-	mgmtVersion, err := m.fetchPlainTextVersion(ctx, managementVersionURL)
-	if err != nil {
-		log.WithContext(ctx).Warnf("failed to fetch management version: %v", err)
-	} else {
-		info.ManagementVersion = mgmtVersion
-		info.ManagementUpdateAvailable = isNewerVersion(info.CurrentVersion, mgmtVersion)
-	}
-
-	// Fetch dashboard version from GitHub
-	dashVersion, err := m.fetchGitHubRelease(ctx, dashboardReleasesURL)
-	if err != nil {
-		log.WithContext(ctx).Warnf("failed to fetch dashboard version from GitHub: %v", err)
-	} else {
-		info.DashboardVersion = dashVersion
-	}
-
-	// Update cache
-	m.versionMu.Lock()
-	m.cachedVersions = info
-	m.lastVersionFetch = time.Now()
-	m.versionMu.Unlock()
-
-	return info, nil
-}
-
-// isNewerVersion returns true if latestVersion is greater than currentVersion
-func isNewerVersion(currentVersion, latestVersion string) bool {
-	current, err := goversion.NewVersion(currentVersion)
-	if err != nil {
-		return false
-	}
-
-	latest, err := goversion.NewVersion(latestVersion)
-	if err != nil {
-		return false
-	}
-
-	return latest.GreaterThan(current)
-}
-
-func (m *DefaultManager) fetchPlainTextVersion(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", "NetBird-Management/"+version.NetbirdVersion())
-
-	resp, err := m.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 100))
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
-	}
-
-	return strings.TrimSpace(string(body)), nil
-}
-
-func (m *DefaultManager) fetchGitHubRelease(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "NetBird-Management/"+version.NetbirdVersion())
-
-	resp, err := m.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
-	}
-
-	// Remove 'v' prefix if present
-	tag := release.TagName
-	if len(tag) > 0 && tag[0] == 'v' {
-		tag = tag[1:]
-	}
-
-	return tag, nil
+// GetVersionInfo returns the local management version without outbound discovery.
+// The inherited NetBird release endpoints are not trusted GoreeCloud update
+// channels. Until GoreeCloud qualifies signed release metadata, remote version
+// fields remain empty and no update is advertised.
+func (m *DefaultManager) GetVersionInfo(_ context.Context) (*VersionInfo, error) {
+	return &VersionInfo{CurrentVersion: version.NetbirdVersion()}, nil
 }

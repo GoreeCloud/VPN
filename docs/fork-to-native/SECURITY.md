@@ -79,3 +79,20 @@ An invalid explicit environment override fails push initialization rather than f
 The inherited management statistics worker is disabled while no independently qualified GoreeCloud collection channel exists. Startup returns before creating a timer; direct send and token-fetch entry points reject the operation before HTTP requests or account/peer collection. The inherited hosted endpoint is empty. Existing anonymous-metrics flags and interval environment settings cannot enable this path.
 
 This applies to management's outbound hosted statistics only. It does not disable local Prometheus metrics or client debug-bundle collection. The full management/instance/proxy/geolocation egress inventory, consent design and observed network acceptance remain open in issue #5. No hosted collection service or production configuration is enabled by this guard.
+
+## Management instance version discovery (development only)
+
+The management instance version API reports its locally running version without
+contacting inherited NetBird package hosting or the NetBird dashboard release
+API. Latest management/dashboard versions are left empty and update availability
+is false until an independently verified, signed GoreeCloud release feed exists.
+The former HTTP fetch helpers, remote endpoint constants and version cache were
+removed from this runtime path; canceled-context reads still return local state.
+The dedicated management-instance CI job tests the API and handler packages on
+the pull-request head.
+
+This is a scoped source-level egress safeguard, not a product-wide no-egress
+finding or a qualified GoreeCloud update channel. Full outbound auditing,
+signed updater trust, target-platform runtime tests and VPS migration/recovery
+remain open under issues #5, #32, #2 and #30. No production NetBird service
+configuration is changed by this source update.

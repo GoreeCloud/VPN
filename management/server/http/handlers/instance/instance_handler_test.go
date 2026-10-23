@@ -585,3 +585,21 @@ func TestGetVersionInfo_Error(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
+
+func TestGetVersionInfo_LocalOnlyOmitsRemoteVersions(t *testing.T) {
+	manager := &nbinstance.DefaultManager{}
+	router := mux.NewRouter()
+	AddVersionEndpoint(manager, router)
+
+	req := httptest.NewRequest(http.MethodGet, "/instance/version", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response api.InstanceVersionInfo
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	assert.NotEmpty(t, response.ManagementCurrentVersion)
+	assert.Nil(t, response.ManagementAvailableVersion)
+	assert.Nil(t, response.DashboardAvailableVersion)
+	assert.False(t, response.ManagementUpdateAvailable)
+}
