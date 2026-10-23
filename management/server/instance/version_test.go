@@ -2,6 +2,8 @@ package instance
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,5 +27,23 @@ func TestDefaultManager_GetVersionInfo_LocalOnly(t *testing.T) {
 			require.Empty(t, info.DashboardVersion)
 			require.False(t, info.ManagementUpdateAvailable)
 		}
+	}
+}
+
+func TestDefaultManager_NoInheritedReleaseDiscoverySource(t *testing.T) {
+	source, err := os.ReadFile("manager.go")
+	require.NoError(t, err)
+
+	for _, forbidden := range []string{
+		"pkgs.netbird.io",
+		"api.github.com/repos/netbirdio/dashboard",
+		"managementVersionURL",
+		"dashboardReleasesURL",
+		"fetchGitHubRelease",
+		"fetchPlainTextVersion",
+		"http.Client",
+	} {
+		require.False(t, strings.Contains(string(source), forbidden),
+			"management version API must not retain inherited release discovery: %s", forbidden)
 	}
 }
