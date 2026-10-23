@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -66,7 +65,6 @@ func newTestManager(idpMock *mockIdP, storeMock *mockStore) *DefaultManager {
 		store:              storeMock,
 		embeddedIdpManager: idpMock,
 		setupRequired:      true,
-		httpClient:         &http.Client{Timeout: httpTimeout},
 	}
 }
 
