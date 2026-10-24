@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/oschwald/maxminddb-golang"
@@ -67,25 +66,23 @@ const (
 	geonamesdbPattern = "geonames_*.db"
 )
 
-func NewGeolocation(ctx context.Context, dataDir string, autoUpdate bool) (Geolocation, error) {
+// NewGeolocation uses only locally provisioned data. The legacy autoUpdate
+// parameter is retained for caller compatibility but never permits downloads.
+func NewGeolocation(ctx context.Context, dataDir string, _ bool) (Geolocation, error) {
 	mmdbGlobPattern := filepath.Join(dataDir, mmdbPattern)
-	mmdbFile, err := getDatabaseFilename(ctx, geoLiteCityTarGZURL, mmdbGlobPattern, autoUpdate)
+	mmdbFile, err := getDatabaseFilename(ctx, mmdbGlobPattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database filename: %v", err)
 	}
 
 	geonamesDbGlobPattern := filepath.Join(dataDir, geonamesdbPattern)
-	geonamesDbFile, err := getDatabaseFilename(ctx, geoLiteCityZipURL, geonamesDbGlobPattern, autoUpdate)
+	geonamesDbFile, err := getDatabaseFilename(ctx, geonamesDbGlobPattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database filename: %v", err)
 	}
 
 	if err := loadGeolocationDatabases(ctx, dataDir, mmdbFile, geonamesDbFile); err != nil {
 		return nil, fmt.Errorf("failed to load MaxMind databases: %v", err)
-	}
-
-	if err := cleanupMaxMindDatabases(ctx, dataDir, mmdbFile, geonamesDbFile); err != nil {
-		return nil, fmt.Errorf("failed to remove old MaxMind databases: %v", err)
 	}
 
 	mmdbPath := path.Join(dataDir, mmdbFile)
@@ -212,45 +209,14 @@ func getExistingDatabases(pattern string) []string {
 	return files
 }
 
-func getDatabaseFilename(ctx context.Context, databaseURL string, filenamePattern string, autoUpdate bool) (string, error) {
-	var (
-		filename string
-		err      error
-	)
-
-	if autoUpdate {
-		filename, err = getFilenameFromURL(databaseURL)
-		if err != nil {
-			log.WithContext(ctx).Debugf("Failed to update database from url: %s", databaseURL)
-			return "", err
-		}
-	} else {
-		files := getExistingDatabases(filenamePattern)
-		if len(files) < 1 {
-			filename, err = getFilenameFromURL(databaseURL)
-			if err != nil {
-				log.WithContext(ctx).Debugf("Failed to get database from url: %s", databaseURL)
-				return "", err
-			}
-		} else {
-			filename = filepath.Base(files[len(files)-1])
-			log.WithContext(ctx).Debugf("Using existing database, %s", filename)
-			return filename, nil
-		}
+func getDatabaseFilename(ctx context.Context, filenamePattern string) (string, error) {
+	files := getExistingDatabases(filenamePattern)
+	if len(files) == 0 {
+		return "", fmt.Errorf("local geolocation database matching %s is required; automatic downloads are disabled", filepath.Base(filenamePattern))
 	}
-
-	// strip suffixes that may be nested, such as .tar.gz
-	basename := strings.SplitN(filename, ".", 2)[0]
-	// get date version from basename
-	parts := strings.SplitN(basename, "_", 2)
-	if len(parts) < 2 || parts[1] == "" {
-		return "", fmt.Errorf("unexpected database filename %q: missing date suffix", filename)
-	}
-	date := parts[1]
-	// format db as "GeoLite2-Cities-{maxmind|geonames}_{DATE}.{mmdb|db}"
-	databaseFilename := filepath.Base(strings.Replace(filenamePattern, "*", date, 1))
-
-	return databaseFilename, nil
+	filename := filepath.Base(files[len(files)-1])
+	log.WithContext(ctx).Debugf("Using existing geolocation database, %s", filename)
+	return filename, nil
 }
 
 func cleanupOldDatabases(ctx context.Context, pattern string, currentFile string) error {

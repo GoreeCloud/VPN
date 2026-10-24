@@ -96,3 +96,21 @@ finding or a qualified GoreeCloud update channel. Full outbound auditing,
 signed updater trust, target-platform runtime tests and VPS migration/recovery
 remain open under issues #5, #32, #2 and #30. No production NetBird service
 configuration is changed by this source update.
+
+## Offline geolocation database policy (development only)
+
+Management and reverse-proxy geolocation now require operator-provisioned local
+GeoLite2 data. Missing MMDB or geonames data cannot trigger inherited hosted
+downloads, even when management's legacy auto-update argument is true. The
+management initializer reports a missing-file error; the proxy disables
+geolocation and country-based restrictions deny rather than silently allowing
+access. Existing local database files and historical versions are not
+rewritten or removed by these startup paths.
+
+This removes the inherited geolocation auto-fetch source paths, **not** the
+requirement to establish a GoreeCloud-owned, signed database update and
+revocation mechanism. Operators must verify the provenance, licensing,
+integrity and freshness of manually provisioned data. Exact-head CI includes
+race-enabled offline/missing-file and local-preservation tests. Full observed
+network egress and country-policy integration testing remain open in #5/#2.
+No production database, proxy, VPS, NetBird or network configuration was changed.

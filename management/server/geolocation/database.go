@@ -9,111 +9,23 @@ import (
 	"path"
 	"strconv"
 
-	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-const (
-	geoLiteCityTarGZURL     = "https://pkgs.netbird.io/geolocation-dbs/GeoLite2-City/download?suffix=tar.gz"
-	geoLiteCityZipURL       = "https://pkgs.netbird.io/geolocation-dbs/GeoLite2-City-CSV/download?suffix=zip"
-	geoLiteCitySha256TarURL = "https://pkgs.netbird.io/geolocation-dbs/GeoLite2-City/download?suffix=tar.gz.sha256"
-	geoLiteCitySha256ZipURL = "https://pkgs.netbird.io/geolocation-dbs/GeoLite2-City-CSV/download?suffix=zip.sha256"
-	geoLiteCityMMDB         = "GeoLite2-City.mmdb"
-	geoLiteCityCSV          = "GeoLite2-City-Locations-en.csv"
+const geonamesCsvFields = 14
 
-	geonamesCsvFields = 14
-)
-
-// loadGeolocationDatabases loads the MaxMind databases.
-func loadGeolocationDatabases(ctx context.Context, dataDir string, mmdbFile string, geonamesdbFile string) error {
+// loadGeolocationDatabases requires both locally provisioned databases. The
+// inherited hosted download path is intentionally unavailable: a missing file
+// is a configuration error, not permission to contact an external provider.
+func loadGeolocationDatabases(_ context.Context, dataDir string, mmdbFile string, geonamesdbFile string) error {
 	for _, file := range []string{mmdbFile, geonamesdbFile} {
-		exists, _ := fileExists(path.Join(dataDir, file))
-		if exists {
-			continue
-		}
-
-		log.WithContext(ctx).Infof("Geolocation database file %s not found, file will be downloaded", file)
-
-		switch file {
-		case mmdbFile:
-			extractFunc := func(src string, dst string) error {
-				if err := decompressTarGzFile(src, dst); err != nil {
-					return err
-				}
-				return copyFile(path.Join(dst, geoLiteCityMMDB), path.Join(dataDir, mmdbFile))
-			}
-			if err := loadDatabase(
-				geoLiteCitySha256TarURL,
-				geoLiteCityTarGZURL,
-				extractFunc,
-			); err != nil {
-				return err
-			}
-
-		case geonamesdbFile:
-			extractFunc := func(src string, dst string) error {
-				if err := decompressZipFile(src, dst); err != nil {
-					return err
-				}
-				extractedCsvFile := path.Join(dst, geoLiteCityCSV)
-				return importCsvToSqlite(dataDir, extractedCsvFile, geonamesdbFile)
-			}
-
-			if err := loadDatabase(
-				geoLiteCitySha256ZipURL,
-				geoLiteCityZipURL,
-				extractFunc,
-			); err != nil {
-				return err
-			}
+		if _, err := os.Stat(path.Join(dataDir, file)); err != nil {
+			return fmt.Errorf("local geolocation database %s unavailable (automatic downloads disabled): %w", file, err)
 		}
 	}
 	return nil
-}
-
-// loadDatabase downloads a file from the specified URL and verifies its checksum.
-// It then calls the extract function to perform additional processing on the extracted files.
-func loadDatabase(checksumURL string, fileURL string, extractFunc func(src string, dst string) error) error {
-	temp, err := os.MkdirTemp(os.TempDir(), "geolite")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(temp)
-
-	checksumFilename, err := getFilenameFromURL(checksumURL)
-	if err != nil {
-		return err
-	}
-	checksumFile := path.Join(temp, checksumFilename)
-
-	err = downloadFile(checksumURL, checksumFile)
-	if err != nil {
-		return err
-	}
-
-	sha256sum, err := loadChecksumFromFile(checksumFile)
-	if err != nil {
-		return err
-	}
-
-	dbFilename, err := getFilenameFromURL(fileURL)
-	if err != nil {
-		return err
-	}
-	dbFile := path.Join(temp, dbFilename)
-
-	err = downloadFile(fileURL, dbFile)
-	if err != nil {
-		return err
-	}
-
-	if err := verifyChecksum(dbFile, sha256sum); err != nil {
-		return err
-	}
-
-	return extractFunc(dbFile, temp)
 }
 
 // importCsvToSqlite imports a CSV file into a SQLite database.
