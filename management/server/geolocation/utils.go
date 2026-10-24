@@ -4,14 +4,11 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
-	"mime"
-	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -147,54 +144,4 @@ func verifyChecksum(filepath, expectedChecksum string) error {
 	}
 
 	return nil
-}
-
-// downloadFile downloads a file from a URL and saves it to a local file path.
-func downloadFile(url, filepath string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected error occurred while downloading the file: %s", string(bodyBytes))
-	}
-
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, bytes.NewBuffer(bodyBytes))
-	return err
-}
-
-func getFilenameFromURL(url string) (string, error) {
-	resp, err := http.Head(url)
-	if err != nil {
-		return "", err
-	}
-
-	defer resp.Body.Close()
-
-	contentDisposition := resp.Header.Get("Content-Disposition")
-	if contentDisposition == "" {
-		return "", fmt.Errorf("no Content-Disposition header in response from %s", url)
-	}
-
-	_, params, err := mime.ParseMediaType(contentDisposition)
-	if err != nil {
-		return "", err
-	}
-
-	filename := params["filename"]
-
-	return filename, nil
 }
