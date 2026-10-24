@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -86,41 +88,112 @@ func TestRequireHTTPS(t *testing.T) {
 	require.Error(t, requireHTTPS("upload URL", "http://upload.example/path"))
 	require.Error(t, requireHTTPS("upload URL", "ftp://upload.example/path"))
 	require.Error(t, requireHTTPS("upload URL", "://malformed"))
+	for _, raw := range []string{"https://", "https://user:pass@upload.example/", "https://upload.example/#", "https://pkgs.netbird.io/upload", "https://UPLOAD.NETBIRD.IO./upload", "https://wiretrustee.com/", "https://netbird.cloud/"} {
+		require.Error(t, requireHTTPS("upload URL", raw), raw)
+	}
 }
 
-func TestRejectInsecureRedirect(t *testing.T) {
-	httpsReq, err := http.NewRequest(http.MethodGet, "https://a.example/", nil)
-	require.NoError(t, err)
-	require.NoError(t, rejectInsecureRedirect(httpsReq, nil), "https redirect target must be allowed")
-
-	httpReq, err := http.NewRequest(http.MethodGet, "http://a.example/", nil)
-	require.NoError(t, err)
-	require.Error(t, rejectInsecureRedirect(httpReq, nil), "http redirect target must be refused")
-
-	require.Error(t, rejectInsecureRedirect(httpsReq, make([]*http.Request, 10)), "the 10-redirect limit must be enforced")
+func TestRejectUploadRedirect(t *testing.T) {
+	require.ErrorIs(t, rejectUploadRedirect(nil, nil), http.ErrUseLastResponse)
 }
 
-// The secure client refuses to follow an https response that redirects to http,
-// so a bundle can't be downgraded onto plaintext mid-flight.
-func TestUploadClientRefusesHTTPSToHTTPRedirect(t *testing.T) {
-	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+// A redirect response is returned to the caller without ever contacting its
+// target, even when the target uses HTTPS. This applies to both the default
+// and the explicitly insecure local-development client.
+func TestGoreeCloudDiagnosticClientNeverFollowsRedirects(t *testing.T) {
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetHits.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(plain.Close)
+	defer target.Close()
 
 	secure := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, plain.URL, http.StatusFound)
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
 	}))
-	t.Cleanup(secure.Close)
+	defer secure.Close()
 
 	client := uploadClient(false)
-	// Trust the test server's cert without disabling verification globally.
 	client.Transport = secure.Client().Transport
-
 	resp, err := client.Get(secure.URL)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
-	require.Error(t, err, "redirect from https to http must be refused")
-	require.Contains(t, err.Error(), "non-https")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
+	insecure := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer insecure.Close()
+
+	resp, err = uploadClient(true).Get(insecure.URL)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+	require.Zero(t, targetHits.Load())
+}
+
+func TestGoreeCloudDiagnosticAuthorizationNeverRedirectsOrLeaksBody(t *testing.T) {
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", target.URL)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		_, _ = w.Write([]byte("private-response-body"))
+	}))
+	defer redirect.Close()
+
+	_, err := getUploadURL(context.Background(), redirect.URL, "https://management.example.test", true)
+	require.ErrorContains(t, err, "status 307")
+	require.NotContains(t, err.Error(), "private-response-body")
+	require.Zero(t, targetHits.Load())
+}
+
+func TestGoreeCloudDiagnosticPUTNeverReplaysBundle(t *testing.T) {
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", target.URL)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		_, _ = w.Write([]byte("sensitive-error-detail"))
+	}))
+	defer redirect.Close()
+
+	file := filepath.Join(t.TempDir(), "bundle.zip")
+	require.NoError(t, os.WriteFile(file, []byte("private-bundle"), 0o600))
+	err := upload(context.Background(), file, &types.GetURLResponse{URL: redirect.URL}, true)
+	require.ErrorContains(t, err, "status 307")
+	require.NotContains(t, err.Error(), "sensitive-error-detail")
+	require.Zero(t, targetHits.Load())
+}
+
+func TestGoreeCloudDiagnosticAuthorizationResponseBounded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(strings.Repeat("x", maxUploadAuthorizationResponseSize+1)))
+	}))
+	defer server.Close()
+	_, err := getUploadURL(context.Background(), server.URL, "https://management.example.test", true)
+	require.ErrorContains(t, err, "exceeds size limit")
+}
+
+func TestGoreeCloudDiagnosticTransportErrorsDoNotEchoURLSecrets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	serviceURL := server.URL + "/private?token=very-secret-token"
+	server.Close()
+	_, err := getUploadURL(context.Background(), serviceURL, "https://management.example.test", true)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "very-secret-token")
+	require.NotContains(t, err.Error(), "/private")
 }

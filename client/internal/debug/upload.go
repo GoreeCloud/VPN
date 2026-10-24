@@ -10,11 +10,15 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
+	"strings"
 
 	"github.com/netbirdio/netbird/upload-server/types"
 )
 
-const maxBundleUploadSize = 50 * 1024 * 1024
+const (
+	maxBundleUploadSize = 50 * 1024 * 1024
+	maxUploadAuthorizationResponseSize = 16 * 1024
+)
 
 // requireHTTPS refuses any URL the daemon would fetch or upload to that is not
 // https. The daemon runs as root and the bundle carries its logs and state, so a
@@ -25,25 +29,32 @@ const maxBundleUploadSize = 50 * 1024 * 1024
 func requireHTTPS(what, rawURL string) error {
 	parsed, err := neturl.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", what, err)
+		return fmt.Errorf("invalid %s", what)
 	}
 	if parsed.Scheme != "https" {
-		return fmt.Errorf("%s must use https, got scheme %q", what, parsed.Scheme)
+		return fmt.Errorf("%s must use https", what)
+	}
+	if parsed.Hostname() == "" || parsed.User != nil || strings.Contains(rawURL, "#") {
+		return fmt.Errorf("%s requires a host without credentials or fragments", what)
+	}
+	host := strings.TrimRight(strings.ToLower(parsed.Hostname()), ".")
+	for _, inherited := range []string{"netbird.io", "wiretrustee.com", "netbird.cloud"} {
+		if host == inherited || strings.HasSuffix(host, "."+inherited) {
+			return fmt.Errorf("%s cannot use an inherited hosted diagnostic endpoint", what)
+		}
 	}
 	return nil
 }
 
-// uploadClient returns the HTTP client for the upload requests. The default
-// client verifies TLS and refuses a redirect that would downgrade to a non-https
-// hop, so a bundle can never leave over http after an https start. The insecure
-// variant accepts http and untrusted certificates, and is only reachable for a
-// privileged caller that passed --upload-bundle-insecure (see
-// requirePrivilegeForUploadURL).
+// uploadClient never follows redirects. A presigned upload destination is an
+// explicit authorization for one URL, not permission to replay a diagnostic
+// bundle or its management identifier to a redirect target.
 func uploadClient(insecure bool) *http.Client {
 	if !insecure {
-		return &http.Client{CheckRedirect: rejectInsecureRedirect}
+		return &http.Client{CheckRedirect: rejectUploadRedirect}
 	}
 	return &http.Client{
+		CheckRedirect: rejectUploadRedirect,
 		Transport: &http.Transport{
 			//nolint:gosec // opt-in, privileged, self-hosted upload servers
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
@@ -51,17 +62,8 @@ func uploadClient(insecure bool) *http.Client {
 	}
 }
 
-// rejectInsecureRedirect refuses a redirect to a non-https target and keeps the
-// standard library's 10-hop limit that a custom CheckRedirect would otherwise
-// disable.
-func rejectInsecureRedirect(req *http.Request, via []*http.Request) error {
-	if req.URL.Scheme != "https" {
-		return fmt.Errorf("refusing redirect to non-https URL %s", req.URL.Redacted())
-	}
-	if len(via) >= 10 {
-		return fmt.Errorf("stopped after 10 redirects")
-	}
-	return nil
+func rejectUploadRedirect(_ *http.Request, _ []*http.Request) error {
+	return http.ErrUseLastResponse
 }
 
 func UploadDebugBundle(ctx context.Context, url, managementURL, filePath string, insecure bool) (key string, err error) {
@@ -108,7 +110,7 @@ func upload(ctx context.Context, filePath string, response *types.GetURLResponse
 
 	req, err := http.NewRequestWithContext(ctx, "PUT", response.URL, fileData)
 	if err != nil {
-		return fmt.Errorf("create PUT request: %w", err)
+		return fmt.Errorf("create diagnostic upload request: invalid destination")
 	}
 
 	req.ContentLength = stat.Size()
@@ -116,13 +118,12 @@ func upload(ctx context.Context, filePath string, response *types.GetURLResponse
 
 	putResp, err := uploadClient(insecure).Do(req)
 	if err != nil {
-		return fmt.Errorf("upload failed: %v", err)
+		return fmt.Errorf("diagnostic upload transport failed")
 	}
 	defer putResp.Body.Close()
 
 	if putResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(putResp.Body)
-		return fmt.Errorf("upload status %d: %s", putResp.StatusCode, string(body))
+		return fmt.Errorf("diagnostic upload status %d", putResp.StatusCode)
 	}
 	return nil
 }
@@ -130,7 +131,7 @@ func upload(ctx context.Context, filePath string, response *types.GetURLResponse
 func getUploadURL(ctx context.Context, serviceURL string, managementURL string, insecure bool) (*types.GetURLResponse, error) {
 	parsed, err := neturl.Parse(serviceURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse upload service URL: %w", err)
+		return nil, fmt.Errorf("invalid diagnostic upload service URL")
 	}
 	q := parsed.Query()
 	q.Set("id", getURLHash(managementURL))
@@ -138,25 +139,27 @@ func getUploadURL(ctx context.Context, serviceURL string, managementURL string, 
 
 	getReq, err := http.NewRequestWithContext(ctx, "GET", parsed.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("create GET request: %w", err)
+		return nil, fmt.Errorf("create diagnostic authorization request: invalid destination")
 	}
 
 	getReq.Header.Set(types.ClientHeader, types.ClientHeaderValue)
 
 	resp, err := uploadClient(insecure).Do(getReq)
 	if err != nil {
-		return nil, fmt.Errorf("get presigned URL: %w", err)
+		return nil, fmt.Errorf("diagnostic authorization transport failed")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("get presigned URL status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("diagnostic authorization status %d", resp.StatusCode)
 	}
 
-	urlBytes, err := io.ReadAll(resp.Body)
+	urlBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxUploadAuthorizationResponseSize+1))
 	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+		return nil, fmt.Errorf("read diagnostic authorization response failed")
+	}
+	if len(urlBytes) > maxUploadAuthorizationResponseSize {
+		return nil, fmt.Errorf("diagnostic authorization response exceeds size limit")
 	}
 	var response types.GetURLResponse
 	if err := json.Unmarshal(urlBytes, &response); err != nil {
