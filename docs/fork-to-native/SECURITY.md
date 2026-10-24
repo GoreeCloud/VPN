@@ -114,3 +114,25 @@ integrity and freshness of manually provisioned data. Exact-head CI includes
 race-enabled offline/missing-file and local-preservation tests. Full observed
 network egress and country-policy integration testing remain open in #5/#2.
 No production database, proxy, VPS, NetBird or network configuration was changed.
+
+## Diagnostic upload transport boundary (development only)
+
+The shared mobile/CLI/daemon debug upload HTTP client now refuses every HTTP
+redirect, including same-scheme HTTPS 307/308 responses that could replay a
+diagnostic bundle or the management-address hash to another endpoint. Both
+the default verified-TLS client and the explicitly insecure privileged
+development client reject redirects. A service response must be direct HTTP
+200; non-200 responses do not echo untrusted response bodies.
+
+The authorization response is capped at 16 KiB, including responses with no
+Content-Length. Transport and malformed-request errors no longer echo
+presigned URL query tokens or remote response bodies. In verified-TLS mode,
+HTTPS upload service and presigned destinations reject inherited
+NetBird/Wiretrustee domains, credentials and fragments. Presigned URL query
+parameters remain permitted because object-store signatures commonly use them.
+
+These are bounded source-level safeguards, not evidence of consent or a
+complete mobile/CLI/SDK endpoint audit. Explicitly insecure development
+uploads still require caller-side privilege/authorization review. Validate
+target-platform mobile runtime, upload consent, local-only diagnostics,
+anonymization and observed egress before any production release.
