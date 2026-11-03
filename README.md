@@ -10,6 +10,9 @@
 
 - Authenticated, loopback-only local management REST API
 - SQLite peer inventory with unique private IPv4 allocation
+- Explicit `pending → approved → revoked` peer lifecycle (revocation is terminal for the recorded key)
+- Only approved peers participate in management policy decisions or private DNS previews
+- Local peer lifecycle event history; events are not tamper-proof audit evidence
 - Public WireGuard key format validation; private keys remain on devices
 - Group-scoped, directional TCP/UDP/ICMP allow policies with a default-deny *decision evaluator*
 - Administrative peer and policy lifecycle APIs
@@ -39,7 +42,13 @@ To register a peer, supply a **public** WireGuard key generated on that peer:
       -H "Content-Type: application/json" \
       -d '{"name":"laptop","public_key":"REPLACE_WITH_REAL_PUBLIC_KEY","groups":["users"]}'
 
-To create a directional management policy allowing TCP/22 from group \`users\` to \`servers\`:
+New peer records start as `pending` and are **not allowed** by the management policy evaluator, even if their groups match. A trusted administrator must explicitly approve each record:
+
+    curl -X POST -H "Authorization: Bearer $GOREECLOUD_VPN_ADMIN_TOKEN" http://127.0.0.1:8176/api/v1/peers/PEER_ID/approve
+
+To revoke a peer, use `POST /api/v1/peers/PEER_ID/revoke` or `DELETE /api/v1/peers/PEER_ID`. Revocation is terminal: the record and public-key tombstone remain in the database so the same key cannot be enrolled again. To replace a revoked peer, use a **new** public key and device name. Changes made here still do **not** control real WireGuard packets.
+
+To create a directional management policy allowing TCP/22 from group `users` to `servers`:
 
     curl -X POST http://127.0.0.1:8176/api/v1/policies \
       -H "Authorization: Bearer $GOREECLOUD_VPN_ADMIN_TOKEN" \
@@ -54,13 +63,16 @@ To create a directional management policy allowing TCP/22 from group \`users\` t
 |---|---|---|
 | GET | /healthz | Minimal unauthenticated process health |
 | GET, POST | /api/v1/peers | List and register peer metadata |
-| DELETE | /api/v1/peers/{id} | Remove peer metadata |
+| POST | /api/v1/peers/{id}/approve | Approve a pending peer record (admin only) |
+| POST | /api/v1/peers/{id}/revoke | Irreversibly revoke a peer record (admin only) |
+| DELETE | /api/v1/peers/{id} | Revoke peer while retaining a key tombstone |
+| GET | /api/v1/events | Last 200 local peer lifecycle events; not tamper-proof |
 | GET, POST | /api/v1/policies | List and create allow policies |
 | DELETE | /api/v1/policies/{id} | Delete policy |
 | POST | /api/v1/access/check | Management-only directional policy decision |
 | GET | /api/v1/dns | Preview A records; DNS server not active |
 
-All endpoints except /healthz require \`Authorization: Bearer <admin-token>\`. Request bodies are JSON with a 16 KiB limit.
+All endpoints except /healthz require `Authorization: Bearer <admin-token>`. Request bodies are JSON with a 16 KiB limit.
 
 Run the test suite:
 

@@ -7,6 +7,9 @@
 - [x] Installable Python package and standard-library API.
 - [x] Loopback-only bearer-authenticated administrative interface.
 - [x] Private IPv4 allocation, peer name/key/group metadata and SQLite persistence.
+- [x] Explicit pending/approved/revoked lifecycle, fail-closed schema migration and terminal revocation of management records.
+- [x] Pending/revoked peer exclusion from management policy decisions and private DNS previews.
+- [x] Local lifecycle history and regression tests (not tamper-proof auditing).
 - [x] Directional TCP/UDP/ICMP default-deny **policy evaluation only**.
 - [x] DNS record preview (not a DNS service).
 - [x] Input checks, body limits, owner file permissions, unit/HTTP tests and CI configuration.

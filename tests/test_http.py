@@ -66,6 +66,29 @@ class ManagementHTTPTests(unittest.TestCase):
         self.assertFalse(result["allowed"])
         self.assertFalse(result["data_plane_enforced"])
 
+    def test_admin_only_device_approval_and_revocation(self):
+        key = base64.b64encode(bytes([17]) * 32).decode()
+        code, response = self.api("/api/v1/peers", "POST", {
+            "name": "lifecycle", "public_key": key, "groups": ["users"]
+        })
+        self.assertEqual(code, 201)
+        peer_id = response["peer"]["id"]
+        self.assertEqual(response["peer"]["status"], "pending")
+        path = "/api/v1/peers/" + peer_id
+        self.assertEqual(self.api(path + "/approve", "POST", authenticated=False)[0], 401)
+        code, answer = self.api(path + "/approve", "POST")
+        self.assertEqual(code, 200)
+        self.assertTrue(answer["approved"])
+        code, answer = self.api(path + "/revoke", "POST")
+        self.assertEqual(code, 200)
+        self.assertTrue(answer["revoked"])
+        self.assertFalse(answer["data_plane_enforced"])
+        self.assertEqual(self.api(path + "/approve", "POST")[0], 404)
+        code, answer = self.api("/api/v1/events")
+        self.assertEqual(code, 200)
+        self.assertFalse(answer["tamper_proof"])
+        self.assertIn("peer_revoked", [row["kind"] for row in answer["events"]])
+
     def test_guardrails(self):
         with self.assertRaises(ValidationError):
             create_server(self.store, "weak", port=0)
