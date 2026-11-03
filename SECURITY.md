@@ -11,6 +11,8 @@
 - All newly registered peers enter `pending` state. Only admin-approved records are eligible for positive management policy decisions or preview DNS names.
 - `revoked` is terminal and the key tombstone remains for duplicate-key rejection. Existing pre-approval databases migrate peers to `pending` (fail closed).
 - Local lifecycle events are informational SQLite entries, **not** immutable enterprise audit evidence.
+- Approved-peer WireGuard adjacency is currently **read-only intent**; exported peer stanzas are not full configurations or enforced network access.
+- VPN address pools and exported host prefixes must be within RFC1918 private IPv4 ranges.
 - SQLite state is local and owner-restricted on POSIX systems.
 - Default-deny means policy *decisions* deny unless a matching allow rule exists, not that actual packets are blocked.
 - Requests are authenticated, size limited, and validated. Browser cross-origin access is not enabled.

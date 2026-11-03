@@ -10,6 +10,9 @@
 - [x] Explicit pending/approved/revoked lifecycle, fail-closed schema migration and terminal revocation of management records.
 - [x] Pending/revoked peer exclusion from management policy decisions and private DNS previews.
 - [x] Local lifecycle history and regression tests (not tamper-proof auditing).
+- [x] Read-only WireGuard adjacency planning for approved peers and offline peer stanzas.
+- [x] RFC1918-only IPv4 pool validation and authenticated peer planning preview.
+- [x] Preliminary threat model and explicit acceptance gates.
 - [x] Directional TCP/UDP/ICMP default-deny **policy evaluation only**.
 - [x] DNS record preview (not a DNS service).
 - [x] Input checks, body limits, owner file permissions, unit/HTTP tests and CI configuration.

@@ -13,6 +13,7 @@
 - Explicit `pending → approved → revoked` peer lifecycle (revocation is terminal for the recorded key)
 - Only approved peers participate in management policy decisions or private DNS previews
 - Local peer lifecycle event history; events are not tamper-proof audit evidence
+- Read-only approved-peer planning and inspectable, unapplied WireGuard peer stanzas
 - Public WireGuard key format validation; private keys remain on devices
 - Group-scoped, directional TCP/UDP/ICMP allow policies with a default-deny *decision evaluator*
 - Administrative peer and policy lifecycle APIs
@@ -67,6 +68,7 @@ To create a directional management policy allowing TCP/22 from group `users` to 
 | POST | /api/v1/peers/{id}/revoke | Irreversibly revoke a peer record (admin only) |
 | DELETE | /api/v1/peers/{id} | Revoke peer while retaining a key tombstone |
 | GET | /api/v1/events | Last 200 local peer lifecycle events; not tamper-proof |
+| GET | /api/v1/peers/{id}/plan | Admin-only connectivity intent preview; no actual enforcement |
 | GET, POST | /api/v1/policies | List and create allow policies |
 | DELETE | /api/v1/policies/{id} | Delete policy |
 | POST | /api/v1/access/check | Management-only directional policy decision |
@@ -84,6 +86,7 @@ Run the test suite:
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Implementation roadmap](docs/ROADMAP.md)
 - [Security policy and production gates](SECURITY.md)
+- [Threat model and release boundaries](docs/THREAT_MODEL.md)
 - [Progress and delivery limits](docs/STATUS.md)
 
 ## Ecosystem boundaries

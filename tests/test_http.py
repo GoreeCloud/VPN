@@ -89,6 +89,36 @@ class ManagementHTTPTests(unittest.TestCase):
         self.assertFalse(answer["tamper_proof"])
         self.assertIn("peer_revoked", [row["kind"] for row in answer["events"]])
 
+    def test_read_only_approved_peer_plan(self):
+        akey = base64.b64encode(bytes([41]) * 32).decode()
+        bkey = base64.b64encode(bytes([42]) * 32).decode()
+        _, a = self.api("/api/v1/peers", "POST", {
+            "name": "planclient", "public_key": akey, "groups": ["planusers"]
+        })
+        _, b = self.api("/api/v1/peers", "POST", {
+            "name": "planserver", "public_key": bkey, "groups": ["planservers"]
+        })
+        path = "/api/v1/peers/" + a["peer"]["id"] + "/plan"
+        self.assertEqual(self.api(path)[0], 404)
+        self.assertEqual(self.api(path, authenticated=False)[0], 401)
+        self.api("/api/v1/peers/" + a["peer"]["id"] + "/approve", "POST")
+        self.api("/api/v1/peers/" + b["peer"]["id"] + "/approve", "POST")
+        self.api("/api/v1/policies", "POST", {
+            "source": "planusers", "target": "planservers",
+            "protocol": "tcp", "ports": [443]
+        })
+        status, result = self.api(path)
+        self.assertEqual(status, 200)
+        self.assertFalse(result["plan"]["wireguard_tunnels_active"])
+        self.assertFalse(result["plan"]["data_plane_enforced"])
+        self.assertEqual(
+            [p["peer_id"] for p in result["plan"]["peers"]],
+            [b["peer"]["id"]]
+        )
+        self.assertEqual(result["plan"]["peers"][0]["intended_egress"], [
+            {"protocol": "tcp", "ports": [443]}
+        ])
+
     def test_guardrails(self):
         with self.assertRaises(ValidationError):
             create_server(self.store, "weak", port=0)

@@ -11,6 +11,7 @@ import os
 from urllib.parse import urlsplit
 
 from .core import VPNStore, ValidationError
+from .plan import build_peer_plan
 
 LOG = logging.getLogger("goreecloud_vpn")
 
@@ -73,6 +74,15 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, {"records": self.server.store.dns_records(), "dns_server_running": False})
         elif path == "/api/v1/events":
             self.reply(200, {"events": self.server.store.events(), "tamper_proof": False})
+        elif path.startswith("/api/v1/peers/") and path.endswith("/plan"):
+            peer_id = path[len("/api/v1/peers/"):-len("/plan")]
+            if not peer_id or "/" in peer_id:
+                self.reply(404, {"error": "not found"})
+                return
+            try:
+                self.reply(200, {"plan": build_peer_plan(self.server.store, peer_id)})
+            except ValidationError:
+                self.reply(404, {"error": "peer absent or not approved"})
         else:
             self.reply(404, {"error": "not found"})
 
