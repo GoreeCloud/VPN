@@ -72,6 +72,11 @@ class VPNStoreTests(unittest.TestCase):
         self.assertEqual({peer["status"] for peer in self.store.peers()}, {"approved", "revoked"})
         self.assertEqual(len(self.store.dns_records()), 1)
 
+    def test_reject_non_rfc1918_subnets(self):
+        for network in ("127.0.0.0/24", "169.254.20.0/24", "192.0.2.0/24"):
+            with self.subTest(network=network), self.assertRaises(ValidationError):
+                VPNStore(self.path.parent / (network.split(".")[0] + ".db"), subnet=network)
+
     def test_ipv6_endpoint_validation(self):
         self.store.add_peer("server", key(6), [], "[2001:db8::1]:51820")
         with self.assertRaises(ValidationError):
