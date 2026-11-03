@@ -1,7 +1,7 @@
 name: VPN foundation verification
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 permissions:
   contents: read
