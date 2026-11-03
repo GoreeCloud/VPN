@@ -14,7 +14,7 @@
 
 ## Current implementation
 
-The Python API is a single-process *management-only* service. Its local SQLite store holds peer names, WireGuard public keys, groups, allocated IPv4 addresses and directional rules. A policy evaluator answers whether two recorded peers match an allowed protocol/port. A DNS endpoint previews A records. No packets traverse the process; no TUN device, WireGuard peer configuration, firewall, DNS socket, NAT helper, identity provider or relay exists.
+The Python API is a single-process *management-only* service. Its local SQLite store holds peer names, WireGuard public keys, groups, allocated IPv4 addresses and directional rules. Registration produces a pending peer; a trusted administrator can approve it, then irreversibly revoke it. Revoked identities remain tombstoned. Legacy peer records migrate to pending. Only approved records are eligible for management access decisions and DNS previews. A local SQLite event history records these transitions without tamper-proof guarantees. A policy evaluator answers whether two recorded peers match an allowed protocol/port. A DNS endpoint previews A records. No packets traverse the process; no TUN device, WireGuard peer configuration, firewall, DNS socket, NAT helper, identity provider or relay exists.
 
 ## Security boundary
 
