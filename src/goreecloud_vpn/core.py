@@ -97,6 +97,17 @@ class VPNStore:
                 id TEXT PRIMARY KEY, source TEXT NOT NULL, target TEXT NOT NULL,
                 protocol TEXT NOT NULL, ports TEXT NOT NULL, created TEXT NOT NULL
             )""")
+            # Fail closed when upgrading pre-approval alpha databases.
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(peers)")}
+            if "status" not in columns:
+                self.db.execute(
+                    "ALTER TABLE peers ADD COLUMN status TEXT NOT NULL DEFAULT 'pending' "
+                    "CHECK(status IN ('pending','approved','revoked'))"
+                )
+            self.db.execute("""CREATE TABLE IF NOT EXISTS events (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL, peer_id TEXT NOT NULL, recorded TEXT NOT NULL
+            )""")
 
     @staticmethod
     def _peer(row):
@@ -134,14 +145,55 @@ class VPNStore:
             record = (str(uuid4()), name, public_key, address, endpoint, json.dumps(groups),
                       datetime.now(timezone.utc).isoformat())
             try:
-                self.db.execute("INSERT INTO peers VALUES (?,?,?,?,?,?,?)", record)
+                self.db.execute(
+                    "INSERT INTO peers (id,name,public_key,address,endpoint,groups,created,status)"
+                    " VALUES (?,?,?,?,?,?,?,'pending')", record
+                )
             except sqlite3.IntegrityError as exc:
                 raise ValidationError("duplicate peer name or public key") from exc
+            self._event("peer_registered", record[0])
             return self._peer(self.db.execute("SELECT * FROM peers WHERE id=?", (record[0],)).fetchone())
 
-    def delete_peer(self, peer_id):
+    def _event(self, kind, peer_id):
+        self.db.execute(
+            "INSERT INTO events (kind,peer_id,recorded) VALUES (?,?,?)",
+            (kind, peer_id, datetime.now(timezone.utc).isoformat())
+        )
+
+    def events(self):
+        # Local event history only; NOT tamper-proof or externally archived.
+        with self.lock:
+            return [dict(row) for row in self.db.execute(
+                "SELECT * FROM events ORDER BY seq DESC LIMIT 200"
+            )]
+
+    def approve_peer(self, peer_id):
+        if not isinstance(peer_id, str):
+            raise ValidationError("invalid peer identity")
         with self.lock, self.db:
-            return self.db.execute("DELETE FROM peers WHERE id=?", (peer_id,)).rowcount == 1
+            count = self.db.execute(
+                "UPDATE peers SET status='approved' WHERE id=? AND status='pending'",
+                (peer_id,)
+            ).rowcount
+            if count:
+                self._event("peer_approved", peer_id)
+            return count == 1
+
+    def revoke_peer(self, peer_id):
+        if not isinstance(peer_id, str):
+            raise ValidationError("invalid peer identity")
+        with self.lock, self.db:
+            count = self.db.execute(
+                "UPDATE peers SET status='revoked' WHERE id=? AND status IN ('pending','approved')",
+                (peer_id,)
+            ).rowcount
+            if count:
+                self._event("peer_revoked", peer_id)
+            return count == 1
+
+    def delete_peer(self, peer_id):
+        # Logical removal preserves a tombstone to prevent revoked key reuse.
+        return self.revoke_peer(peer_id)
 
     def add_policy(self, source, target, protocol, ports):
         source, target = check_group(source), check_group(target)
@@ -173,8 +225,12 @@ class VPNStore:
         )):
             raise ValidationError("invalid port for protocol")
         with self.lock:
-            src = self.db.execute("SELECT groups FROM peers WHERE id=?", (source_id,)).fetchone()
-            dst = self.db.execute("SELECT groups FROM peers WHERE id=?", (target_id,)).fetchone()
+            src = self.db.execute(
+                "SELECT groups FROM peers WHERE id=? AND status='approved'", (source_id,)
+            ).fetchone()
+            dst = self.db.execute(
+                "SELECT groups FROM peers WHERE id=? AND status='approved'", (target_id,)
+            ).fetchone()
             if not src or not dst or source_id == target_id:
                 return False
             src_groups, dst_groups = set(json.loads(src["groups"])), set(json.loads(dst["groups"]))
@@ -186,7 +242,7 @@ class VPNStore:
 
     def dns_records(self):
         return [{"name": p["name"] + "." + self.domain, "type": "A", "address": p["address"]}
-                for p in self.peers()]
+                for p in self.peers() if p["status"] == "approved"]
 
     def close(self):
         with self.lock:
