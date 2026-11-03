@@ -44,7 +44,7 @@ To register a peer, supply a **public** WireGuard key generated on that peer:
 
 New peer records start as `pending` and are **not allowed** by the management policy evaluator, even if their groups match. A trusted administrator must explicitly approve each record:
 
-    curl -X POST -H "Authorization: Bearer $GOREECLOUD_VPN_ADMIN_TOKEN"       http://127.0.0.1:8176/api/v1/peers/PEER_ID/approve
+    curl -X POST -H "Authorization: Bearer $GOREECLOUD_VPN_ADMIN_TOKEN" http://127.0.0.1:8176/api/v1/peers/PEER_ID/approve
 
 To revoke a peer, use `POST /api/v1/peers/PEER_ID/revoke` or `DELETE /api/v1/peers/PEER_ID`. Revocation is terminal: the record and public-key tombstone remain in the database so the same key cannot be enrolled again. To replace a revoked peer, use a **new** public key and device name. Changes made here still do **not** control real WireGuard packets.
 
