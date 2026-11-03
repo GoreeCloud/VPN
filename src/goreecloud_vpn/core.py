@@ -57,11 +57,20 @@ def check_endpoint(value):
     m = ENDPOINT.fullmatch(value)
     if not m or not 1 <= int(m.group(2)) <= 65535:
         raise ValidationError("invalid endpoint: expected host:port or [IPv6]:port")
-    if m.group(1).startswith("["):
+    host = m.group(1)
+    if host.startswith("["):
         try:
-            ipaddress.IPv6Address(m.group(1)[1:-1])
+            ipaddress.IPv6Address(host[1:-1])
         except ValueError as exc:
             raise ValidationError("invalid IPv6 endpoint") from exc
+    elif not all(LABEL.fullmatch(part.lower()) and len(part) <= 63
+                 for part in host.split(".")):
+        raise ValidationError("invalid endpoint hostname")
+    elif all(char in "0123456789." for char in host):
+        try:
+            ipaddress.IPv4Address(host)
+        except ValueError as exc:
+            raise ValidationError("invalid IPv4 endpoint") from exc
     return value
 
 
