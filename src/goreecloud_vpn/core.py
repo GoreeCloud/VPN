@@ -16,6 +16,9 @@ from uuid import uuid4
 LABEL = re.compile(r"^[a-z](?:[a-z0-9-]{0,30}[a-z0-9])?$")
 GROUP = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 ENDPOINT = re.compile(r"^(\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9.-]+):([0-9]{1,5})$")
+RFC1918 = tuple(ipaddress.ip_network(cidr) for cidr in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
+))
 
 
 class ValidationError(ValueError):
@@ -70,9 +73,9 @@ class VPNStore:
             self.network = ipaddress.ip_network(subnet, strict=True)
         except ValueError as exc:
             raise ValidationError("invalid subnet") from exc
-        if (self.network.version != 4 or not self.network.is_private
+        if (self.network.version != 4 or not any(self.network.subnet_of(r) for r in RFC1918)
                 or not 16 <= self.network.num_addresses <= 65536):
-            raise ValidationError("subnet must be private IPv4 with 16 to 65536 addresses")
+            raise ValidationError("subnet must be RFC1918 private IPv4 with 16 to 65536 addresses")
         if not isinstance(domain, str) or len(domain) > 253 or any(
             not LABEL.fullmatch(label) for label in domain.split(".")
         ):
