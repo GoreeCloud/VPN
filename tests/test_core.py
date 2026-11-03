@@ -27,6 +27,10 @@ class VPNStoreTests(unittest.TestCase):
         self.assertEqual(b["address"], "10.234.12.11")
         self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 22))
         rule = self.store.add_policy("users", "infra", "tcp", [22])
+        self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 22))
+        self.assertTrue(self.store.approve_peer(a["id"]))
+        self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 22))
+        self.assertTrue(self.store.approve_peer(b["id"]))
         self.assertTrue(self.store.allowed(a["id"], b["id"], "tcp", 22))
         self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 443))
         self.assertFalse(self.store.allowed(b["id"], a["id"], "tcp", 22))
@@ -54,6 +58,9 @@ class VPNStoreTests(unittest.TestCase):
     def test_revocation_dns_and_persistence(self):
         a = self.store.add_peer("alice", key(4), ["users"])
         b = self.store.add_peer("server", key(5), ["infra"])
+        self.assertEqual(len(self.store.dns_records()), 0)
+        self.store.approve_peer(a["id"])
+        self.store.approve_peer(b["id"])
         self.assertEqual(len(self.store.dns_records()), 2)
         self.store.add_policy("users", "infra", "icmp", [])
         self.assertTrue(self.store.allowed(a["id"], b["id"], "icmp"))
@@ -61,7 +68,9 @@ class VPNStoreTests(unittest.TestCase):
         self.assertFalse(self.store.allowed(a["id"], b["id"], "icmp"))
         self.store.close()
         self.store = VPNStore(self.path)
-        self.assertEqual(len(self.store.peers()), 1)
+        self.assertEqual(len(self.store.peers()), 2)
+        self.assertEqual({peer["status"] for peer in self.store.peers()}, {"approved", "revoked"})
+        self.assertEqual(len(self.store.dns_records()), 1)
 
     def test_ipv6_endpoint_validation(self):
         self.store.add_peer("server", key(6), [], "[2001:db8::1]:51820")
