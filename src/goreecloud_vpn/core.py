@@ -14,6 +14,7 @@ import threading
 from uuid import uuid4
 
 LABEL = re.compile(r"^[a-z](?:[a-z0-9-]{0,30}[a-z0-9])?$")
+HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 GROUP = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 ENDPOINT = re.compile(r"^(\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9.-]+):([0-9]{1,5})$")
 RFC1918 = tuple(ipaddress.ip_network(cidr) for cidr in (
@@ -63,7 +64,7 @@ def check_endpoint(value):
             ipaddress.IPv6Address(host[1:-1])
         except ValueError as exc:
             raise ValidationError("invalid IPv6 endpoint") from exc
-    elif not all(LABEL.fullmatch(part.lower()) and len(part) <= 63
+    elif not all(HOST_LABEL.fullmatch(part.lower())
                  for part in host.split(".")):
         raise ValidationError("invalid endpoint hostname")
     elif all(char in "0123456789." for char in host):
