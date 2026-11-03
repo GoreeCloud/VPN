@@ -71,6 +71,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, {"policies": self.server.store.policies()})
         elif path == "/api/v1/dns":
             self.reply(200, {"records": self.server.store.dns_records(), "dns_server_running": False})
+        elif path == "/api/v1/events":
+            self.reply(200, {"events": self.server.store.events(), "tamper_proof": False})
         else:
             self.reply(404, {"error": "not found"})
 
@@ -78,6 +80,23 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             return
         path = urlsplit(self.path).path
+        if path.startswith("/api/v1/peers/") and (
+            path.endswith("/approve") or path.endswith("/revoke")
+        ):
+            action = "approve" if path.endswith("/approve") else "revoke"
+            peer_id = path[len("/api/v1/peers/"):-len("/" + action)]
+            if not peer_id or "/" in peer_id:
+                self.reply(404, {"error": "not found"})
+                return
+            if self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length", "0") != "0":
+                self.reply(400, {"error": "state transitions do not accept a request body"})
+                return
+            transitioned = (self.server.store.approve_peer(peer_id) if action == "approve"
+                            else self.server.store.revoke_peer(peer_id))
+            self.reply(200 if transitioned else 404, {
+                action + "d": transitioned, "data_plane_enforced": False
+            })
+            return
         if path not in ("/api/v1/peers", "/api/v1/policies", "/api/v1/access/check"):
             self.reply(404, {"error": "not found"})
             return
@@ -122,7 +141,9 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.reply(404, {"error": "not found"})
             return
-        self.reply(200 if found else 404, {"deleted": found})
+        self.reply(200 if found else 404, {
+            "revoked": found, "metadata_retained": True, "data_plane_enforced": False
+        })
 
     def log_message(self, fmt, *args):
         LOG.info("%s %s", self.address_string(), fmt % args)
