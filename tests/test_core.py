@@ -20,6 +20,11 @@ class VPNStoreTests(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
+    def approve(self, peer):
+        # Internal store-only fixture; HTTP tests verify actual key possession.
+        self.assertTrue(self.store.record_device_proof(peer["id"], peer["public_key"]))
+        self.assertTrue(self.store.approve_peer(peer["id"]))
+
     def test_default_deny_and_allowlist(self):
         a = self.store.add_peer("alice", key(1), ["users"])
         b = self.store.add_peer("server", key(2), ["infra"])
@@ -28,9 +33,9 @@ class VPNStoreTests(unittest.TestCase):
         self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 22))
         rule = self.store.add_policy("users", "infra", "tcp", [22])
         self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 22))
-        self.assertTrue(self.store.approve_peer(a["id"]))
+        self.approve(a)
         self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 22))
-        self.assertTrue(self.store.approve_peer(b["id"]))
+        self.approve(b)
         self.assertTrue(self.store.allowed(a["id"], b["id"], "tcp", 22))
         self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 443))
         self.assertFalse(self.store.allowed(b["id"], a["id"], "tcp", 22))
@@ -59,8 +64,8 @@ class VPNStoreTests(unittest.TestCase):
         a = self.store.add_peer("alice", key(4), ["users"])
         b = self.store.add_peer("server", key(5), ["infra"])
         self.assertEqual(len(self.store.dns_records()), 0)
-        self.store.approve_peer(a["id"])
-        self.store.approve_peer(b["id"])
+        self.approve(a)
+        self.approve(b)
         self.assertEqual(len(self.store.dns_records()), 2)
         self.store.add_policy("users", "infra", "icmp", [])
         self.assertTrue(self.store.allowed(a["id"], b["id"], "icmp"))
