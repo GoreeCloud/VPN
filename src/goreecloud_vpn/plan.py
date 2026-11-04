@@ -75,6 +75,14 @@ def render_wireguard_peer_fragments(plan: dict) -> str:
     peers = plan.get("peers")
     if not isinstance(peers, list):
         raise ValidationError("invalid peer plan")
+    local_address = plan.get("local_address")
+    if local_address is not None:
+        try:
+            local_ip = ipaddress.IPv4Address(local_address)
+        except (ValueError, TypeError) as exc:
+            raise ValidationError("invalid local peer address") from exc
+    else:
+        local_ip = None
     out = [
         "# GoreeCloud VPN: OFFLINE REVIEW ONLY; NOT AN ENFORCED VPN CONFIG",
         "# Do not apply without separately verified WireGuard identity and firewall controls.",
@@ -91,6 +99,8 @@ def render_wireguard_peer_fragments(plan: dict) -> str:
             raise ValidationError("invalid allowed IP prefix") from exc
         if network.version != 4 or network.prefixlen != 32 or not any(network.subnet_of(r) for r in RFC1918):
             raise ValidationError("only private IPv4 /32 peer prefixes are accepted")
+        if local_ip is not None and network.network_address == local_ip:
+            raise ValidationError("remote peer prefix overlaps local peer address")
         key = check_key(peer.get("public_key"))
         endpoint = check_endpoint(peer.get("endpoint"))
         out.extend(("", "[Peer]", "PublicKey = " + key, "AllowedIPs = " + str(network)))
