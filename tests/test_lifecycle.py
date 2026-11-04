@@ -23,6 +23,11 @@ class ApprovalLifecycleTests(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
+    def approve(self, peer):
+        # Internal store-only fixture; HTTP tests verify actual key possession.
+        self.assertTrue(self.store.record_device_proof(peer["id"], peer["public_key"]))
+        self.assertTrue(self.store.approve_peer(peer["id"]))
+
     def test_pending_approval_and_irreversible_revocation(self):
         src = self.store.add_peer("sender", key(24), ["team"])
         dst = self.store.add_peer("receiver", key(25), ["services"])
@@ -31,9 +36,9 @@ class ApprovalLifecycleTests(unittest.TestCase):
         self.store.add_policy("team", "services", "tcp", [443])
         self.assertFalse(self.store.allowed(src["id"], dst["id"], "tcp", 443))
         self.assertEqual(self.store.dns_records(), [])
-        self.assertTrue(self.store.approve_peer(src["id"]))
+        self.approve(src)
         self.assertFalse(self.store.allowed(src["id"], dst["id"], "tcp", 443))
-        self.assertTrue(self.store.approve_peer(dst["id"]))
+        self.approve(dst)
         self.assertTrue(self.store.allowed(src["id"], dst["id"], "tcp", 443))
         self.assertEqual(len(self.store.dns_records()), 2)
         self.assertTrue(self.store.revoke_peer(src["id"]))
@@ -54,13 +59,13 @@ class ApprovalLifecycleTests(unittest.TestCase):
 
     def test_local_event_history_omits_public_keys(self):
         peer = self.store.add_peer("example", key(26), ["team"])
-        self.store.approve_peer(peer["id"])
+        self.approve(peer)
         self.store.delete_peer(peer["id"])
         events = self.store.events()
         self.assertEqual([e["kind"] for e in events], [
-            "peer_revoked", "peer_approved", "peer_registered"
+            "peer_revoked", "peer_approved", "peer_key_proved", "peer_registered"
         ])
-        self.assertEqual([e["peer_id"] for e in events], [peer["id"]] * 3)
+        self.assertEqual([e["peer_id"] for e in events], [peer["id"]] * 4)
         self.assertNotIn(key(26), json.dumps(events))
 
     def test_legacy_peer_records_migrate_to_pending(self):
