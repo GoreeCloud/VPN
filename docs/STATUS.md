@@ -7,3 +7,9 @@ Development checkpoint: peer records require explicit administrator approval, re
 See docs/THREAT_MODEL.md for specific identity, packet-policy, route, relay and release requirements. A read-only peer planning preview has been added, but does not configure WireGuard or enforce traffic.
 
 Priority sequence: secure identity and enrollment; real WireGuard data-plane enforcement; routing and DNS; clients; observability; remote access; enterprise and AI modules. GoreeCloud Mesh owns inter-product orchestration, while GoreeCloud UI governs visual surfaces.
+
+Management inspection additions: authenticated status (lifecycle, group and pool
+counts), access explanations/batch simulation, static policy diagnostics,
+filtered event pagination and a local `goreecloud-vpnctl` inspection CLI. See
+[usage and limits](MANAGEMENT_INSPECTION.md). They are management-only and do not
+change the security/production gates above. No database schema change is needed.
