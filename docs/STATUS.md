@@ -6,4 +6,6 @@ Development checkpoint: peer records require explicit administrator approval, re
 
 See docs/THREAT_MODEL.md for specific identity, packet-policy, route, relay and release requirements. A read-only peer planning preview has been added, but does not configure WireGuard or enforce traffic.
 
+November 4, 2026: Implemented a locally testable single-use X25519 key-possession proof prior to administrative approval, including replay/expiry checks and a fail-closed migration that demotes previously approved peer records. This does not deploy, connect, revoke or encrypt actual network traffic. See docs/KEY_PROOF.md.
+
 Priority sequence: secure identity and enrollment; real WireGuard data-plane enforcement; routing and DNS; clients; observability; remote access; enterprise and AI modules. GoreeCloud Mesh owns inter-product orchestration, while GoreeCloud UI governs visual surfaces.
