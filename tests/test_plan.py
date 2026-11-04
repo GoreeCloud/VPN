@@ -26,13 +26,18 @@ class PeerPlanningTests(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
+    def approve(self, peer):
+        # Internal store-only fixture; HTTP tests verify actual key possession.
+        self.assertTrue(self.store.record_device_proof(peer["id"], peer["public_key"]))
+        self.assertTrue(self.store.approve_peer(peer["id"]))
+
     def test_unapproved_local_peer_is_rejected(self):
         with self.assertRaises(ValidationError):
             build_peer_plan(self.store, self.client["id"])
 
     def test_default_deny_excludes_unrelated_peers(self):
-        self.store.approve_peer(self.client["id"])
-        self.store.approve_peer(self.server["id"])
+        self.approve(self.client)
+        self.approve(self.server)
         plan = build_peer_plan(self.store, self.client["id"])
         self.assertEqual(plan["schema"], PLAN_SCHEMA)
         self.assertEqual(plan["peers"], [])
@@ -40,8 +45,8 @@ class PeerPlanningTests(unittest.TestCase):
 
     def test_one_way_rules_produce_two_sided_adjacency_but_one_way_intent(self):
         self.store.add_policy("users", "services", "tcp", [22, 443])
-        self.store.approve_peer(self.client["id"])
-        self.store.approve_peer(self.server["id"])
+        self.approve(self.client)
+        self.approve(self.server)
         outgoing = build_peer_plan(self.store, self.client["id"])
         incoming = build_peer_plan(self.store, self.server["id"])
         self.assertEqual(len(outgoing["peers"]), 1)
@@ -65,8 +70,8 @@ class PeerPlanningTests(unittest.TestCase):
 
     def test_revocation_excludes_peer_and_does_not_reactivate(self):
         self.store.add_policy("users", "services", "icmp", [])
-        self.store.approve_peer(self.client["id"])
-        self.store.approve_peer(self.server["id"])
+        self.approve(self.client)
+        self.approve(self.server)
         self.assertEqual(len(build_peer_plan(self.store, self.client["id"])["peers"]), 1)
         self.assertTrue(self.store.revoke_peer(self.server["id"]))
         self.assertEqual(build_peer_plan(self.store, self.client["id"])["peers"], [])
@@ -74,8 +79,8 @@ class PeerPlanningTests(unittest.TestCase):
 
     def test_renderer_rejects_tampered_prefixes(self):
         self.store.add_policy("users", "services", "tcp", [443])
-        self.store.approve_peer(self.client["id"])
-        self.store.approve_peer(self.server["id"])
+        self.approve(self.client)
+        self.approve(self.server)
         plan = build_peer_plan(self.store, self.client["id"])
         plan["peers"][0]["allowed_ips"] = ["0.0.0.0/0"]
         with self.assertRaises(ValidationError):
