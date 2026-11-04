@@ -67,7 +67,7 @@ def check_endpoint(value):
         # Reject malformed DNS names before emitting WireGuard endpoint stanzas.
         # IPv4 literals must also be syntactically valid, not merely DNS-shaped.
         labels = host.split(".")
-        if any(not LABEL.fullmatch(label.lower()) or len(label) > 63 for label in labels):
+        if any(not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label) for label in labels):
             raise ValidationError("invalid endpoint hostname")
         if all(label.isdecimal() for label in labels) and len(labels) == 4:
             try:
