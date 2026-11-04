@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from .core import VPNStore, ValidationError
 from .plan import build_peer_plan
+from .enrollment import ProofChallenges
 
 LOG = logging.getLogger("goreecloud_vpn")
 
@@ -90,6 +91,33 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             return
         path = urlsplit(self.path).path
+        if path.startswith("/api/v1/peers/") and (
+            path.endswith("/challenge") or path.endswith("/prove")
+        ):
+            action = "challenge" if path.endswith("/challenge") else "prove"
+            peer_id = path[len("/api/v1/peers/"):-len("/" + action)]
+            if not peer_id or "/" in peer_id:
+                self.reply(404, {"error": "not found"})
+                return
+            try:
+                if action == "challenge":
+                    if (self.headers.get("Transfer-Encoding") or
+                            self.headers.get("Content-Length", "0") != "0"):
+                        raise ValidationError("challenge creation accepts no body")
+                    result = {"challenge": self.server.proofs.issue(peer_id)}
+                    status = 201
+                else:
+                    payload = self.body()
+                    self.keys(payload, {"challenge_id", "proof"})
+                    success = self.server.proofs.verify(
+                        peer_id, payload.get("challenge_id"), payload.get("proof")
+                    )
+                    result = {"verified": success, "data_plane_enforced": False}
+                    status = 200 if success else 400
+                self.reply(status, result)
+            except ValidationError as exc:
+                self.reply(400, {"error": str(exc)})
+            return
         if path.startswith("/api/v1/peers/") and (
             path.endswith("/approve") or path.endswith("/revoke")
         ):
@@ -171,6 +199,7 @@ def create_server(store, token, host="127.0.0.1", port=8176):
     server.daemon_threads = True
     server.store = store
     server.admin_token = token
+    server.proofs = ProofChallenges(store)
     return server
 
 
