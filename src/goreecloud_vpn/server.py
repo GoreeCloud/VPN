@@ -8,10 +8,11 @@ import ipaddress
 import json
 import logging
 import os
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from .core import VPNStore, ValidationError
 from .plan import build_peer_plan
+from .diagnostics import management_status, policy_diagnostics, simulate_access
 
 LOG = logging.getLogger("goreecloud_vpn")
 
@@ -66,14 +67,31 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self.authorized():
             return
-        if path == "/api/v1/peers":
+        if path == "/api/v1/status":
+            self.reply(200, management_status(self.server.store))
+        elif path == "/api/v1/policies/diagnostics":
+            self.reply(200, policy_diagnostics(self.server.store))
+        elif path == "/api/v1/peers":
             self.reply(200, {"peers": self.server.store.peers()})
         elif path == "/api/v1/policies":
             self.reply(200, {"policies": self.server.store.policies()})
         elif path == "/api/v1/dns":
             self.reply(200, {"records": self.server.store.dns_records(), "dns_server_running": False})
         elif path == "/api/v1/events":
-            self.reply(200, {"events": self.server.store.events(), "tamper_proof": False})
+            try:
+                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True, max_num_fields=4)
+                self.keys(query, {"limit", "before", "peer_id", "kind"})
+                if any(len(values) != 1 for values in query.values()):
+                    raise ValidationError("duplicate query parameters")
+                filters = {name: values[0] for name, values in query.items()}
+                for name in ("limit", "before"):
+                    if name in filters:
+                        if not filters[name].isascii() or not filters[name].isdigit():
+                            raise ValidationError("invalid numeric event filter")
+                        filters[name] = int(filters[name])
+                self.reply(200, self.server.store.event_page(**filters))
+            except (ValidationError, ValueError):
+                self.reply(400, {"error": "invalid event filters"})
         elif path.startswith("/api/v1/peers/") and path.endswith("/plan"):
             peer_id = path[len("/api/v1/peers/"):-len("/plan")]
             if not peer_id or "/" in peer_id:
@@ -107,7 +125,8 @@ class Handler(BaseHTTPRequestHandler):
                 action + "d": transitioned, "data_plane_enforced": False
             })
             return
-        if path not in ("/api/v1/peers", "/api/v1/policies", "/api/v1/access/check"):
+        if path not in ("/api/v1/peers", "/api/v1/policies", "/api/v1/access/check",
+                        "/api/v1/access/explain", "/api/v1/access/simulate"):
             self.reply(404, {"error": "not found"})
             return
         try:
@@ -122,6 +141,15 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"policy": self.server.store.add_policy(
                     body.get("source"), body.get("target"), body.get("protocol"), body.get("ports"))}
                 status = 201
+            elif path == "/api/v1/access/simulate":
+                self.keys(body, {"checks"})
+                result = simulate_access(self.server.store, body.get("checks"))
+                status = 200
+            elif path == "/api/v1/access/explain":
+                self.keys(body, {"source_id", "target_id", "protocol", "port"})
+                result = self.server.store.explain_access(
+                    body.get("source_id"), body.get("target_id"), body.get("protocol"), body.get("port"))
+                status = 200
             else:
                 self.keys(body, {"source_id", "target_id", "protocol", "port"})
                 result = {"allowed": self.server.store.allowed(
