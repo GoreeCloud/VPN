@@ -57,11 +57,23 @@ def check_endpoint(value):
     m = ENDPOINT.fullmatch(value)
     if not m or not 1 <= int(m.group(2)) <= 65535:
         raise ValidationError("invalid endpoint: expected host:port or [IPv6]:port")
-    if m.group(1).startswith("["):
+    host = m.group(1)
+    if host.startswith("["):
         try:
-            ipaddress.IPv6Address(m.group(1)[1:-1])
+            ipaddress.IPv6Address(host[1:-1])
         except ValueError as exc:
             raise ValidationError("invalid IPv6 endpoint") from exc
+    else:
+        # Reject malformed DNS names before emitting WireGuard endpoint stanzas.
+        # IPv4 literals must also be syntactically valid, not merely DNS-shaped.
+        labels = host.split(".")
+        if any(not LABEL.fullmatch(label.lower()) or len(label) > 63 for label in labels):
+            raise ValidationError("invalid endpoint hostname")
+        if all(label.isdecimal() for label in labels) and len(labels) == 4:
+            try:
+                ipaddress.IPv4Address(host)
+            except ValueError as exc:
+                raise ValidationError("invalid IPv4 endpoint") from exc
     return value
 
 
