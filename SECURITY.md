@@ -7,7 +7,10 @@
 - The management HTTP API is restricted to loopback addresses.
 - An administrator token of at least 32 characters is required at runtime.
 - No secrets, private WireGuard keys, or deployed configuration values are checked into Git.
-- Public WireGuard peer keys are validated but are not proof of device possession.
+- Public WireGuard peer keys are validated and then require a short-lived X25519/HKDF/HMAC key-possession proof before administrative approval; this alone is not remote identity authentication or hardware attestation.
+- Prior alpha-approved peers are deliberately demoted to pending during this migration and must be freshly verified. A peer must be approved within five minutes of proof.
+- Proof challenges expire after two minutes, allow one attempt, are memory-bounded, and are invalidated by management restarts. Only expected HMAC values—not ephemeral private keys—are retained in the in-memory cache.
+- Real WireGuard connection revocation and packet enforcement are **not yet implemented**.
 - All newly registered peers enter `pending` state. Only admin-approved records are eligible for positive management policy decisions or preview DNS names.
 - `revoked` is terminal and the key tombstone remains for duplicate-key rejection. Existing pre-approval databases migrate peers to `pending` (fail closed).
 - Local lifecycle events are informational SQLite entries, **not** immutable enterprise audit evidence.
