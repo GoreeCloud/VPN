@@ -79,6 +79,8 @@ def render_wireguard_peer_fragments(plan: dict) -> str:
         "# GoreeCloud VPN: OFFLINE REVIEW ONLY; NOT AN ENFORCED VPN CONFIG",
         "# Do not apply without separately verified WireGuard identity and firewall controls.",
     ]
+    seen_prefixes = set()
+    seen_keys = set()
     for peer in peers:
         if not isinstance(peer, dict) or not isinstance(peer.get("allowed_ips"), list):
             raise ValidationError("invalid peer plan entry")
@@ -92,6 +94,10 @@ def render_wireguard_peer_fragments(plan: dict) -> str:
         if network.version != 4 or network.prefixlen != 32 or not any(network.subnet_of(r) for r in RFC1918):
             raise ValidationError("only private IPv4 /32 peer prefixes are accepted")
         key = check_key(peer.get("public_key"))
+        if str(network) in seen_prefixes or key in seen_keys:
+            raise ValidationError("duplicate WireGuard peer identity or AllowedIPs")
+        seen_prefixes.add(str(network))
+        seen_keys.add(key)
         endpoint = check_endpoint(peer.get("endpoint"))
         out.extend(("", "[Peer]", "PublicKey = " + key, "AllowedIPs = " + str(network)))
         if endpoint:
