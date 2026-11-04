@@ -46,6 +46,10 @@ def check_key(value):
         raise ValidationError("invalid WireGuard public key") from exc
     if len(data) != 32 or data == bytes(32):
         raise ValidationError("invalid WireGuard public key")
+    # Reject alternate base64 spellings of the same key (nonzero pad bits).
+    # Public-key identity and duplicate detection must use one representation.
+    if base64.b64encode(data).decode("ascii") != value:
+        raise ValidationError("noncanonical WireGuard public key")
     return value
 
 
