@@ -1,5 +1,6 @@
 """Key-possession verification and fail-closed upgrade regressions."""
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -116,6 +117,35 @@ class ProofTests(unittest.TestCase):
         peer = self.store.add_peer("badcurve", low_order_key, ["devices"])
         with self.assertRaises(ValidationError):
             self.manager.issue(peer["id"])
+
+    def test_concurrent_proofs_are_single_use(self):
+        challenge = self.manager.issue(self.peer["id"])
+        valid = device_proof(self.private, challenge)
+
+        def submit(_):
+            return self.manager.verify(self.peer["id"], challenge["challenge_id"], valid)
+
+        with ThreadPoolExecutor(max_workers=16) as executor:
+            outcomes = list(executor.map(submit, range(32)))
+        self.assertEqual(outcomes.count(True), 1)
+        self.assertEqual(outcomes.count(False), 31)
+        self.assertTrue(self.store.approve_peer(self.peer["id"]))
+        self.assertEqual(
+            [event["kind"] for event in self.store.events()].count("peer_key_proved"), 1
+        )
+
+    def test_management_restart_invalidates_unconsumed_challenge(self):
+        challenge = self.manager.issue(self.peer["id"])
+        valid = device_proof(self.private, challenge)
+        restarted = ProofChallenges(self.store)
+        self.assertFalse(restarted.verify(self.peer["id"], challenge["challenge_id"], valid))
+        self.assertFalse(self.store.approve_peer(self.peer["id"]))
+        fresh = restarted.issue(self.peer["id"])
+        self.assertTrue(restarted.verify(
+            self.peer["id"], fresh["challenge_id"],
+            device_proof(self.private, fresh),
+        ))
+        self.assertTrue(self.store.approve_peer(self.peer["id"]))
 
     def test_previous_approved_records_are_demoted_on_migration(self):
         self.store.close()
