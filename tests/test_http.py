@@ -144,6 +144,49 @@ class ManagementHTTPTests(unittest.TestCase):
             {"protocol": "tcp", "ports": [443]}
         ])
 
+    def test_json_ambiguity_is_rejected_before_peer_or_policy_mutation(self):
+        private, public = self.identity(86)
+        del private
+        before_peers = len(self.store.peers())
+        before_policies = len(self.store.policies())
+        public_json = json.dumps(public)
+
+        # Duplicate top-level keys, duplicate keys inside nested policy-like
+        # objects and nonstandard NaN/Infinity numbers must fail closed.
+        requests = (
+            ("/api/v1/peers",
+             '{"name":"first","name":"second","public_key":' + public_json +
+             ',"groups":["users"]}'),
+            ("/api/v1/peers",
+             '{"name":"test-dup","public_key":' + public_json +
+             ',"groups":["users"],"groups":["admins"]}'),
+            ("/api/v1/access/simulate",
+             '{"checks":[{"source_id":"a","source_id":"b"}]}'),
+            ("/api/v1/policies",
+             '{"source":"users","target":"servers","protocol":"tcp","ports":[NaN]}'),
+            ("/api/v1/policies",
+             '{"source":"users","target":"servers","protocol":"tcp","ports":[Infinity]}'),
+        )
+        for path, body in requests:
+            with self.subTest(path=path, body=body[:45]):
+                request = Request(
+                    self.base + path, data=body.encode("utf-8"), method="POST",
+                    headers={"Authorization": "Bearer " + self.token,
+                             "Content-Type": "application/json"},
+                )
+                with self.assertRaises(HTTPError) as caught:
+                    urlopen(request, timeout=3)
+                self.assertEqual(caught.exception.code, 400)
+                self.assertEqual(len(self.store.peers()), before_peers)
+                self.assertEqual(len(self.store.policies()), before_policies)
+
+        # Normal, unambiguous payloads still work on the same listener.
+        status, data = self.api("/api/v1/peers", "POST", {
+            "name": "uniquejson", "public_key": public, "groups": ["users"]
+        })
+        self.assertEqual(status, 201)
+        self.assertEqual(data["peer"]["name"], "uniquejson")
+
     def test_guardrails(self):
         with self.assertRaises(ValidationError):
             create_server(self.store, "weak", port=0)
