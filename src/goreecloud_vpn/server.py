@@ -18,6 +18,21 @@ from .diagnostics import management_status, policy_diagnostics, simulate_access
 LOG = logging.getLogger("goreecloud_vpn")
 
 
+def _unique_json_object(pairs):
+    """Reject ambiguous JSON names in every nested object, before mutation."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite(_value):
+    """JSON does not permit NaN, Infinity, or -Infinity."""
+    raise ValueError("non-finite JSON number")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "GoreeCloudVPN-alpha"
 
@@ -54,7 +69,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get_content_type() != "application/json":
             raise ValidationError("Content-Type must be application/json")
         try:
-            result = json.loads(self.rfile.read(length))
+            result = json.loads(
+                self.rfile.read(length),
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_nonfinite,
+            )
         except (ValueError, UnicodeDecodeError) as exc:
             raise ValidationError("invalid JSON") from exc
         if not isinstance(result, dict):
