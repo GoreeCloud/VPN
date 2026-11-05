@@ -8,6 +8,7 @@ import ipaddress
 import json
 import logging
 import os
+import socket
 from urllib.parse import parse_qs, urlsplit
 
 from .core import VPNStore, ValidationError
@@ -15,6 +16,11 @@ from .plan import build_peer_plan
 from .diagnostics import management_status, policy_diagnostics, simulate_access
 
 LOG = logging.getLogger("goreecloud_vpn")
+
+
+class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+    """Bind the IPv6 loopback with an IPv6 socket, never an IPv4 wildcard."""
+    address_family = socket.AF_INET6
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -189,13 +195,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def create_server(store, token, host="127.0.0.1", port=8176):
     try:
-        if not ipaddress.ip_address(host).is_loopback:
-            raise ValidationError("management interface must be loopback only")
+        address = ipaddress.ip_address(host)
     except ValueError as exc:
         raise ValidationError("management host must be a loopback IP") from exc
+    if not address.is_loopback:
+        raise ValidationError("management interface must be loopback only")
     if not isinstance(token, str) or not 32 <= len(token) <= 4096:
         raise ValidationError("admin token must be at least 32 characters")
-    server = ThreadingHTTPServer((host, port), Handler)
+    server_class = _IPv6ThreadingHTTPServer if address.version == 6 else ThreadingHTTPServer
+    server = server_class((host, port), Handler)
     server.daemon_threads = True
     server.store = store
     server.admin_token = token
