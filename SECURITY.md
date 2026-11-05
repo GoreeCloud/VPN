@@ -18,7 +18,7 @@
 - VPN address pools and exported host prefixes must be within RFC1918 private IPv4 ranges.
 - SQLite state is local and owner-restricted on POSIX systems.
 - Default-deny means policy *decisions* deny unless a matching allow rule exists, not that actual packets are blocked.
-- Requests are authenticated, size limited, and validated. Browser cross-origin access is not enabled.
+- Management JSON writes reject duplicate object member names (including nested members) and nonstandard NaN/Infinity values before any state mutation, in addition to existing field and size validation. Browser cross-origin access is not enabled.
 
 ## Required security gates before production
 
