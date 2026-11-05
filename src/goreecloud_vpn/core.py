@@ -46,6 +46,10 @@ def check_key(value):
         raise ValidationError("invalid WireGuard public key") from exc
     if len(data) != 32 or data == bytes(32):
         raise ValidationError("invalid WireGuard public key")
+    # Reject alternate base64 spellings of the same 32-byte key. Non-zero
+    # padding bits otherwise bypass the unique-key and revocation tombstone.
+    if base64.b64encode(data).decode("ascii") != value:
+        raise ValidationError("noncanonical WireGuard public key")
     return value
 
 
@@ -168,11 +172,31 @@ class VPNStore:
         )
 
     def events(self):
-        # Local event history only; NOT tamper-proof or externally archived.
+        return self.event_page()["events"]
+
+    def event_page(self, limit=200, before=None, peer_id=None, kind=None):
+        """Newest-first keyset pagination; retained local history is not tamper-proof."""
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValidationError("limit must be an integer from 1 to 200")
+        if before is not None and (type(before) is not int or not 1 <= before <= 2**63 - 1):
+            raise ValidationError("before must be a positive SQLite sequence number")
+        if peer_id is not None and (not isinstance(peer_id, str) or not 1 <= len(peer_id) <= 128):
+            raise ValidationError("invalid peer identity filter")
+        if kind is not None and kind not in ("peer_registered", "peer_key_proved", "peer_approved", "peer_revoked"):
+            raise ValidationError("invalid event kind")
+        clauses, values = [], []
+        for column, operator, value in (("seq", "<", before), ("peer_id", "=", peer_id), ("kind", "=", kind)):
+            if value is not None:
+                clauses.append(column + operator + "?")
+                values.append(value)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
         with self.lock:
-            return [dict(row) for row in self.db.execute(
-                "SELECT * FROM events ORDER BY seq DESC LIMIT 200"
+            rows = [dict(row) for row in self.db.execute(
+                "SELECT * FROM events" + where + " ORDER BY seq DESC LIMIT ?", values + [limit + 1]
             )]
+        events = rows[:limit]
+        return {"events": events, "next_before": events[-1]["seq"] if len(rows) > limit else None,
+                "tamper_proof": False}
 
     def pending_peer(self, peer_id):
         if not isinstance(peer_id, str) or not peer_id:
@@ -261,32 +285,18 @@ class VPNStore:
         with self.lock, self.db:
             return self.db.execute("DELETE FROM policies WHERE id=?", (rule_id,)).rowcount == 1
 
-    def allowed(self, source_id, target_id, protocol, port=None):
-        if not isinstance(source_id, str) or not isinstance(target_id, str):
-            raise ValidationError("invalid peer identity")
-        if protocol not in ("tcp", "udp", "icmp"):
-            raise ValidationError("invalid protocol")
-        if (protocol == "icmp" and port is not None) or (protocol != "icmp" and (
-            type(port) is not int or not 1 <= port <= 65535
-        )):
-            raise ValidationError("invalid port for protocol")
+    def snapshot(self):
+        """Read peers and policies together, serialized with this store's writers."""
         with self.lock:
-            src = self.db.execute(
-                "SELECT groups FROM peers WHERE id=? AND status='approved' "
-                "AND proof_verified_at IS NOT NULL", (source_id,)
-            ).fetchone()
-            dst = self.db.execute(
-                "SELECT groups FROM peers WHERE id=? AND status='approved' "
-                "AND proof_verified_at IS NOT NULL", (target_id,)
-            ).fetchone()
-            if not src or not dst or source_id == target_id:
-                return False
-            src_groups, dst_groups = set(json.loads(src["groups"])), set(json.loads(dst["groups"]))
-            for rule in self.db.execute("SELECT * FROM policies WHERE protocol=?", (protocol,)):
-                if rule["source"] in src_groups and rule["target"] in dst_groups:
-                    if protocol == "icmp" or port in json.loads(rule["ports"]):
-                        return True
-            return False
+            return self.peers(), self.policies()
+
+    def explain_access(self, source_id, target_id, protocol, port=None):
+        from .diagnostics import evaluate_access
+        peers, policies = self.snapshot()
+        return evaluate_access(peers, policies, source_id, target_id, protocol, port)
+
+    def allowed(self, source_id, target_id, protocol, port=None):
+        return self.explain_access(source_id, target_id, protocol, port)["allowed"]
 
     def dns_records(self):
         return [{"name": p["name"] + "." + self.domain, "type": "A", "address": p["address"]}

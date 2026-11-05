@@ -21,6 +21,16 @@
 - [x] Input checks, body limits, owner file permissions, unit/HTTP tests and CI configuration.
 - [ ] Verified CI success across all configured Python versions for the current enrollment change.
 
+## Management inspection additions
+
+- [x] Authenticated management status and group/address-pool inventory.
+- [x] Explainable access evaluation and bounded current-policy batch simulation.
+- [x] Static duplicate/unused-policy diagnostics and cursor-paginated event history.
+- [x] Local read-only administration CLI with JSON output.
+
+See [management inspection](MANAGEMENT_INSPECTION.md). These additions do not
+complete any identity, data-plane, live telemetry or production deployment gate.
+
 ## Priority 0 — establish a real secure VPN
 
 - [ ] Threat model, security review and architecture decision on client engine.

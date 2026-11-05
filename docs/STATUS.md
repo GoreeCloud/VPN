@@ -9,3 +9,9 @@ See docs/THREAT_MODEL.md for specific identity, packet-policy, route, relay and 
 November 4, 2026: Implemented a locally testable single-use X25519 key-possession proof prior to administrative approval, including replay/expiry checks and a fail-closed migration that demotes previously approved peer records. This does not deploy, connect, revoke or encrypt actual network traffic. See docs/KEY_PROOF.md.
 
 Priority sequence: secure identity and enrollment; real WireGuard data-plane enforcement; routing and DNS; clients; observability; remote access; enterprise and AI modules. GoreeCloud Mesh owns inter-product orchestration, while GoreeCloud UI governs visual surfaces.
+
+Management inspection additions: authenticated status (lifecycle, group and pool
+counts), access explanations/batch simulation, static policy diagnostics,
+filtered event pagination and a local `goreecloud-vpnctl` inspection CLI. See
+[usage and limits](MANAGEMENT_INSPECTION.md). They are management-only and do not
+change the security/production gates above. No database schema change is needed.

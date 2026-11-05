@@ -19,6 +19,11 @@
 - Administrative peer and policy lifecycle APIs
 - Preview of internal DNS A records (not a live DNS server)
 - Input validation, request size limits, owner-restricted database and constant-time bearer-token comparison
+- Management status with lifecycle/group counts and address-pool capacity
+- Explainable access decisions and bounded batch simulation against current policies
+- Static policy diagnostics for duplicate rules and rules without eligible approved peers
+- Filtered, cursor-paginated local lifecycle history
+- Local inspection CLI (`goreecloud-vpnctl`) with JSON output
 - Automated tests and CI configuration
 
 ## Install and start (local development)
@@ -69,14 +74,28 @@ To create a directional management policy allowing TCP/22 from group `users` to 
 | POST | /api/v1/peers/{id}/approve | Approve a pending peer with fresh verified proof (admin only) |
 | POST | /api/v1/peers/{id}/revoke | Irreversibly revoke a peer record (admin only) |
 | DELETE | /api/v1/peers/{id} | Revoke peer while retaining a key tombstone |
-| GET | /api/v1/events | Last 200 local peer lifecycle events; not tamper-proof |
+| GET | /api/v1/events | Filtered lifecycle history with cursor pagination (default 200); not tamper-proof |
 | GET | /api/v1/peers/{id}/plan | Admin-only connectivity intent preview; no actual enforcement |
 | GET, POST | /api/v1/policies | List and create allow policies |
 | DELETE | /api/v1/policies/{id} | Delete policy |
 | POST | /api/v1/access/check | Management-only directional policy decision |
 | GET | /api/v1/dns | Preview A records; DNS server not active |
+| GET | /api/v1/status | Management counts, group inventory and address-pool usage (not live VPN health) |
+| GET | /api/v1/policies/diagnostics | Eligible peer-pair counts, inactive-rule warnings and exact duplicate sets |
+| POST | /api/v1/access/explain | Decision reason and matching policy IDs; no enforcement |
+| POST | /api/v1/access/simulate | Evaluate 1–100 access queries against current management state |
 
 All endpoints except /healthz require `Authorization: Bearer <admin-token>`. Request bodies are JSON with a 16 KiB limit.
+
+Inspect management state from a second terminal using the same administrator token:
+
+    goreecloud-vpnctl status
+    goreecloud-vpnctl diagnostics
+    goreecloud-vpnctl events --limit 20
+
+See [management inspection](docs/MANAGEMENT_INSPECTION.md) for CLI usage, batch
+simulation, decision reasons, pagination and limitations. These are local
+administrative tools, **not a functioning VPN client or live health monitor**.
 
 Run the test suite:
 
