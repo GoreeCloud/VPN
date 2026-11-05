@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 import binascii
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import ipaddress
 import json
 import os
@@ -111,6 +111,10 @@ class VPNStore:
                     "ALTER TABLE peers ADD COLUMN status TEXT NOT NULL DEFAULT 'pending' "
                     "CHECK(status IN ('pending','approved','revoked'))"
                 )
+            if "proof_verified_at" not in columns:
+                self.db.execute("ALTER TABLE peers ADD COLUMN proof_verified_at TEXT")
+                # Explicitly demote every pre-proof approved peer. No grandfathering.
+                self.db.execute("UPDATE peers SET status='pending' WHERE status='approved'")
             self.db.execute("""CREATE TABLE IF NOT EXISTS events (
                 seq INTEGER PRIMARY KEY AUTOINCREMENT,
                 kind TEXT NOT NULL, peer_id TEXT NOT NULL, recorded TEXT NOT NULL
@@ -178,7 +182,7 @@ class VPNStore:
             raise ValidationError("before must be a positive SQLite sequence number")
         if peer_id is not None and (not isinstance(peer_id, str) or not 1 <= len(peer_id) <= 128):
             raise ValidationError("invalid peer identity filter")
-        if kind is not None and kind not in ("peer_registered", "peer_approved", "peer_revoked"):
+        if kind is not None and kind not in ("peer_registered", "peer_key_proved", "peer_approved", "peer_revoked"):
             raise ValidationError("invalid event kind")
         clauses, values = [], []
         for column, operator, value in (("seq", "<", before), ("peer_id", "=", peer_id), ("kind", "=", kind)):
@@ -194,13 +198,51 @@ class VPNStore:
         return {"events": events, "next_before": events[-1]["seq"] if len(rows) > limit else None,
                 "tamper_proof": False}
 
+    def pending_peer(self, peer_id):
+        if not isinstance(peer_id, str) or not peer_id:
+            raise ValidationError("invalid peer identity")
+        with self.lock:
+            row = self.db.execute(
+                "SELECT id,public_key FROM peers WHERE id=? AND status='pending'",
+                (peer_id,)
+            ).fetchone()
+            if row is None:
+                raise ValidationError("peer is not pending")
+            return dict(row)
+
+    def record_device_proof(self, peer_id, public_key):
+        """Internal management operation; caller must validate the X25519 challenge."""
+        with self.lock, self.db:
+            changed = self.db.execute(
+                "UPDATE peers SET proof_verified_at=? "
+                "WHERE id=? AND public_key=? AND status='pending'",
+                (datetime.now(timezone.utc).isoformat(), peer_id, public_key)
+            ).rowcount
+            if changed:
+                self._event("peer_key_proved", peer_id)
+            return changed == 1
+
     def approve_peer(self, peer_id):
         if not isinstance(peer_id, str):
             raise ValidationError("invalid peer identity")
         with self.lock, self.db:
-            count = self.db.execute(
-                "UPDATE peers SET status='approved' WHERE id=? AND status='pending'",
+            row = self.db.execute(
+                "SELECT proof_verified_at FROM peers WHERE id=? AND status='pending'",
                 (peer_id,)
+            ).fetchone()
+            if row is None or not row["proof_verified_at"]:
+                return False
+            try:
+                verified_at = datetime.fromisoformat(row["proof_verified_at"])
+                seconds = (datetime.now(timezone.utc) - verified_at).total_seconds()
+            except (ValueError, TypeError):
+                return False
+            if not 0 <= seconds <= 300:
+                return False
+            count = self.db.execute(
+                "UPDATE peers SET status='approved' "
+                "WHERE id=? AND status='pending' AND proof_verified_at=?",
+                (peer_id, row["proof_verified_at"])
             ).rowcount
             if count:
                 self._event("peer_approved", peer_id)
@@ -211,7 +253,8 @@ class VPNStore:
             raise ValidationError("invalid peer identity")
         with self.lock, self.db:
             count = self.db.execute(
-                "UPDATE peers SET status='revoked' WHERE id=? AND status IN ('pending','approved')",
+                "UPDATE peers SET status='revoked', proof_verified_at=NULL "
+                "WHERE id=? AND status IN ('pending','approved')",
                 (peer_id,)
             ).rowcount
             if count:
@@ -257,7 +300,7 @@ class VPNStore:
 
     def dns_records(self):
         return [{"name": p["name"] + "." + self.domain, "type": "A", "address": p["address"]}
-                for p in self.peers() if p["status"] == "approved"]
+                for p in self.peers() if p["status"] == "approved" and p["proof_verified_at"]]
 
     def close(self):
         with self.lock:

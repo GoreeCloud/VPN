@@ -9,6 +9,9 @@ from urllib.request import Request, urlopen
 
 from goreecloud_vpn.core import VPNStore, ValidationError
 from goreecloud_vpn.server import create_server
+from goreecloud_vpn.enrollment import device_proof
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives import serialization
 
 
 class ManagementHTTPTests(unittest.TestCase):
@@ -45,6 +48,29 @@ class ManagementHTTPTests(unittest.TestCase):
         except HTTPError as error:
             return error.code, json.loads(error.read())
 
+    @staticmethod
+    def identity(seed):
+        private = X25519PrivateKey.from_private_bytes(bytes([seed]) * 32)
+        public = private.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
+        return private, base64.b64encode(public).decode("ascii")
+
+    def prove_and_approve(self, peer_id, private):
+        prefix = "/api/v1/peers/" + peer_id
+        status, result = self.api(prefix + "/challenge", "POST")
+        self.assertEqual(status, 201)
+        challenge = result["challenge"]
+        proof = device_proof(private, challenge)
+        status, result = self.api(prefix + "/prove", "POST", {
+            "challenge_id": challenge["challenge_id"], "proof": proof
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(result["verified"])
+        status, result = self.api(prefix + "/approve", "POST")
+        self.assertEqual(status, 200)
+        self.assertTrue(result["approved"])
+
     def test_auth_and_health(self):
         self.assertEqual(self.api("/healthz", authenticated=False)[0], 200)
         self.assertEqual(self.api("/api/v1/peers", authenticated=False)[0], 401)
@@ -67,7 +93,7 @@ class ManagementHTTPTests(unittest.TestCase):
         self.assertFalse(result["data_plane_enforced"])
 
     def test_admin_only_device_approval_and_revocation(self):
-        key = base64.b64encode(bytes([17]) * 32).decode()
+        private, key = self.identity(17)
         code, response = self.api("/api/v1/peers", "POST", {
             "name": "lifecycle", "public_key": key, "groups": ["users"]
         })
@@ -76,9 +102,8 @@ class ManagementHTTPTests(unittest.TestCase):
         self.assertEqual(response["peer"]["status"], "pending")
         path = "/api/v1/peers/" + peer_id
         self.assertEqual(self.api(path + "/approve", "POST", authenticated=False)[0], 401)
-        code, answer = self.api(path + "/approve", "POST")
-        self.assertEqual(code, 200)
-        self.assertTrue(answer["approved"])
+        self.assertEqual(self.api(path + "/approve", "POST")[0], 404)
+        self.prove_and_approve(peer_id, private)
         code, answer = self.api(path + "/revoke", "POST")
         self.assertEqual(code, 200)
         self.assertTrue(answer["revoked"])
@@ -90,8 +115,8 @@ class ManagementHTTPTests(unittest.TestCase):
         self.assertIn("peer_revoked", [row["kind"] for row in answer["events"]])
 
     def test_read_only_approved_peer_plan(self):
-        akey = base64.b64encode(bytes([41]) * 32).decode()
-        bkey = base64.b64encode(bytes([42]) * 32).decode()
+        aprivate, akey = self.identity(41)
+        bprivate, bkey = self.identity(42)
         _, a = self.api("/api/v1/peers", "POST", {
             "name": "planclient", "public_key": akey, "groups": ["planusers"]
         })
@@ -101,8 +126,8 @@ class ManagementHTTPTests(unittest.TestCase):
         path = "/api/v1/peers/" + a["peer"]["id"] + "/plan"
         self.assertEqual(self.api(path)[0], 404)
         self.assertEqual(self.api(path, authenticated=False)[0], 401)
-        self.api("/api/v1/peers/" + a["peer"]["id"] + "/approve", "POST")
-        self.api("/api/v1/peers/" + b["peer"]["id"] + "/approve", "POST")
+        self.prove_and_approve(a["peer"]["id"], aprivate)
+        self.prove_and_approve(b["peer"]["id"], bprivate)
         self.api("/api/v1/policies", "POST", {
             "source": "planusers", "target": "planservers",
             "protocol": "tcp", "ports": [443]

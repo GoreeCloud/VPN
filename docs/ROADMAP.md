@@ -1,6 +1,6 @@
 # GoreeCloud VPN — implementation plan and acceptance criteria
 
-**As of November 3, 2026.** All unmarked capabilities remain planned. See [FEATURES](FEATURES.md) for the complete product scope.
+**As of November 4, 2026.** All unmarked capabilities remain planned. See [FEATURES](FEATURES.md) for the complete product scope.
 
 ## Foundation delivered to repository
 
@@ -8,6 +8,9 @@
 - [x] Loopback-only bearer-authenticated administrative interface.
 - [x] Private IPv4 allocation, peer name/key/group metadata and SQLite persistence.
 - [x] Explicit pending/approved/revoked lifecycle, fail-closed schema migration and terminal revocation of management records.
+- [x] Prototype X25519 key-possession challenge using HKDF/HMAC, short expiry, one-attempt replay prevention and proof-bound approval.
+- [x] Pre-proof approved records demoted to pending; peer access decisions and DNS previews require newly verified approvals.
+- [x] Offline device-side proof helper; private keys are never accepted by the server.
 - [x] Pending/revoked peer exclusion from management policy decisions and private DNS previews.
 - [x] Local lifecycle history and regression tests (not tamper-proof auditing).
 - [x] Read-only WireGuard adjacency planning for approved peers and offline peer stanzas.
@@ -16,7 +19,7 @@
 - [x] Directional TCP/UDP/ICMP default-deny **policy evaluation only**.
 - [x] DNS record preview (not a DNS service).
 - [x] Input checks, body limits, owner file permissions, unit/HTTP tests and CI configuration.
-- [ ] Verified CI success across all configured Python versions.
+- [ ] Verified CI success across all configured Python versions for the current enrollment change.
 
 ## Management inspection additions
 
@@ -31,7 +34,7 @@ complete any identity, data-plane, live telemetry or production deployment gate.
 ## Priority 0 — establish a real secure VPN
 
 - [ ] Threat model, security review and architecture decision on client engine.
-- [ ] Client-held key generation and authenticated proof-of-possession enrollment.
+- [ ] Production device key generation and secure remote authenticated enrollment transport; local proof-of-possession primitive implemented but unreviewed.
 - [ ] WireGuard tunnel/peer lifecycle and server-client coordination.
 - [ ] Enforce identity/policy in actual data plane, including deny/revoke tests.
 - [ ] TLS/mTLS for remote management and enrollment.

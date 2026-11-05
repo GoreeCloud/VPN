@@ -2,7 +2,7 @@
 
 **Privacy-first, self-hosted Zero Trust networking platform.**
 
-**Maturity: 0.1.0-alpha.1 — management-plane foundation only.** GoreeCloud VPN is designed for private WireGuard mesh connectivity, routing, network access control, private DNS, application publishing, remote access and observability. The full vision is recorded in [the capabilities specification](docs/FEATURES.md).
+**Maturity: 0.1.0-alpha.2 — management-plane foundation only.** GoreeCloud VPN is designed for private WireGuard mesh connectivity, routing, network access control, private DNS, application publishing, remote access and observability. The full vision is recorded in [the capabilities specification](docs/FEATURES.md).
 
 > **Not yet a functioning VPN.** This alpha does **not** create WireGuard tunnels, enforce packet-level access rules, deploy DNS, provide NAT traversal/relays, or install client VPNs. Do not use this code as a security boundary for production traffic.
 
@@ -10,7 +10,7 @@
 
 - Authenticated, loopback-only local management REST API
 - SQLite peer inventory with unique private IPv4 allocation
-- Explicit `pending → approved → revoked` peer lifecycle (revocation is terminal for the recorded key)
+- Device identity lifecycle: pending → key possession proven → administrator approved → revoked; proof must be fresh before approval
 - Only approved peers participate in management policy decisions or private DNS previews
 - Local peer lifecycle event history; events are not tamper-proof audit evidence
 - Read-only approved-peer planning and inspectable, unapplied WireGuard peer stanzas
@@ -48,7 +48,7 @@ To register a peer, supply a **public** WireGuard key generated on that peer:
       -H "Content-Type: application/json" \
       -d '{"name":"laptop","public_key":"REPLACE_WITH_REAL_PUBLIC_KEY","groups":["users"]}'
 
-New peer records start as `pending` and are **not allowed** by the management policy evaluator, even if their groups match. A trusted administrator must explicitly approve each record:
+New peer records remain `pending` until an administrator verifies a short-lived proof of possession of the device-held WireGuard private key and approves within five minutes. Previously approved records are reset to pending when upgrading from the pre-proof schema. The private key must never be transmitted to the management server. See [the local key-possession protocol](docs/KEY_PROOF.md). After the proof has been verified, the administrator can approve:
 
     curl -X POST -H "Authorization: Bearer $GOREECLOUD_VPN_ADMIN_TOKEN" http://127.0.0.1:8176/api/v1/peers/PEER_ID/approve
 
@@ -69,7 +69,9 @@ To create a directional management policy allowing TCP/22 from group `users` to 
 |---|---|---|
 | GET | /healthz | Minimal unauthenticated process health |
 | GET, POST | /api/v1/peers | List and register peer metadata |
-| POST | /api/v1/peers/{id}/approve | Approve a pending peer record (admin only) |
+| POST | /api/v1/peers/{id}/challenge | Issue a single-use short-lived key-possession challenge |
+| POST | /api/v1/peers/{id}/prove | Verify the device-produced proof against the registered public key |
+| POST | /api/v1/peers/{id}/approve | Approve a pending peer with fresh verified proof (admin only) |
 | POST | /api/v1/peers/{id}/revoke | Irreversibly revoke a peer record (admin only) |
 | DELETE | /api/v1/peers/{id} | Revoke peer while retaining a key tombstone |
 | GET | /api/v1/events | Filtered lifecycle history with cursor pagination (default 200); not tamper-proof |
@@ -106,6 +108,7 @@ Run the test suite:
 - [Implementation roadmap](docs/ROADMAP.md)
 - [Security policy and production gates](SECURITY.md)
 - [Threat model and release boundaries](docs/THREAT_MODEL.md)
+- [WireGuard key-possession protocol](docs/KEY_PROOF.md)
 - [Progress and delivery limits](docs/STATUS.md)
 
 ## Ecosystem boundaries
