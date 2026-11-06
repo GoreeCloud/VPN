@@ -107,6 +107,30 @@ class VPNStoreTests(unittest.TestCase):
         self.assertEqual(peers[0]["status"], "revoked")
         self.assertEqual(peers[0]["public_key"], key(41))
 
+    def test_pending_peer_stays_denied_after_store_restart(self):
+        """An existing allow rule never approves a pending peer implicitly."""
+        pending = self.store.add_peer("new-client", key(51), ["users"])
+        target = self.store.add_peer("service", key(52), ["infra"])
+        self.assertTrue(self.store.approve_peer(target["id"]))
+        self.store.add_policy("users", "infra", "tcp", [443])
+        self.store.add_policy("infra", "users", "tcp", [443])
+
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        for source_id, target_id in ((pending["id"], target["id"]),
+                                     (target["id"], pending["id"])):
+            with self.subTest(source=source_id):
+                decision = self.store.explain_access(source_id, target_id, "tcp", 443)
+                self.assertFalse(decision["allowed"])
+                self.assertEqual(decision["reason"], "peer_not_approved")
+                self.assertEqual(decision["matching_policy_ids"], [])
+                self.assertFalse(decision["data_plane_enforced"])
+        self.assertEqual(
+            {peer["name"]: peer["status"] for peer in self.store.peers()},
+            {"new-client": "pending", "service": "approved"},
+        )
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
