@@ -131,6 +131,31 @@ class VPNStoreTests(unittest.TestCase):
             {"new-client": "pending", "service": "approved"},
         )
 
+    def test_one_direction_policy_deletion_does_not_remove_reverse_allow(self):
+        """Directional policy changes remain isolated across a SQLite restart."""
+        client = self.store.add_peer("client", key(61), ["users"])
+        service = self.store.add_peer("service", key(62), ["infra"])
+        self.assertTrue(self.store.approve_peer(client["id"]))
+        self.assertTrue(self.store.approve_peer(service["id"]))
+        forward = self.store.add_policy("users", "infra", "tcp", [443])
+        reverse = self.store.add_policy("infra", "users", "tcp", [443])
+        self.assertTrue(self.store.allowed(client["id"], service["id"], "tcp", 443))
+        self.assertTrue(self.store.allowed(service["id"], client["id"], "tcp", 443))
+
+        self.assertTrue(self.store.delete_policy(forward["id"]))
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        denied = self.store.explain_access(client["id"], service["id"], "tcp", 443)
+        permitted = self.store.explain_access(service["id"], client["id"], "tcp", 443)
+        self.assertFalse(denied["allowed"])
+        self.assertEqual(denied["matching_policy_ids"], [])
+        self.assertTrue(permitted["allowed"])
+        self.assertEqual(permitted["matching_policy_ids"], [reverse["id"]])
+        self.assertFalse(denied["data_plane_enforced"])
+        self.assertFalse(permitted["data_plane_enforced"])
+        self.assertFalse(self.store.allowed(service["id"], client["id"], "tcp", 444))
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
