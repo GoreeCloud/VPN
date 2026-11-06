@@ -177,6 +177,25 @@ class VPNStoreTests(unittest.TestCase):
             self.assertFalse(decision["data_plane_enforced"])
         self.assertFalse(tcp["data_plane_enforced"])
 
+    def test_unrelated_group_policy_does_not_authorize_after_restart(self):
+        """An allow rule for other groups must not grant access to these peers."""
+        client = self.store.add_peer("client", key(81), ["users"])
+        service = self.store.add_peer("service", key(82), ["infra"])
+        self.assertTrue(self.store.approve_peer(client["id"]))
+        self.assertTrue(self.store.approve_peer(service["id"]))
+        self.store.add_policy("admins", "infra", "tcp", [443])
+        self.store.add_policy("users", "database", "tcp", [443])
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        for left, right in ((client["id"], service["id"]),
+                            (service["id"], client["id"])):
+            with self.subTest(source=left):
+                decision = self.store.explain_access(left, right, "tcp", 443)
+                self.assertFalse(decision["allowed"])
+                self.assertEqual(decision["matching_policy_ids"], [])
+                self.assertFalse(decision["data_plane_enforced"])
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
