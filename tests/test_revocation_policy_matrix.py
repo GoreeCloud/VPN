@@ -56,5 +56,42 @@ class RevocationPolicyMatrixTests(unittest.TestCase):
                 store.close()
 
 
+    def test_policy_deletion_denies_both_directions_without_revoking_peers(self):
+        """Management-only regression: deleting an allow rule must fail closed."""
+        with tempfile.TemporaryDirectory() as directory:
+            store = VPNStore(Path(directory) / "vpn.db")
+            try:
+                left = store.add_peer("left", public_key(81), ["leftgroup"])
+                right = store.add_peer("right", public_key(82), ["rightgroup"])
+                self.assertTrue(store.approve_peer(left["id"]))
+                self.assertTrue(store.approve_peer(right["id"]))
+                directions = (
+                    (left["id"], right["id"], "leftgroup", "rightgroup"),
+                    (right["id"], left["id"], "rightgroup", "leftgroup"),
+                )
+                rules = []
+                for _, _, source_group, target_group in directions:
+                    rules.append(store.add_policy(source_group, target_group, "tcp", [443]))
+                for source, target, _, _ in directions:
+                    decision = store.explain_access(source, target, "tcp", 443)
+                    self.assertTrue(decision["allowed"])
+                    self.assertFalse(decision["data_plane_enforced"])
+
+                for rule in rules:
+                    self.assertTrue(store.delete_policy(rule["id"]))
+                    self.assertFalse(store.delete_policy(rule["id"]))
+                for source, target, _, _ in directions:
+                    with self.subTest(source=source, target=target):
+                        decision = store.explain_access(source, target, "tcp", 443)
+                        self.assertFalse(decision["allowed"])
+                        self.assertEqual(decision["matching_policy_ids"], [])
+                        self.assertFalse(decision["data_plane_enforced"])
+                        # A removed permit must not affect unrelated default-deny ports.
+                        self.assertFalse(store.explain_access(source, target, "tcp", 444)["allowed"])
+                self.assertTrue(all(peer["status"] == "approved" for peer in store.peers()))
+            finally:
+                store.close()
+
+
 if __name__ == "__main__":
     unittest.main()
