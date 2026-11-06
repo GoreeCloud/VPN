@@ -91,6 +91,22 @@ class VPNStoreTests(unittest.TestCase):
             {"approved", "revoked"},
         )
 
+    def test_revoked_key_tombstone_survives_restart(self):
+        """A revoked key cannot be re-enrolled after reopening the store."""
+        original = self.store.add_peer("retired", key(41), ["users"])
+        self.assertTrue(self.store.approve_peer(original["id"]))
+        self.assertTrue(self.store.revoke_peer(original["id"]))
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        with self.assertRaises(ValidationError):
+            self.store.add_peer("replacement", key(41), ["users"])
+        self.assertFalse(self.store.approve_peer(original["id"]))
+        peers = self.store.peers()
+        self.assertEqual(len(peers), 1)
+        self.assertEqual(peers[0]["status"], "revoked")
+        self.assertEqual(peers[0]["public_key"], key(41))
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
