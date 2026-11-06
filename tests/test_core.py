@@ -38,6 +38,30 @@ class VPNStoreTests(unittest.TestCase):
         self.assertTrue(self.store.delete_policy(rule["id"]))
         self.assertFalse(self.store.allowed(a["id"], b["id"], "tcp", 22))
 
+    def test_deleted_policy_stays_denied_after_store_restart(self):
+        """A removed management allow rule must not reappear after SQLite reopen."""
+        source = self.store.add_peer("client", key(21), ["users"])
+        target = self.store.add_peer("service", key(22), ["infra"])
+        self.assertTrue(self.store.approve_peer(source["id"]))
+        self.assertTrue(self.store.approve_peer(target["id"]))
+        forward = self.store.add_policy("users", "infra", "tcp", [443])
+        reverse = self.store.add_policy("infra", "users", "tcp", [443])
+        self.assertTrue(self.store.allowed(source["id"], target["id"], "tcp", 443))
+        self.assertTrue(self.store.allowed(target["id"], source["id"], "tcp", 443))
+
+        self.assertTrue(self.store.delete_policy(forward["id"]))
+        self.assertTrue(self.store.delete_policy(reverse["id"]))
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        self.assertFalse(self.store.allowed(source["id"], target["id"], "tcp", 443))
+        self.assertFalse(self.store.allowed(target["id"], source["id"], "tcp", 443))
+        self.assertFalse(self.store.allowed(source["id"], target["id"], "tcp", 444))
+        self.assertEqual(
+            {peer["status"] for peer in self.store.peers()},
+            {"approved"},
+        )
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
