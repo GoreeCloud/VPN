@@ -196,6 +196,28 @@ class VPNStoreTests(unittest.TestCase):
                 self.assertEqual(decision["matching_policy_ids"], [])
                 self.assertFalse(decision["data_plane_enforced"])
 
+    def test_tcp_allow_does_not_authorize_icmp_after_restart(self):
+        """A TCP rule must not authorize ICMP in either direction."""
+        client = self.store.add_peer("client", key(91), ["users"])
+        service = self.store.add_peer("service", key(92), ["infra"])
+        self.assertTrue(self.store.approve_peer(client["id"]))
+        self.assertTrue(self.store.approve_peer(service["id"]))
+        rule = self.store.add_policy("users", "infra", "tcp", [443])
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        permitted = self.store.explain_access(client["id"], service["id"], "tcp", 443)
+        self.assertTrue(permitted["allowed"])
+        self.assertEqual(permitted["matching_policy_ids"], [rule["id"]])
+        self.assertFalse(permitted["data_plane_enforced"])
+        for left, right in ((client["id"], service["id"]),
+                            (service["id"], client["id"])):
+            with self.subTest(source=left):
+                denied = self.store.explain_access(left, right, "icmp")
+                self.assertFalse(denied["allowed"])
+                self.assertEqual(denied["matching_policy_ids"], [])
+                self.assertFalse(denied["data_plane_enforced"])
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
