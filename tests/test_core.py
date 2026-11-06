@@ -156,6 +156,27 @@ class VPNStoreTests(unittest.TestCase):
         self.assertFalse(permitted["data_plane_enforced"])
         self.assertFalse(self.store.allowed(service["id"], client["id"], "tcp", 444))
 
+    def test_tcp_allow_does_not_authorize_udp_after_restart(self):
+        """Protocol-specific allow rules must not authorize a different protocol."""
+        client = self.store.add_peer("client", key(71), ["users"])
+        service = self.store.add_peer("service", key(72), ["infra"])
+        self.assertTrue(self.store.approve_peer(client["id"]))
+        self.assertTrue(self.store.approve_peer(service["id"]))
+        rule = self.store.add_policy("users", "infra", "tcp", [443])
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        tcp = self.store.explain_access(client["id"], service["id"], "tcp", 443)
+        udp = self.store.explain_access(client["id"], service["id"], "udp", 443)
+        reverse = self.store.explain_access(service["id"], client["id"], "tcp", 443)
+        self.assertTrue(tcp["allowed"])
+        self.assertEqual(tcp["matching_policy_ids"], [rule["id"]])
+        for decision in (udp, reverse):
+            self.assertFalse(decision["allowed"])
+            self.assertEqual(decision["matching_policy_ids"], [])
+            self.assertFalse(decision["data_plane_enforced"])
+        self.assertFalse(tcp["data_plane_enforced"])
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
