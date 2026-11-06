@@ -62,6 +62,35 @@ class VPNStoreTests(unittest.TestCase):
             {"approved"},
         )
 
+    def test_revocation_remains_denied_after_store_restart(self):
+        """Revoked identity stays denied even when its allow rules still exist."""
+        source = self.store.add_peer("client", key(31), ["users"])
+        target = self.store.add_peer("service", key(32), ["infra"])
+        self.assertTrue(self.store.approve_peer(source["id"]))
+        self.assertTrue(self.store.approve_peer(target["id"]))
+        self.store.add_policy("users", "infra", "tcp", [443])
+        self.store.add_policy("infra", "users", "tcp", [443])
+        self.assertTrue(self.store.allowed(source["id"], target["id"], "tcp", 443))
+        self.assertTrue(self.store.allowed(target["id"], source["id"], "tcp", 443))
+
+        self.assertTrue(self.store.revoke_peer(target["id"]))
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        for left, right in ((source["id"], target["id"]),
+                            (target["id"], source["id"])):
+            with self.subTest(source=left):
+                decision = self.store.explain_access(left, right, "tcp", 443)
+                self.assertFalse(decision["allowed"])
+                self.assertEqual(decision["reason"], "peer_not_approved")
+                self.assertEqual(decision["matching_policy_ids"], [])
+                self.assertFalse(decision["data_plane_enforced"])
+        self.assertFalse(self.store.approve_peer(target["id"]))
+        self.assertEqual(
+            {peer["status"] for peer in self.store.peers()},
+            {"approved", "revoked"},
+        )
+
     def test_invalid_input_and_duplicate_keys(self):
         with self.assertRaises(ValidationError):
             self.store.add_peer("invalid name", key(1), [])
