@@ -107,6 +107,28 @@ class VPNStoreTests(unittest.TestCase):
         self.assertEqual(peers[0]["status"], "revoked")
         self.assertEqual(peers[0]["public_key"], key(41))
 
+    def test_noncanonical_key_cannot_bypass_revocation_tombstone(self):
+        """Alternate base64 padding bits cannot evade a revoked key's identity."""
+        original_key = key(101)
+        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        last_data_index = alphabet.index(original_key[-2])
+        alternate_key = original_key[:-2] + alphabet[last_data_index ^ 1] + "="
+        self.assertNotEqual(original_key, alternate_key)
+        self.assertEqual(base64.b64decode(original_key), base64.b64decode(alternate_key))
+
+        peer = self.store.add_peer("retired", original_key, ["users"])
+        self.assertTrue(self.store.approve_peer(peer["id"]))
+        self.assertTrue(self.store.revoke_peer(peer["id"]))
+        self.store.close()
+        self.store = VPNStore(self.path)
+
+        with self.assertRaises(ValidationError):
+            self.store.add_peer("reencoded", alternate_key, ["users"])
+        with self.assertRaises(ValidationError):
+            self.store.add_peer("same-key", original_key, ["users"])
+        self.assertEqual(len(self.store.peers()), 1)
+        self.assertEqual(self.store.peers()[0]["status"], "revoked")
+
     def test_pending_peer_stays_denied_after_store_restart(self):
         """An existing allow rule never approves a pending peer implicitly."""
         pending = self.store.add_peer("new-client", key(51), ["users"])
