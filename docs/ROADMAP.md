@@ -21,6 +21,9 @@
 - [x] Nonpublishing Python wheel build and included license/SPDX/package integrity validation (PR #18).
 - [x] Verified GitHub PR CI success on Python 3.11, 3.12 and 3.13, including wheel gates in PR #18.
 - [x] Local clean-checkout management baseline: 53 tests passed on Python 3.12 after packaging gates.
+- [x] Read-only Linux WireGuard lab prerequisite checker and regression tests (PR #19).
+- [x] Manual, explicitly opt-in rootless network/mount namespace WireGuard kernel handshake, nftables drop, rule restore and peer removal smoke, private tmpfs keys and safety-guard tests (PR #20).
+- [x] Clean-checkout Python 3.12 lab branch: 62 tests; GitHub CI Python 3.11/3.12/3.13 successful, Bash syntax-only in CI. **Not** a GoreeCloud-managed data plane.
 
 ## Management inspection additions
 
