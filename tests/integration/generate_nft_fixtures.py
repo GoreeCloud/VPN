@@ -72,6 +72,17 @@ def generate(directory: Path) -> None:
         outputs["reverse.deny.nft"] = build_nft_ingress_preview(
             store, source["id"], interface="wgA"
         )
+        # Freeze the same public-only lab generation used by ports.nft.
+        # These temporary records never leave this private tmpfs.
+        lab_peers, lab_policies = store.snapshot()
+        lab_snapshot = {
+            "pool": str(store.network), "target_peer_id": target["id"],
+            "peers": lab_peers, "policies": lab_policies,
+        }
+        snapshot_file = directory / "lab-state.json"
+        with snapshot_file.open("x", encoding="ascii") as out:
+            json.dump(lab_snapshot, out, sort_keys=True)
+        snapshot_file.chmod(0o600)
 
         for name, plan in outputs.items():
             path = directory / name

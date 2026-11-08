@@ -129,6 +129,7 @@ This confirms build metadata, inclusion of the MIT license, and a basic wheel fi
 - [Experimental offline nftables ingress policy preview](docs/NFT_INGRESS_PREVIEW.md)
 - [Offline approved peer key-to-IP binding manifest](docs/IDENTITY_BINDING_INTENT.md)
 - [Offline public WireGuard AllowedIPs readback reconciliation](docs/KERNEL_ALLOWEDIPS_READBACK.md)
+- [Experimental one-snapshot ingress preflight — offline only](docs/OFFLINE_AGENT_PREFLIGHT.md)
 
 ## Ecosystem boundaries
 

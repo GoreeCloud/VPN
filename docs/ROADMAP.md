@@ -31,6 +31,7 @@
 - [x] Read-only, fail-closed approved-peer canonical public-key to unique private IPv4 `/32` binding intent with unauthenticated SHA-256 change fingerprint (PR #26); exact-head 81 local Python 3.12 tests, wheel metadata validation and 3-version CI passed. Does not establish device possession, active kernel AllowedIPs, or enforcement.
 - [x] Disposable kernel test confirms an **already established** TCP stream loses subsequent application traffic after manual rule withdrawal, and fresh connection succeeds after reallow (PR #27); exact-head 83 local Python 3.12 tests and GitHub CI Python 3.11/3.12/3.13 passed. Full conntrack/session-revocation guarantee still open.
 - [x] Strict offline parser for public-only WireGuard AllowedIPs text compared with selected approved key-to-/32 intent; manual rootless lab verifies actual kernel public readback with no private-key dump (PR #28). Exact-head 92 local Python 3.12 tests, kernel regression and GitHub CI Python 3.11/3.12/3.13 passed. **Not** an attested production agent.
+- [x] Experimental **single-snapshot offline ingress preflight** combines approved public key/IP binding intent, group-policy/port nftables preview, and public-key readback within one frozen management generation; absent, unauthorized or mismatched selected sources fail closed. Explicit flags prohibit claims of agent authority or production enforcement. Development branch 103 local tests and rootless live kernel check passed; PR/CI review required.
 
 ## Management inspection additions
 
