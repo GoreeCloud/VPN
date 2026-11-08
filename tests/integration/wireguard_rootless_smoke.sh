@@ -114,16 +114,28 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
     exit 5
   fi
   echo 'GENERATED_NFT_POLICY_DEFAULT_DENY=PASS'
-  # Delete/re-add below is LAB ONLY and NOT atomic or safe for deployment.
-  nsenter -t "$b" -n nft delete table inet goreecloud_vpn_preview
-  nsenter -t "$b" -n nft -f "$work/allow.nft"
+  # Negative transaction: a malformed update must NOT remove the active deny.
+  cat "$work/allow.replace.nft" > "$work/broken.replace.nft"
+  printf '%s\n' 'nft_intentionally_invalid_command' >> "$work/broken.replace.nft"
+  if nsenter -t "$b" -n nft -f "$work/broken.replace.nft" >/dev/null 2>&1; then
+    echo 'ERROR: invalid nft batch unexpectedly accepted' >&2
+    exit 8
+  fi
+  if nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null 2>&1; then
+    echo 'ERROR: rejected batch removed the active deny rule' >&2
+    exit 8
+  fi
+  echo 'NFT_REJECTED_BATCH_PRESERVED_DENY=PASS'
+  # nft -f commits a valid command batch as one kernel transaction.
+  # This is still a manual, rootless namespace test; no agent is built.
+  nsenter -t "$b" -n nft -c -f "$work/allow.replace.nft"
+  nsenter -t "$b" -n nft -f "$work/allow.replace.nft"
   nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null
   echo 'GENERATED_NFT_POLICY_ICMP_ALLOW=PASS'
   # The following tests use a real socket listener in the RECEIVING lab namespace.
-  # This is still a manual, non-atomic test table replacement, NOT an agent.
-  nsenter -t "$b" -n nft -c -f "$work/ports.nft"
-  nsenter -t "$b" -n nft delete table inet goreecloud_vpn_preview
-  nsenter -t "$b" -n nft -f "$work/ports.nft"
+  # This is still a manual transaction, NOT a trusted production agent.
+  nsenter -t "$b" -n nft -c -f "$work/ports.replace.nft"
+  nsenter -t "$b" -n nft -f "$work/ports.replace.nft"
   nsenter -t "$b" -n python3 "$root/tests/integration/port_probe.py" serve --ready "$work/ports.ready" &
   port_server=$!
   for iteration in {1..40}; do
