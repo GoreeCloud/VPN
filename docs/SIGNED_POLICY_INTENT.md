@@ -46,6 +46,12 @@ python -m unittest discover -s tests -q
 
 The optional extra is bounded to `cryptography>=50.0.2,<51` (PyPI project current stable observed November 7, 2026); the local development laptop's system `cryptography` may be older. Dependency license (Apache-2.0 OR BSD-3-Clause) and version range require standard release supply-chain, vulnerability and license review before use. The package does **not** contain a production signing key, command sender or network-facing verifier service. Unit tests generate disposable Ed25519 keys **only in memory**.
 
+## Test-only combination with the offline revision ledger
+
+The updated **draft** tests in `tests/test_signed_policy_ledger_integration.py` exercise **two separate experimental primitives together without shipping a service**: read the local per-device sequence floor, verify detached Ed25519 claims against an independently trusted public key and that floor, and only then attempt the local SQLite `compare_and_advance` transaction. Tests cover a genuine signed policy, wrong signer/recipient/payload, equal/older signed revision, controller signing-key rotation, two valid **racing** signed revisions (one wins, the stale competing writer fails), and a simulated *old database restore* that **reverts the recorded floor**. See [OFFLINE_POLICY_REVISION_LEDGER](OFFLINE_POLICY_REVISION_LEDGER.md).
+
+This is deliberately a **unit-test demonstration, not an exported verified-and-apply API**. Advancing the ledger does **not** change a firewall or prove a valid enrollment; it only records a candidate revision locally. There is no chosen production order for ledger advance versus kernel apply, since either ordering has a crash window. **Do not use this demonstration as a privileged agent transaction.** A restored disk/VM backup still defeats the local anti-replay floor; only an independently reviewed trusted monotonic anchor and transaction protocol can address that.
+
 ## Unresolved production security gates
 
 1. Independent cryptographer/protocol reviewer must assess message format, exact canonicalization, signature and digest binding, algorithm/authority domain separation, key lifecycle, clock assumptions and failure cases. This is **not** a replacement for independent review of draft [PR #6](https://github.com/GoreeCloud/VPN/pull/6).
