@@ -5,6 +5,8 @@
 ## Safeguards in the current foundation
 
 - The management HTTP API is restricted to loopback addresses.
+- Every HTTP request must use the exact bound loopback IP literal and port as its single Host header. Unexpected and duplicate Hosts are rejected to reduce DNS-rebinding and virtual-host confusion.
+- Browser Origin headers and absolute-URI request targets are rejected; this prototype does not serve a browser UI, issue cookies or enable CORS. This is a defense in depth, not remote authentication.
 - An administrator token of at least 32 characters is required at runtime.
 - No secrets, private WireGuard keys, or deployed configuration values are checked into Git.
 - Public WireGuard peer keys are validated but are not proof of device possession.
