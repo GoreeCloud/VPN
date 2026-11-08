@@ -10,6 +10,10 @@ license = "MIT"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+# This reviewer-gated offline verifier must NOT become a management API dependency.
+policy-signatures = ["cryptography>=50.0.2,<51"]
+
 [project.scripts]
 goreecloud-vpn = "goreecloud_vpn.server:main"
 goreecloud-vpnctl = "goreecloud_vpn.cli:main"

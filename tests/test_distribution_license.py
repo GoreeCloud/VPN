@@ -21,6 +21,11 @@ class RepositoryLicenseTests(unittest.TestCase):
             metadata = tomllib.load(source)
         self.assertEqual(metadata["project"]["license"], "MIT")
         self.assertEqual(metadata["project"]["name"], "goreecloud-vpn")
+        self.assertEqual(metadata["project"]["dependencies"], [])
+        self.assertEqual(
+            metadata["project"]["optional-dependencies"]["policy-signatures"],
+            ["cryptography>=50.0.2,<51"],
+        )
         self.assertIn("[MIT License](LICENSE)", (ROOT / "README.md").read_text(encoding="utf-8"))
 
 
