@@ -58,6 +58,25 @@ class IsolatedLabSafetyGuardTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 4, result.stderr)
                 self.assertIn("isolated", result.stderr)
 
+    def test_persistent_stream_probe_refuses_unisolated_execution(self):
+        probe = SCRIPT.parent / "port_probe.py"
+        for command in (
+            ["serve-stream", "--ready", "/tmp/not-created-by-test"],
+            ["check-stream", "--ready", "/tmp/not-created-by-test",
+             "--go", "/tmp/not-created-by-test-go"],
+        ):
+            env = os.environ.copy()
+            for name in ("GOREECLOUD_ISOLATED_LAB_CHILD",
+                         "GOREECLOUD_PARENT_NETNS", "GOREECLOUD_PARENT_MOUNTNS"):
+                env.pop(name, None)
+            with self.subTest(command=command):
+                result = subprocess.run(
+                    [sys.executable, str(probe), *command], env=env,
+                    text=True, capture_output=True, timeout=3, check=False,
+                )
+                self.assertEqual(result.returncode, 4, result.stderr)
+                self.assertIn("isolated", result.stderr)
+
     def test_missing_verified_wireguard_binary_rejected_before_unshare(self):
         result = self.run_guard(["--run"], {"WG_BIN": "/nonexistent/wg"})
         self.assertEqual(result.returncode, 3, result.stderr)

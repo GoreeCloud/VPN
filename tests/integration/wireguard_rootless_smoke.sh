@@ -44,9 +44,11 @@ if [[ -z "$self_ns" || ! "$uid_map" =~ ^0:[1-9][0-9]*:1$ ]]; then
 fi
 umask 077
 work=$(mktemp -d /tmp/goreecloud-vpn-isolated-keys.XXXXXX)
-a='' b='' port_server=''
+a='' b='' port_server='' stream_server='' stream_client=''
 mounted=0
 cleanup() {
+  if [[ -n "$stream_client" ]]; then kill "$stream_client" 2>/dev/null || true; wait "$stream_client" 2>/dev/null || true; fi
+  if [[ -n "$stream_server" ]]; then kill "$stream_server" 2>/dev/null || true; wait "$stream_server" 2>/dev/null || true; fi
   if [[ -n "$port_server" ]]; then kill "$port_server" 2>/dev/null || true; wait "$port_server" 2>/dev/null || true; fi
   if [[ -n "$a" ]]; then kill "$a" 2>/dev/null || true; wait "$a" 2>/dev/null || true; fi
   if [[ -n "$b" ]]; then kill "$b" 2>/dev/null || true; wait "$b" 2>/dev/null || true; fi
@@ -192,6 +194,48 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
     exit 7
   fi
   echo 'GENERATED_NFT_DENIED_UDP_PORT=PASS'
+  kill "$port_server" 2>/dev/null || true
+  wait "$port_server" 2>/dev/null || true
+  port_server=''
+  # Start a *real established* TCP flow through the allowed port, then
+  # transactionally withdraw the rule before sending the second payload.
+  nsenter -t "$b" -n python3 "$root/tests/integration/port_probe.py" serve-stream --ready "$work/stream-server.ready" &
+  stream_server=$!
+  for iteration in {1..40}; do
+    if [[ -s "$work/stream-server.ready" ]]; then break; fi
+    kill -0 "$stream_server" 2>/dev/null || { echo 'stream server quit early' >&2; exit 11; }
+    sleep 0.1
+  done
+  test -s "$work/stream-server.ready"
+  nsenter -t "$a" -n python3 "$root/tests/integration/port_probe.py" check-stream --ready "$work/stream-client.ready" --go "$work/stream.go" &
+  stream_client=$!
+  for iteration in {1..40}; do
+    if [[ -s "$work/stream-client.ready" ]]; then break; fi
+    kill -0 "$stream_client" 2>/dev/null || { echo 'established stream failed' >&2; exit 11; }
+    sleep 0.1
+  done
+  test -s "$work/stream-client.ready"
+  nsenter -t "$b" -n nft -c -f "$work/deny.replace.nft"
+  nsenter -t "$b" -n nft -f "$work/deny.replace.nft"
+  : > "$work/stream.go"
+  wait "$stream_client"
+  stream_client=''
+  kill -0 "$stream_server"
+  echo 'KERNEL_ESTABLISHED_TCP_BLOCKED_AFTER_POLICY_WITHDRAWAL=PASS'
+  kill "$stream_server" 2>/dev/null || true
+  wait "$stream_server" 2>/dev/null || true
+  stream_server=''
+  nsenter -t "$b" -n nft -f "$work/ports.replace.nft"
+  nsenter -t "$b" -n python3 "$root/tests/integration/port_probe.py" serve --ready "$work/restored.ready" &
+  port_server=$!
+  for iteration in {1..40}; do
+    if [[ -s "$work/restored.ready" ]]; then break; fi
+    kill -0 "$port_server" 2>/dev/null || { echo 'restored listener quit early' >&2; exit 11; }
+    sleep 0.1
+  done
+  test -s "$work/restored.ready"
+  nsenter -t "$a" -n python3 "$root/tests/integration/port_probe.py" check tcp 8443
+  echo 'KERNEL_FRESH_TCP_RESTORED_AFTER_LAB_POLICY_REALLOW=PASS'
   kill "$port_server" 2>/dev/null || true
   wait "$port_server" 2>/dev/null || true
   port_server=''
