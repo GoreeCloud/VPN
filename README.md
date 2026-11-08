@@ -131,6 +131,7 @@ This confirms build metadata, inclusion of the MIT license, and **every wheel fi
 - [Offline public WireGuard AllowedIPs readback reconciliation](docs/KERNEL_ALLOWEDIPS_READBACK.md)
 - [Experimental one-snapshot ingress preflight — offline only](docs/OFFLINE_AGENT_PREFLIGHT.md)
 - [Guarded rootless-only policy application test](docs/ROOTLESS_LAB_POLICY_TRANSACTION.md)
+- [Experimental offline SQLite policy revision ledger — not rollback-resistant](docs/OFFLINE_POLICY_REVISION_LEDGER.md)
 
 ## Ecosystem boundaries
 
