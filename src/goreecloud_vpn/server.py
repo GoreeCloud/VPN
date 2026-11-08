@@ -38,6 +38,30 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def trusted_request(self):
+        """Disallow DNS-rebound hosts and browser-originated management calls.
+
+        The development service is intentionally usable only through the exact
+        bound loopback IP and port. No browser-based administration is shipped.
+        """
+        bound_ip = ipaddress.ip_address(self.server.server_address[0])
+        port = self.server.server_port
+        expected_host = (f"[{bound_ip}]:{port}" if bound_ip.version == 6
+                         else f"{bound_ip}:{port}")
+        host_headers = self.headers.get_all("Host", [])
+        if len(host_headers) != 1 or host_headers[0] != expected_host:
+            self.reply(421, {"error": "unrecognized management host"})
+            return False
+        # This API does not serve any browser UI. Reject even same-origin
+        # browser requests until a reviewed session/CSRF design exists.
+        if self.headers.get_all("Origin", []):
+            self.reply(403, {"error": "browser-origin requests are unsupported"})
+            return False
+        if not self.path.startswith("/") or self.path.startswith("//"):
+            self.reply(400, {"error": "invalid request target"})
+            return False
+        return True
+
     def authorized(self):
         value = self.headers.get("Authorization", "")
         if not value.startswith("Bearer ") or not hmac.compare_digest(
@@ -67,6 +91,8 @@ class Handler(BaseHTTPRequestHandler):
         return result
 
     def do_GET(self):
+        if not self.trusted_request():
+            return
         path = urlsplit(self.path).path
         if path == "/healthz":
             self.reply(200, {"status": "ok", "maturity": "alpha", "component": "management"})
@@ -111,6 +137,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, {"error": "not found"})
 
     def do_POST(self):
+        if not self.trusted_request():
+            return
         if not self.authorized():
             return
         path = urlsplit(self.path).path
@@ -175,6 +203,8 @@ class Handler(BaseHTTPRequestHandler):
             raise ValidationError("unexpected request fields")
 
     def do_DELETE(self):
+        if not self.trusted_request():
+            return
         if not self.authorized():
             return
         path = urlsplit(self.path).path
