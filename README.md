@@ -99,6 +99,13 @@ Run the test suite:
 
     python -m unittest discover -s tests -v
 
+For a nonpublishing wheel/package-integrity check:
+
+    python -m pip wheel --no-deps --wheel-dir dist .
+    python scripts/verify_wheel.py dist
+
+This confirms build metadata, inclusion of the MIT license, and a basic wheel file manifest; it does not establish a deployable VPN or a signed production release.
+
 ## Product documentation
 
 - [Features and capability targets](docs/FEATURES.md)
