@@ -28,5 +28,5 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Build wheel
         run: python -m pip wheel --no-deps --wheel-dir dist .
-      - name: Verify wheel metadata and license
+      - name: Verify every wheel RECORD hash, license, path and package metadata
         run: python scripts/verify_wheel.py dist

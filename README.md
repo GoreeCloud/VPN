@@ -114,7 +114,7 @@ For a nonpublishing wheel/package-integrity check:
     python -m pip wheel --no-deps --wheel-dir dist .
     python scripts/verify_wheel.py dist
 
-This confirms build metadata, inclusion of the MIT license, and a basic wheel file manifest; it does not establish a deployable VPN or a signed production release.
+This confirms build metadata, inclusion of the MIT license, and **every wheel file’s secure RECORD digest and byte length** (including rejection of duplicate/unrecorded paths and unsafe symlinks). The RECORD check detects inconsistent or tampered local artifacts, **not** a malicious wheel whose content and RECORD were both rewritten. A signed artifact, authenticated provenance, SBOM and independent release review remain required before distribution; it does not establish a functioning VPN.
 
 ## Product documentation
 

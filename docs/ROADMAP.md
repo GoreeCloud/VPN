@@ -19,6 +19,7 @@
 - [x] Individual repository MIT license, README scope and SPDX package metadata (PR #16).
 - [x] Exact loopback Host and browser Origin request boundaries with IPv4/IPv6 regressions (PR #17).
 - [x] Nonpublishing Python wheel build and included license/SPDX/package integrity validation (PR #18).
+- [x] Stronger wheel archive integrity gate verifies **all** recorded members using secure RECORD digests and sizes; negative tests cover tampered code/license, omitted/unrecorded members, weak hashes, unsafe ZIP paths, unexpected private files and duplicate entries. This is artifact consistency, **not** signed provenance, full SBOM or release attestation.
 - [x] Verified GitHub PR CI success on Python 3.11, 3.12 and 3.13, including wheel gates in PR #18.
 - [x] Local clean-checkout management baseline: 53 tests passed on Python 3.12 after packaging gates.
 - [x] Read-only Linux WireGuard lab prerequisite checker and regression tests (PR #19).
