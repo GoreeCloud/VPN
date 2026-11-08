@@ -14,6 +14,7 @@
 - Only approved peers participate in management policy decisions or private DNS previews
 - Local peer lifecycle event history; events are not tamper-proof audit evidence
 - Read-only approved-peer planning and inspectable, unapplied WireGuard peer stanzas
+- Experimental read-only manifest of canonical approved peer public keys bound to unique private IPv4 /32 host-intent addresses (not active WireGuard state or key-possession proof)
 - **Experimental:** offline source/destination/port nftables ingress rule preview with no automatic application; real kernel validation requires an explicitly opted-in disposable lab
 - Public WireGuard key format validation; private keys remain on devices
 - Group-scoped, directional TCP/UDP/ICMP allow policies with a default-deny *decision evaluator*
@@ -126,6 +127,7 @@ This confirms build metadata, inclusion of the MIT license, and a basic wheel fi
 - [Read-only Linux WireGuard lab prerequisites](docs/LAB_PREFLIGHT.md)
 - [Disposable kernel WireGuard handshake, policy and revocation lab](docs/ISOLATED_WIREGUARD_LAB.md)
 - [Experimental offline nftables ingress policy preview](docs/NFT_INGRESS_PREVIEW.md)
+- [Offline approved peer key-to-IP binding manifest](docs/IDENTITY_BINDING_INTENT.md)
 
 ## Ecosystem boundaries
 

@@ -10,6 +10,7 @@
 - An administrator token of at least 32 characters is required at runtime.
 - No secrets, private WireGuard keys, or deployed configuration values are checked into Git.
 - Public WireGuard peer keys are validated but are not proof of device possession.
+- An optional **offline** approved-peer key/IP manifest validates canonical public keys, unique RFC1918 /32 mappings and endpoints; it explicitly does not verify current kernel AllowedIPs, device key possession, signed policy or live enforcement.
 - All newly registered peers enter `pending` state. Only admin-approved records are eligible for positive management policy decisions or preview DNS names.
 - `revoked` is terminal and the key tombstone remains for duplicate-key rejection. Existing pre-approval databases migrate peers to `pending` (fail closed).
 - Local lifecycle events are informational SQLite entries, **not** immutable enterprise audit evidence.
