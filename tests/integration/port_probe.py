@@ -102,6 +102,60 @@ def probe(protocol: str, port: int) -> bool:
     raise ValueError("unsupported lab protocol")
 
 
+def serve_stream(ready_file: Path) -> None:
+    """Accept one established test session; never run outside the rootless lab."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((LAB_TARGET, 8443))
+        server.listen(1)
+        server.settimeout(10)
+        with ready_file.open("x", encoding="ascii") as ready:
+            ready.write("listening\n")
+        ready_file.chmod(0o600)
+        with server.accept()[0] as connection:
+            connection.settimeout(10)
+            connection.sendall(ACK)
+            if connection.recv(32) != b"phase-one":
+                raise RuntimeError("initial application exchange failed")
+            connection.sendall(ACK)
+            try:
+                # In the denial case, the second client payload cannot arrive.
+                second = connection.recv(32)
+            except socket.timeout:
+                return
+            if second:
+                connection.sendall(ACK)
+
+
+def check_stream(ready_file: Path, go_file: Path) -> bool:
+    """Return True only if an established connection becomes silent on deny."""
+    with socket.create_connection((LAB_TARGET, 8443), timeout=2) as client:
+        client.settimeout(2)
+        if client.recv(len(ACK)) != ACK:
+            raise RuntimeError("initial stream server greeting missing")
+        client.sendall(b"phase-one")
+        if client.recv(len(ACK)) != ACK:
+            raise RuntimeError("initial established TCP payload not acknowledged")
+        with ready_file.open("x", encoding="ascii") as ready:
+            ready.write("established\n")
+        ready_file.chmod(0o600)
+        until = time.monotonic() + 8
+        while not go_file.exists():
+            if time.monotonic() >= until:
+                raise RuntimeError("policy denial was not signalled")
+            time.sleep(0.05)
+        # A full application reply on the SAME socket after the deny is a bug.
+        client.sendall(b"phase-two")
+        client.settimeout(2.5)
+        try:
+            response = client.recv(len(ACK))
+        except socket.timeout:
+            return True
+        if response == ACK:
+            return False
+        raise RuntimeError("connection closed instead of demonstrating packet drop")
+
+
 def main(argv=None) -> int:
     try:
         _assert_isolated_lab()
@@ -115,10 +169,20 @@ def main(argv=None) -> int:
     check = sub.add_parser("check")
     check.add_argument("protocol", choices=["tcp", "udp"])
     check.add_argument("port", type=int)
+    serve_stream_command = sub.add_parser("serve-stream")
+    serve_stream_command.add_argument("--ready", type=Path, required=True)
+    check_stream_command = sub.add_parser("check-stream")
+    check_stream_command.add_argument("--ready", type=Path, required=True)
+    check_stream_command.add_argument("--go", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.action == "serve":
         serve(args.ready)
         return 0
+    if args.action == "serve-stream":
+        serve_stream(args.ready)
+        return 0
+    if args.action == "check-stream":
+        return 0 if check_stream(args.ready, args.go) else 1
     return 0 if probe(args.protocol, args.port) else 1
 
 
