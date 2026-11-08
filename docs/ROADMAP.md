@@ -29,6 +29,8 @@
 - [x] Experimental **offline** nftables `flush chain`/`add rule` replacement preview and manually verified rejection of a malformed batch while preserving the prior kernel deny (PR #24). Exact-head 75 Python 3.12 tests and GitHub CI Python 3.11/3.12/3.13 passed. This does **not** implement authenticated, atomic production policy rollout, cross-hook traffic control or conntrack revocation.
 - [x] Real WireGuard source-address `/32` spoof-denial and reverse-direction INPUT default-deny checks in rootless isolation (PR #25); exact-head 76 local Python 3.12 tests and GitHub CI Python 3.11/3.12/3.13 passed. Stateless return-flow correctness is not solved.
 - [x] Read-only, fail-closed approved-peer canonical public-key to unique private IPv4 `/32` binding intent with unauthenticated SHA-256 change fingerprint (PR #26); exact-head 81 local Python 3.12 tests, wheel metadata validation and 3-version CI passed. Does not establish device possession, active kernel AllowedIPs, or enforcement.
+- [x] Disposable kernel test confirms an **already established** TCP stream loses subsequent application traffic after manual rule withdrawal, and fresh connection succeeds after reallow (PR #27); exact-head 83 local Python 3.12 tests and GitHub CI Python 3.11/3.12/3.13 passed. Full conntrack/session-revocation guarantee still open.
+- [x] Strict offline parser for public-only WireGuard AllowedIPs text compared with selected approved key-to-/32 intent; manual rootless lab verifies actual kernel public readback with no private-key dump (PR #28). Exact-head 92 local Python 3.12 tests, kernel regression and GitHub CI Python 3.11/3.12/3.13 passed. **Not** an attested production agent.
 
 ## Management inspection additions
 
