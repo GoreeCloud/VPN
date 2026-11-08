@@ -132,6 +132,7 @@ This confirms build metadata, inclusion of the MIT license, and **every wheel fi
 - [Experimental one-snapshot ingress preflight — offline only](docs/OFFLINE_AGENT_PREFLIGHT.md)
 - [Guarded rootless-only policy application test](docs/ROOTLESS_LAB_POLICY_TRANSACTION.md)
 - [Experimental standalone Ed25519 signed policy verifier — offline-only; independent crypto review required](docs/SIGNED_POLICY_INTENT.md)
+- [Experimental offline SQLite policy revision ledger — not rollback-resistant](docs/OFFLINE_POLICY_REVISION_LEDGER.md)
 
 ## Ecosystem boundaries
 
