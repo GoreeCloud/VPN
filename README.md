@@ -112,4 +112,8 @@ Run the test suite:
 
 [GoreeCloud Mesh](https://github.com/GoreeCloud/mesh) is the ecosystem integration/orchestration fabric, not a duplicate VPN data plane. [GoreeCloud UI](https://github.com/GoreeCloud/gc-ui) is the authoritative design system for future user-facing VPN applications.
 
-No NetBird/Tailscale service, production host, keys, subnet, or deployment is modified by this repository. No third-party implementation is represented as owned GoreeCloud code. Release licensing is not finalized; do not infer redistribution rights from public visibility.
+No NetBird/Tailscale service, production host, keys, subnet, or deployment is modified by this repository. No third-party implementation is represented as owned GoreeCloud code.
+
+## License
+
+This repository's original GoreeCloud-maintained source and documentation are licensed under the [MIT License](LICENSE) (SPDX: `MIT`). This license does not extend to third-party software that may be installed as an external dependency or incorporated later under separate licensing obligations. The existing codebase contains no vendored third-party packages; new imports require provenance and license review.
