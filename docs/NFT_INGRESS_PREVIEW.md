@@ -27,16 +27,17 @@ The script first creates isolated user, network and mount namespaces. It generat
 
 1. An ingress preview with no allow policies. After applying it **inside the receiving lab namespace only**, the encrypted ICMP test fails as expected.
 2. A preview with an explicit `users → services, icmp` policy. After replacing the lab-only table, encrypted ICMP succeeds.
-3. A WireGuard peer-key removal on the receiver. Traffic fails again, even while the manually allowed ICMP rule is present.
+3. A separate policy preview containing only allowed TCP destination port **8443** and UDP destination port **5353**. A temporary TCP/UDP echo listener is bound to the receiving peer's private overlay IP only. Through the actual WireGuard tunnel, ports 8443 and 5353 are reachable and the otherwise-listening TCP port 8444 and UDP port 5354 are dropped as unauthorized.
+4. A WireGuard peer-key removal on the receiver. Traffic fails again, even while the manually allowed TCP/UDP rules are present.
 
 The script uses `nft -c` before any experimental application. Private keys and temporary database files are kept on a bounded private tmpfs and automatically cleaned during normal exit. Network interfaces and firewall rules disappear when the disposable namespaces end. It never uses `sudo` and never modifies host, NetBird, VPS or production networking.
 
-**Verified November 7, 2026:** Generated default-deny blocked traffic; generated ICMP allow passed; peer removal stopped traffic. The isolated test returned zero and private key directory count was zero.
+**Verified November 7, 2026:** Generated default-deny blocked traffic; generated ICMP allow passed; allowed TCP/UDP port probes succeeded; denied TCP/UDP port probes failed; peer removal stopped traffic. The isolated test returned zero and private key directory count was zero. The socket probe has its own strict rootless namespace guard and refuses host-network execution.
 
 ## Critical limitations and production blockers
 
 - **Not deployed.** The management daemon does not request, authenticate or apply these rules. The test script applies them manually in a rootless network namespace.
-- **INPUT only.** There is no OUTPUT, FORWARD, IPv6, subnet routing, exit-node or established-connection policy. ICMP and connectionless/stateless behavior are illustrative; TCP return traffic, conntrack handling and directional flow tracking need explicit design.
+- **INPUT only.** There is no OUTPUT, FORWARD, IPv6, subnet routing, exit-node or established-connection policy. The basic TCP/UDP port probes show destination-port filtering on a new connection/datagram, **not** fully stateful TCP return traffic, midstream revocation, conntrack safety or directional flow tracking.
 - **No atomic update.** The test replaces its own table by deleting and re-adding it between scenarios. This is **not** a fail-closed production-safe rollout, and must not be reused on hosts.
 - **No cryptographic peer authorization by itself.** IP addresses and group membership in the preview are not trustworthy unless a privileged agent verifies the real WireGuard peer public key and `AllowedIPs` binding.
 - **No live revocation orchestration.** The test manually removes a peer key. Product revocation must also address existing connections, conntrack state, rule distribution failure and control-plane loss.

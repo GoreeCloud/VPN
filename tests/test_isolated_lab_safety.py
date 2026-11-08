@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import sys
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "tests/integration/wireguard_rootless_smoke.sh"
@@ -36,6 +37,26 @@ class IsolatedLabSafetyGuardTests(unittest.TestCase):
             with self.subTest(args=args):
                 result = self.run_guard(args)
                 self.assertEqual(result.returncode, 2, result.stderr)
+
+    def test_port_probe_refuses_host_network_even_with_forged_marker(self):
+        probe = SCRIPT.parent / "port_probe.py"
+        for env_overrides in ({}, {
+            "GOREECLOUD_ISOLATED_LAB_CHILD": "1",
+            "GOREECLOUD_PARENT_NETNS": "net:[1]",
+            "GOREECLOUD_PARENT_MOUNTNS": "mnt:[1]",
+        }):
+            env = os.environ.copy()
+            for key in ("GOREECLOUD_ISOLATED_LAB_CHILD", "GOREECLOUD_PARENT_NETNS",
+                        "GOREECLOUD_PARENT_MOUNTNS"):
+                env.pop(key, None)
+            env.update(env_overrides)
+            with self.subTest(markers=env_overrides):
+                result = subprocess.run(
+                    [sys.executable, str(probe), "check", "tcp", "8443"],
+                    env=env, text=True, capture_output=True, check=False, timeout=3,
+                )
+                self.assertEqual(result.returncode, 4, result.stderr)
+                self.assertIn("isolated", result.stderr)
 
     def test_missing_verified_wireguard_binary_rejected_before_unshare(self):
         result = self.run_guard(["--run"], {"WG_BIN": "/nonexistent/wg"})

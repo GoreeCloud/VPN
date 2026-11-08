@@ -39,7 +39,7 @@ An **experimental separate opt-in mode** tests the GoreeCloud management-plane n
 WG_BIN=/absolute/path/to/verified/wg bash tests/integration/wireguard_rootless_smoke.sh --run --policy-preview
 ```
 
-This mode registers the actual lab-generated WireGuard public keys to a temporary SQLite management store on the lab’s 4 MiB private tmpfs, compiles an ICMP default deny and explicit allow preview, checks both with `nft -c`, and applies them **only inside the receiving disposable namespace**. It proves that preview text has a simple real-kernel effect; it does not create a production network agent, perform atomic updates, or handle connection tracking. See [nftables preview boundaries](NFT_INGRESS_PREVIEW.md).
+This mode registers the actual lab-generated WireGuard public keys to a temporary SQLite management store on the lab’s 4 MiB private tmpfs, compiles ICMP default-deny/allow and TCP/UDP destination-port previews, checks them with `nft -c`, and applies them **only inside the receiving disposable namespace**. The basic socket probes demonstrate allowed TCP 8443 / UDP 5353 and denied TCP 8444 / UDP 5354 on the actual overlay. They do not test established-flow revocation, reverse-direction ACLs, or source spoofing. The test does not create a production network agent, perform atomic updates, or handle connection tracking. See [nftables preview boundaries](NFT_INGRESS_PREVIEW.md).
 
 A successful smoke test checks:
 

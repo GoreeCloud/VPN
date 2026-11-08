@@ -44,9 +44,10 @@ if [[ -z "$self_ns" || ! "$uid_map" =~ ^0:[1-9][0-9]*:1$ ]]; then
 fi
 umask 077
 work=$(mktemp -d /tmp/goreecloud-vpn-isolated-keys.XXXXXX)
-a='' b=''
+a='' b='' port_server=''
 mounted=0
 cleanup() {
+  if [[ -n "$port_server" ]]; then kill "$port_server" 2>/dev/null || true; wait "$port_server" 2>/dev/null || true; fi
   if [[ -n "$a" ]]; then kill "$a" 2>/dev/null || true; wait "$a" 2>/dev/null || true; fi
   if [[ -n "$b" ]]; then kill "$b" 2>/dev/null || true; wait "$b" 2>/dev/null || true; fi
   if [[ "$mounted" == 1 ]]; then umount "$work" 2>/dev/null || true; fi
@@ -118,6 +119,36 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
   nsenter -t "$b" -n nft -f "$work/allow.nft"
   nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null
   echo 'GENERATED_NFT_POLICY_ICMP_ALLOW=PASS'
+  # The following tests use a real socket listener in the RECEIVING lab namespace.
+  # This is still a manual, non-atomic test table replacement, NOT an agent.
+  nsenter -t "$b" -n nft -c -f "$work/ports.nft"
+  nsenter -t "$b" -n nft delete table inet goreecloud_vpn_preview
+  nsenter -t "$b" -n nft -f "$work/ports.nft"
+  nsenter -t "$b" -n python3 "$root/tests/integration/port_probe.py" serve --ready "$work/ports.ready" &
+  port_server=$!
+  for iteration in {1..40}; do
+    if [[ -s "$work/ports.ready" ]]; then break; fi
+    kill -0 "$port_server" 2>/dev/null || { echo 'port probe server quit early' >&2; exit 7; }
+    sleep 0.1
+  done
+  test -s "$work/ports.ready"
+  nsenter -t "$a" -n python3 "$root/tests/integration/port_probe.py" check tcp 8443
+  echo 'GENERATED_NFT_ALLOWED_TCP_PORT=PASS'
+  if nsenter -t "$a" -n python3 "$root/tests/integration/port_probe.py" check tcp 8444; then
+    echo 'ERROR: unexpected access to denied TCP port 8444' >&2
+    exit 7
+  fi
+  echo 'GENERATED_NFT_DENIED_TCP_PORT=PASS'
+  nsenter -t "$a" -n python3 "$root/tests/integration/port_probe.py" check udp 5353
+  echo 'GENERATED_NFT_ALLOWED_UDP_PORT=PASS'
+  if nsenter -t "$a" -n python3 "$root/tests/integration/port_probe.py" check udp 5354; then
+    echo 'ERROR: unexpected access to denied UDP port 5354' >&2
+    exit 7
+  fi
+  echo 'GENERATED_NFT_DENIED_UDP_PORT=PASS'
+  kill "$port_server" 2>/dev/null || true
+  wait "$port_server" 2>/dev/null || true
+  port_server=''
 else
 nsenter -t "$b" -n nft add table inet gcfilter
 nsenter -t "$b" -n nft 'add chain inet gcfilter input { type filter hook input priority 0; policy accept; }'

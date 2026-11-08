@@ -43,8 +43,15 @@ def generate(directory: Path) -> None:
         outputs = {
             "deny.nft": build_nft_ingress_preview(store, target["id"], interface="wgB"),
         }
-        store.add_policy("users", "services", "icmp", [])
+        icmp = store.add_policy("users", "services", "icmp", [])
         outputs["allow.nft"] = build_nft_ingress_preview(
+            store, target["id"], interface="wgB"
+        )
+        if not store.delete_policy(icmp["id"]):
+            raise RuntimeError("cannot remove temporary ICMP lab rule")
+        store.add_policy("users", "services", "tcp", [8443])
+        store.add_policy("users", "services", "udp", [5353])
+        outputs["ports.nft"] = build_nft_ingress_preview(
             store, target["id"], interface="wgB"
         )
 
@@ -57,6 +64,8 @@ def generate(directory: Path) -> None:
             raise RuntimeError("expected no allow entries in deny fixture")
         if outputs["allow.nft"]["allow_rule_count"] != 1:
             raise RuntimeError("expected exactly one ICMP allow entry")
+        if outputs["ports.nft"]["allow_rule_count"] != 2:
+            raise RuntimeError("expected exactly two TCP/UDP allow entries")
     finally:
         store.close()
         store_path.unlink(missing_ok=True)
