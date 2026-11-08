@@ -102,6 +102,23 @@ test "$handshake" -gt 0
 echo 'KERNEL_WIREGUARD_ENCRYPTED_PING=PASS'
 echo 'KERNEL_WIREGUARD_HANDSHAKE=PASS'
 
+# Verify the receiving kernel peer has precisely one /32 source binding.
+peer_allowed_ips=$(nsenter -t "$b" -n "$WG" show wgB allowed-ips | awk '{print $2}')
+if [[ "$peer_allowed_ips" != '10.77.0.10/32' ]]; then
+  echo 'ERROR: unexpected receiver peer allowed source IP prefix' >&2
+  exit 9
+fi
+echo 'KERNEL_WIREGUARD_SOURCE_PREFIX_BOUND=PASS'
+# A sender can configure a second local address, but its peer identity
+# must not authorize that forged source address at the receiver.
+nsenter -t "$a" -n ip addr add 10.77.0.12/32 dev wgA
+if nsenter -t "$a" -n ping -n -I 10.77.0.12 -c 1 -W 2 10.77.0.11 >/dev/null 2>&1; then
+  echo 'ERROR: forged overlay source IP reached the receiving peer' >&2
+  exit 9
+fi
+nsenter -t "$a" -n ip addr del 10.77.0.12/32 dev wgA
+echo 'KERNEL_WIREGUARD_SOURCE_SPOOF_DENIED=PASS'
+
 if [[ "${2:-}" == "--policy-preview" ]]; then
   # The preview compiler is *pure*; only this disposable namespace test applies it.
   root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -132,6 +149,23 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
   nsenter -t "$b" -n nft -f "$work/allow.replace.nft"
   nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null
   echo 'GENERATED_NFT_POLICY_ICMP_ALLOW=PASS'
+  # Run reverse-direction check while the responder still permits ICMP replies.
+  # The later TCP/UDP-only rule blocks ICMP replies and would be ambiguous.
+  # Demonstrate reverse traffic is permitted by WireGuard adjacency alone,
+  # then denied by the independent *receiver* INPUT policy preview.
+  nsenter -t "$b" -n ping -n -I 10.77.0.11 -c 1 -W 2 10.77.0.10 >/dev/null
+  nsenter -t "$a" -n nft -c -f "$work/reverse.deny.nft"
+  nsenter -t "$a" -n nft -f "$work/reverse.deny.nft"
+  if nsenter -t "$b" -n ping -n -I 10.77.0.11 -c 1 -W 2 10.77.0.10 >/dev/null 2>&1; then
+    echo 'ERROR: an unauthorized reverse-direction ping succeeded' >&2
+    exit 10
+  fi
+  echo 'GENERATED_NFT_REVERSE_DIRECTION_DENIED=PASS'
+  # An INPUT-only stateless deny also impacts reply packets for outbound flows.
+  # Do not represent this preview as stateful bidirectional network security.
+  nsenter -t "$a" -n nft delete table inet goreecloud_vpn_preview
+  nsenter -t "$b" -n ping -n -I 10.77.0.11 -c 1 -W 2 10.77.0.10 >/dev/null
+  echo 'KERNEL_REVERSE_DIRECTION_RESTORED_AFTER_LAB_RULE_REMOVAL=PASS'
   # The following tests use a real socket listener in the RECEIVING lab namespace.
   # This is still a manual transaction, NOT a trusted production agent.
   nsenter -t "$b" -n nft -c -f "$work/ports.replace.nft"

@@ -16,6 +16,8 @@ Verified experimental policy milestone: PR #21 merged an **offline** nftables IP
 
 Verified PR #24 batch replacement milestone (November 7, 2026): an **offline** compiler emits an `nft -f` replacement transaction for an existing dedicated preview chain. In a disposable rootless WireGuard lab, a deliberately malformed batch was rejected **without removing the active deny**; valid transactions restored expected ICMP/TCP/UDP destination-port behavior. The exact PR checkout passed **75 Python 3.12 tests** and the manual kernel regression; GitHub CI Python 3.11, 3.12 and 3.13 passed. The management server does **not** apply these transactions. A privileged agent, cryptographic peer-to-IP ownership, multi-hook controls, stateful revocation, recovery and independent security review remain outstanding (issue #22).
 
+Proposed next negative-test increment (pending GitHub CI): the disposable lab validates WireGuard kernel peer source-address `/32` binding, rejects a forged sender address and checks reverse-direction ingress policy against actual encrypted traffic. These observations remain **manual lab gates**, not a production VPN agent or independently reviewed security design.
+
 Priority sequence: secure identity and enrollment; real WireGuard data-plane enforcement; routing and DNS; clients; observability; remote access; enterprise and AI modules. GoreeCloud Mesh owns inter-product orchestration, while GoreeCloud UI governs visual surfaces.
 
 Management inspection additions: authenticated status (lifecycle, group and pool

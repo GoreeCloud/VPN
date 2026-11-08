@@ -54,6 +54,11 @@ def generate(directory: Path) -> None:
         outputs["ports.nft"] = build_nft_ingress_preview(
             store, target["id"], interface="wgB"
         )
+        # No services -> users policy exists. The other endpoint must not
+        # treat handshake/AllowedIPs alone as reverse-direction authorization.
+        outputs["reverse.deny.nft"] = build_nft_ingress_preview(
+            store, source["id"], interface="wgA"
+        )
 
         for name, plan in outputs.items():
             path = directory / name
@@ -71,6 +76,8 @@ def generate(directory: Path) -> None:
             raise RuntimeError("expected exactly one ICMP allow entry")
         if outputs["ports.nft"]["allow_rule_count"] != 2:
             raise RuntimeError("expected exactly two TCP/UDP allow entries")
+        if outputs["reverse.deny.nft"]["allow_rule_count"] != 0:
+            raise RuntimeError("expected no reverse-direction allow entries")
     finally:
         store.close()
         store_path.unlink(missing_ok=True)

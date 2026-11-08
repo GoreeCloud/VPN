@@ -61,6 +61,18 @@ class FirewallPreviewTests(unittest.TestCase):
         self.assertTrue(self.store.allowed(self.sender["id"], self.server["id"], "tcp", 22))
         self.assertFalse(self.store.allowed(self.server["id"], self.sender["id"], "tcp", 22))
 
+    def test_reverse_group_direction_is_default_deny(self):
+        self.approve(self.sender)
+        self.approve(self.server)
+        self.store.add_policy("users", "services", "icmp", [])
+        forward = build_nft_ingress_preview(self.store, self.server["id"], interface="wgB")
+        reverse = build_nft_ingress_preview(self.store, self.sender["id"], interface="wgA")
+        self.assertEqual(forward["allow_rule_count"], 1)
+        self.assertEqual(reverse["allow_rule_count"], 0)
+        self.assertIn('iifname "wgA" ip daddr 10.77.0.10 drop', reverse["nftables_text"])
+        self.assertNotIn('ip saddr 10.77.0.11 ', reverse["nftables_text"])
+        self.assertFalse(reverse["applied"])
+
     def test_revoked_source_excluded(self):
         self.approve(self.sender)
         self.approve(self.server)
