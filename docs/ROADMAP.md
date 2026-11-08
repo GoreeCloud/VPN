@@ -27,6 +27,8 @@
 - [x] Experimental **read-only** nftables IPv4 INPUT policy compiler merged in PR #21; manually applied in disposable rootless lab only. Generated ICMP deny/allow and peer removal were verified in kernel; Python 3.11/3.12/3.13 CI passed.
 - [x] Generated TCP 8443 and UDP 5353 allow versus listening TCP 8444 and UDP 5354 deny tested over real encrypted WireGuard in isolated lab (PR #23). Exact-head 73 local tests and GitHub CI Python 3.11/3.12/3.13 passed. **Neither PR implements an agent or production packet enforcement.**
 - [x] Experimental **offline** nftables `flush chain`/`add rule` replacement preview and manually verified rejection of a malformed batch while preserving the prior kernel deny (PR #24). Exact-head 75 Python 3.12 tests and GitHub CI Python 3.11/3.12/3.13 passed. This does **not** implement authenticated, atomic production policy rollout, cross-hook traffic control or conntrack revocation.
+- [x] Real WireGuard source-address `/32` spoof-denial and reverse-direction INPUT default-deny checks in rootless isolation (PR #25); exact-head 76 local Python 3.12 tests and GitHub CI Python 3.11/3.12/3.13 passed. Stateless return-flow correctness is not solved.
+- [x] Read-only, fail-closed approved-peer canonical public-key to unique private IPv4 `/32` binding intent with unauthenticated SHA-256 change fingerprint (PR #26); exact-head 81 local Python 3.12 tests, wheel metadata validation and 3-version CI passed. Does not establish device possession, active kernel AllowedIPs, or enforcement.
 
 ## Management inspection additions
 
