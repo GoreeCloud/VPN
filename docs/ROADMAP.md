@@ -1,6 +1,6 @@
 # GoreeCloud VPN — implementation plan and acceptance criteria
 
-**As of November 3, 2026.** All unmarked capabilities remain planned. See [FEATURES](FEATURES.md) for the complete product scope.
+**As of November 7, 2026.** All unmarked capabilities remain planned. See [FEATURES](FEATURES.md) for the complete product scope.
 
 ## Foundation delivered to repository
 
@@ -16,7 +16,11 @@
 - [x] Directional TCP/UDP/ICMP default-deny **policy evaluation only**.
 - [x] DNS record preview (not a DNS service).
 - [x] Input checks, body limits, owner file permissions, unit/HTTP tests and CI configuration.
-- [ ] Verified CI success across all configured Python versions.
+- [x] Individual repository MIT license, README scope and SPDX package metadata (PR #16).
+- [x] Exact loopback Host and browser Origin request boundaries with IPv4/IPv6 regressions (PR #17).
+- [x] Nonpublishing Python wheel build and included license/SPDX/package integrity validation (PR #18).
+- [x] Verified GitHub PR CI success on Python 3.11, 3.12 and 3.13, including wheel gates in PR #18.
+- [x] Local clean-checkout management baseline: 53 tests passed on Python 3.12 after packaging gates.
 
 ## Management inspection additions
 
@@ -31,7 +35,7 @@ complete any identity, data-plane, live telemetry or production deployment gate.
 ## Priority 0 — establish a real secure VPN
 
 - [ ] Threat model, security review and architecture decision on client engine.
-- [ ] Client-held key generation and authenticated proof-of-possession enrollment.
+- [ ] Client-held key generation and authenticated production enrollment. Local key-possession prototype in draft PR #6 remains unmerged, under independent cryptographic review and branch-reconciliation gates.
 - [ ] WireGuard tunnel/peer lifecycle and server-client coordination.
 - [ ] Enforce identity/policy in actual data plane, including deny/revoke tests.
 - [ ] TLS/mTLS for remote management and enrollment.
