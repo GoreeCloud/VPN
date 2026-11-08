@@ -8,6 +8,7 @@ import ipaddress
 import json
 import logging
 import os
+import socket
 from urllib.parse import parse_qs, urlsplit
 
 from .core import VPNStore, ValidationError
@@ -32,6 +33,10 @@ def _reject_nonfinite(_value):
     """JSON does not permit NaN, Infinity, or -Infinity."""
     raise ValueError("non-finite JSON number")
 
+class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+    """Bind the IPv6 loopback with an IPv6 socket, never an IPv4 wildcard."""
+    address_family = socket.AF_INET6
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "GoreeCloudVPN-alpha"
@@ -47,6 +52,30 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", "default-src 'none'")
         self.end_headers()
         self.wfile.write(payload)
+
+    def trusted_request(self):
+        """Disallow DNS-rebound hosts and browser-originated management calls.
+
+        The development service is intentionally usable only through the exact
+        bound loopback IP and port. No browser-based administration is shipped.
+        """
+        bound_ip = ipaddress.ip_address(self.server.server_address[0])
+        port = self.server.server_port
+        expected_host = (f"[{bound_ip}]:{port}" if bound_ip.version == 6
+                         else f"{bound_ip}:{port}")
+        host_headers = self.headers.get_all("Host", [])
+        if len(host_headers) != 1 or host_headers[0] != expected_host:
+            self.reply(421, {"error": "unrecognized management host"})
+            return False
+        # This API does not serve any browser UI. Reject even same-origin
+        # browser requests until a reviewed session/CSRF design exists.
+        if self.headers.get_all("Origin", []):
+            self.reply(403, {"error": "browser-origin requests are unsupported"})
+            return False
+        if not self.path.startswith("/") or self.path.startswith("//"):
+            self.reply(400, {"error": "invalid request target"})
+            return False
+        return True
 
     def authorized(self):
         value = self.headers.get("Authorization", "")
@@ -81,6 +110,8 @@ class Handler(BaseHTTPRequestHandler):
         return result
 
     def do_GET(self):
+        if not self.trusted_request():
+            return
         path = urlsplit(self.path).path
         if path == "/healthz":
             self.reply(200, {"status": "ok", "maturity": "alpha", "component": "management"})
@@ -125,6 +156,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, {"error": "not found"})
 
     def do_POST(self):
+        if not self.trusted_request():
+            return
         if not self.authorized():
             return
         path = urlsplit(self.path).path
@@ -216,6 +249,8 @@ class Handler(BaseHTTPRequestHandler):
             raise ValidationError("unexpected request fields")
 
     def do_DELETE(self):
+        if not self.trusted_request():
+            return
         if not self.authorized():
             return
         path = urlsplit(self.path).path
@@ -236,13 +271,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def create_server(store, token, host="127.0.0.1", port=8176):
     try:
-        if not ipaddress.ip_address(host).is_loopback:
-            raise ValidationError("management interface must be loopback only")
+        address = ipaddress.ip_address(host)
     except ValueError as exc:
         raise ValidationError("management host must be a loopback IP") from exc
+    if not address.is_loopback:
+        raise ValidationError("management interface must be loopback only")
     if not isinstance(token, str) or not 32 <= len(token) <= 4096:
         raise ValidationError("admin token must be at least 32 characters")
-    server = ThreadingHTTPServer((host, port), Handler)
+    server_class = _IPv6ThreadingHTTPServer if address.version == 6 else ThreadingHTTPServer
+    server = server_class((host, port), Handler)
     server.daemon_threads = True
     server.store = store
     server.admin_token = token

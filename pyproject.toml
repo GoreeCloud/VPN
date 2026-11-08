@@ -1,11 +1,12 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "goreecloud-vpn"
 version = "0.1.0a2"
 description = "Privacy-first GoreeCloud VPN management foundation"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = ["cryptography>=46.0.3,<51"]
 
