@@ -58,6 +58,38 @@ class IsolatedLabSafetyGuardTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 4, result.stderr)
                 self.assertIn("isolated", result.stderr)
 
+    def test_test_only_policy_transaction_refuses_host_or_spoofed_child(self):
+        agent = SCRIPT.parent / "lab_policy_transaction.py"
+        options = ["--run", "--private-lab-directory", "/tmp/untrusted",
+                   "--wg-binary", "/bin/true"]
+        for overrides in ({}, {
+            "GOREECLOUD_ISOLATED_LAB_CHILD": "1",
+            "GOREECLOUD_PARENT_NETNS": "net:[1]",
+            "GOREECLOUD_PARENT_MOUNTNS": "mnt:[1]",
+        }):
+            env = os.environ.copy()
+            for name in ("GOREECLOUD_ISOLATED_LAB_CHILD", "GOREECLOUD_PARENT_NETNS",
+                         "GOREECLOUD_PARENT_MOUNTNS"):
+                env.pop(name, None)
+            env.update(overrides)
+            with self.subTest(overrides=overrides):
+                result = subprocess.run(
+                    [sys.executable, str(agent), *options], env=env,
+                    text=True, capture_output=True, timeout=4, check=False,
+                )
+                self.assertEqual(result.returncode, 4, result.stderr)
+                self.assertIn("isolated", result.stderr)
+
+    def test_test_only_policy_transaction_requires_explicit_opt_in(self):
+        agent = SCRIPT.parent / "lab_policy_transaction.py"
+        result = subprocess.run(
+            [sys.executable, str(agent), "--private-lab-directory", "/tmp/fake",
+             "--wg-binary", "/bin/true"], text=True,
+            capture_output=True, timeout=3, check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--run", result.stderr)
+
     def test_persistent_stream_probe_refuses_unisolated_execution(self):
         probe = SCRIPT.parent / "port_probe.py"
         for command in (
