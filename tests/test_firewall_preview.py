@@ -89,6 +89,19 @@ class FirewallPreviewTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             build_nft_ingress_preview(self.store, self.server["id"])
 
+    def test_reserved_network_and_broadcast_addresses_are_rejected(self):
+        self.approve(self.sender)
+        self.approve(self.server)
+        for address in ("10.77.0.0", "10.77.0.255"):
+            with self.subTest(address=address):
+                with self.store.lock, self.store.db:
+                    self.store.db.execute(
+                        "UPDATE peers SET address=? WHERE id=?",
+                        (address, self.sender["id"]),
+                    )
+                with self.assertRaises(ValidationError):
+                    build_nft_ingress_preview(self.store, self.server["id"])
+
     def test_stored_policy_rejects_invalid_protocol_value(self):
         self.approve(self.sender)
         self.approve(self.server)
