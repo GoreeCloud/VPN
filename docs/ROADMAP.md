@@ -26,7 +26,7 @@
 - [x] Clean-checkout Python 3.12 lab branch: 62 tests; GitHub CI Python 3.11/3.12/3.13 successful, Bash syntax-only in CI. **Not** a GoreeCloud-managed data plane.
 - [x] Experimental **read-only** nftables IPv4 INPUT policy compiler merged in PR #21; manually applied in disposable rootless lab only. Generated ICMP deny/allow and peer removal were verified in kernel; Python 3.11/3.12/3.13 CI passed.
 - [x] Generated TCP 8443 and UDP 5353 allow versus listening TCP 8444 and UDP 5354 deny tested over real encrypted WireGuard in isolated lab (PR #23). Exact-head 73 local tests and GitHub CI Python 3.11/3.12/3.13 passed. **Neither PR implements an agent or production packet enforcement.**
-- [x] Experimental **offline** nftables `flush chain`/`add rule` replacement text and manually verified fail-closed rejection of a malformed batch in the disposable lab. This does not implement authenticated, atomic production policy rollout or conntrack revocation.
+- [x] Experimental **offline** nftables `flush chain`/`add rule` replacement preview and manually verified rejection of a malformed batch while preserving the prior kernel deny (PR #24). Exact-head 75 Python 3.12 tests and GitHub CI Python 3.11/3.12/3.13 passed. This does **not** implement authenticated, atomic production policy rollout, cross-hook traffic control or conntrack revocation.
 
 ## Management inspection additions
 
