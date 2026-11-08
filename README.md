@@ -95,6 +95,12 @@ See [management inspection](docs/MANAGEMENT_INSPECTION.md) for CLI usage, batch
 simulation, decision reasons, pagination and limitations. These are local
 administrative tools, **not a functioning VPN client or live health monitor**.
 
+Before attempting any disposable privileged WireGuard lab, inspect the **read-only** prerequisites (this does not install WireGuard or modify interfaces):
+
+    goreecloud-vpn-lab --json
+
+The checker reports missing tools and privileges and never asserts that an actual tunnel or firewall enforcement has been verified. See [lab preflight](docs/LAB_PREFLIGHT.md).
+
 Run the test suite:
 
     python -m unittest discover -s tests -v
@@ -114,6 +120,7 @@ This confirms build metadata, inclusion of the MIT license, and a basic wheel fi
 - [Security policy and production gates](SECURITY.md)
 - [Threat model and release boundaries](docs/THREAT_MODEL.md)
 - [Progress and delivery limits](docs/STATUS.md)
+- [Read-only Linux WireGuard lab prerequisites](docs/LAB_PREFLIGHT.md)
 
 ## Ecosystem boundaries
 
