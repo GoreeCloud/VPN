@@ -101,6 +101,8 @@ Before attempting any disposable privileged WireGuard lab, inspect the **read-on
 
 The checker reports missing tools and privileges and never asserts that an actual tunnel or firewall enforcement has been verified. See [lab preflight](docs/LAB_PREFLIGHT.md).
 
+A separate **explicitly invoked, rootless and disposable** Linux kernel test checks real WireGuard handshake/ICMP traffic, a manual nftables packet drop, and removal of a peer key. It is not an actual GoreeCloud VPN agent or production policy enforcement. See [isolated WireGuard lab smoke](docs/ISOLATED_WIREGUARD_LAB.md) for prerequisite checks, safe invocation and limitations. This test is never run automatically in CI.
+
 Run the test suite:
 
     python -m unittest discover -s tests -v
@@ -121,6 +123,7 @@ This confirms build metadata, inclusion of the MIT license, and a basic wheel fi
 - [Threat model and release boundaries](docs/THREAT_MODEL.md)
 - [Progress and delivery limits](docs/STATUS.md)
 - [Read-only Linux WireGuard lab prerequisites](docs/LAB_PREFLIGHT.md)
+- [Disposable kernel WireGuard handshake, policy and revocation lab](docs/ISOLATED_WIREGUARD_LAB.md)
 
 ## Ecosystem boundaries
 

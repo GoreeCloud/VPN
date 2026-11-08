@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Explicit manual integration test. No host VPN, DNS, routes or firewall changes.
+# This script enters a fresh rootless user/network namespace BEFORE mutations.
+set -euo pipefail
+if [[ "${1:-}" != "--run" ]]; then
+  echo "Usage: WG_BIN=/absolute/path/to/verified/wg bash $0 --run" >&2
+  exit 2
+fi
+if [[ -z "${WG_BIN:-}" ]]; then
+  WG_BIN=$(command -v wg || true)
+fi
+if [[ -z "$WG_BIN" || "$WG_BIN" != /* || ! -x "$WG_BIN" ]]; then
+  echo "WireGuard tool unavailable; set WG_BIN to a verified absolute executable path" >&2
+  exit 3
+fi
+if [[ "${GOREECLOUD_ISOLATED_LAB_CHILD:-0}" != "1" ]]; then
+  if [[ $(id -u) -eq 0 ]]; then
+    echo "Refusing to run as host root; use an authorized nonroot development environment" >&2
+    exit 4
+  fi
+  for program in unshare nsenter ip nft ping timeout mount umount stat; do
+    command -v "$program" >/dev/null || { echo "Missing required tool: $program" >&2; exit 3; }
+  done
+  parent_netns=$(readlink /proc/self/ns/net)
+  parent_mountns=$(readlink /proc/self/ns/mnt)
+  exec timeout 65 env GOREECLOUD_ISOLATED_LAB_CHILD=1 WG_BIN="$WG_BIN" \
+    GOREECLOUD_PARENT_NETNS="$parent_netns" GOREECLOUD_PARENT_MOUNTNS="$parent_mountns" \
+    unshare -Urnm bash "$0" --run
+fi
+WG="$WG_BIN"
+self_ns=$(readlink /proc/self/ns/net)
+self_mountns=$(readlink /proc/self/ns/mnt)
+if [[ -z "${GOREECLOUD_PARENT_NETNS:-}" || "$self_ns" == "$GOREECLOUD_PARENT_NETNS" ||
+      -z "${GOREECLOUD_PARENT_MOUNTNS:-}" || "$self_mountns" == "$GOREECLOUD_PARENT_MOUNTNS" ]]; then
+  echo 'ERROR: fresh isolated network and mount namespaces are mandatory' >&2
+  exit 4
+fi
+uid_map=$(awk 'NR==1 { print $1 ":" $2 ":" $3 }' /proc/self/uid_map)
+# An explicit one-UID rootless mapping is required; never run as host root.
+if [[ -z "$self_ns" || ! "$uid_map" =~ ^0:[1-9][0-9]*:1$ ]]; then
+  echo 'ERROR: expected fresh rootless user and network namespaces' >&2
+  exit 4
+fi
+umask 077
+work=$(mktemp -d /tmp/goreecloud-vpn-isolated-keys.XXXXXX)
+a='' b=''
+mounted=0
+cleanup() {
+  if [[ -n "$a" ]]; then kill "$a" 2>/dev/null || true; wait "$a" 2>/dev/null || true; fi
+  if [[ -n "$b" ]]; then kill "$b" 2>/dev/null || true; wait "$b" 2>/dev/null || true; fi
+  if [[ "$mounted" == 1 ]]; then umount "$work" 2>/dev/null || true; fi
+  rmdir "$work" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
+# Private mount namespace: test private keys never reach host-backed /tmp.
+mount -t tmpfs -o size=64k,mode=0700 tmpfs "$work"
+mounted=1
+test "$(stat -f -c %T "$work")" = tmpfs
+
+unshare -n sleep 70 &
+a=$!
+unshare -n sleep 70 &
+b=$!
+sleep 0.3
+kill -0 "$a"
+kill -0 "$b"
+
+ip link add ga type veth peer name gb
+ip link set ga netns "$a"
+ip link set gb netns "$b"
+nsenter -t "$a" -n ip link set lo up
+nsenter -t "$b" -n ip link set lo up
+nsenter -t "$a" -n ip addr add 172.29.50.1/30 dev ga
+nsenter -t "$b" -n ip addr add 172.29.50.2/30 dev gb
+nsenter -t "$a" -n ip link set ga up
+nsenter -t "$b" -n ip link set gb up
+nsenter -t "$a" -n ping -n -c 1 -W 2 172.29.50.2 >/dev/null
+echo 'ISOLATED_UNDERLAY=PASS'
+
+"$WG" genkey > "$work/a.priv"
+"$WG" pubkey < "$work/a.priv" > "$work/a.pub"
+"$WG" genkey > "$work/b.priv"
+"$WG" pubkey < "$work/b.priv" > "$work/b.pub"
+
+nsenter -t "$a" -n ip link add wgA type wireguard
+nsenter -t "$b" -n ip link add wgB type wireguard
+nsenter -t "$a" -n "$WG" set wgA listen-port 51820 private-key "$work/a.priv" peer "$(cat "$work/b.pub")" allowed-ips 10.77.0.2/32 endpoint 172.29.50.2:51821
+nsenter -t "$b" -n "$WG" set wgB listen-port 51821 private-key "$work/b.priv" peer "$(cat "$work/a.pub")" allowed-ips 10.77.0.1/32 endpoint 172.29.50.1:51820
+nsenter -t "$a" -n ip addr add 10.77.0.1/32 dev wgA
+nsenter -t "$b" -n ip addr add 10.77.0.2/32 dev wgB
+nsenter -t "$a" -n ip link set wgA up
+nsenter -t "$b" -n ip link set wgB up
+nsenter -t "$a" -n ip route add 10.77.0.2/32 dev wgA
+nsenter -t "$b" -n ip route add 10.77.0.1/32 dev wgB
+
+nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 2 -W 3 10.77.0.2 >/dev/null
+handshake=$(nsenter -t "$a" -n "$WG" show wgA latest-handshakes | awk '{print $2}')
+test "$handshake" -gt 0
+echo 'KERNEL_WIREGUARD_ENCRYPTED_PING=PASS'
+echo 'KERNEL_WIREGUARD_HANDSHAKE=PASS'
+
+nsenter -t "$b" -n nft add table inet gcfilter
+nsenter -t "$b" -n nft 'add chain inet gcfilter input { type filter hook input priority 0; policy accept; }'
+nsenter -t "$b" -n nft add rule inet gcfilter input iifname wgB ip saddr 10.77.0.1 ip daddr 10.77.0.2 icmp type echo-request drop
+if nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 1 -W 2 10.77.0.2 >/dev/null 2>&1; then
+  echo 'ERROR: expected policy-denied ping to fail' >&2
+  exit 5
+fi
+echo 'ISOLATED_NFT_KERNEL_DROP=PASS'
+nsenter -t "$b" -n nft delete table inet gcfilter
+
+nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 1 -W 2 10.77.0.2 >/dev/null
+echo 'KERNEL_WIREGUARD_POST_RULE_RESTORE=PASS'
+
+nsenter -t "$b" -n "$WG" set wgB peer "$(cat "$work/a.pub")" remove
+if nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 1 -W 2 10.77.0.2 >/dev/null 2>&1; then
+  echo 'ERROR: expected revoked WireGuard peer traffic to fail' >&2
+  exit 6
+fi
+echo 'ISOLATED_WIREGUARD_PEER_REVOKE=PASS'
+echo 'ISOLATED_LAB_FINISHED_AND_CLEANUP_SCHEDULED=TRUE'
