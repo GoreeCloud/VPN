@@ -14,6 +14,7 @@
 - `revoked` is terminal and the key tombstone remains for duplicate-key rejection. Existing pre-approval databases migrate peers to `pending` (fail closed).
 - Local lifecycle events are informational SQLite entries, **not** immutable enterprise audit evidence.
 - Approved-peer WireGuard adjacency is currently **read-only intent**; exported peer stanzas are not full configurations or enforced network access.
+- An experimental, offline nftables IPv4 INPUT preview now expresses group policies as stateless ingress matches and a terminal drop. It is **not applied by GoreeCloud VPN**, and cannot safely manage host/production firewall state, established connections, routing or authenticated peer key-to-IP bindings.
 - VPN address pools and exported host prefixes must be within RFC1918 private IPv4 ranges.
 - SQLite state is local and owner-restricted on POSIX systems.
 - Default-deny means policy *decisions* deny unless a matching allow rule exists, not that actual packets are blocked.
@@ -23,4 +24,4 @@
 
 Authenticated device enrollment and key possession, TLS/mTLS, identity-aware authorization, real WireGuard tunnel integration, actual firewall or equivalent data-plane enforcement, device revocation, hardened DNS and routing, audit trails, security reviews, integration/adversarial tests, controlled rollout, backup and recovery.
 
-Report vulnerabilities privately to the authorized GoreeCloud maintainers rather than posting secrets or exploit details in public issues. Licensing and final release security policy are not yet finalized.
+Report vulnerabilities privately to the authorized GoreeCloud maintainers rather than posting secrets or exploit details in public issues. Original GoreeCloud repository code is MIT licensed; the independent production security review remains incomplete.

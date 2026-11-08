@@ -33,6 +33,14 @@ WG_BIN=/absolute/path/to/verified/wg bash tests/integration/wireguard_rootless_s
 
 With `wg` on PATH, `WG_BIN` can be omitted. Running without `--run` prints usage and exits without changing networking.
 
+An **experimental separate opt-in mode** tests the GoreeCloud management-plane nftables ingress preview in the same rootless lab:
+
+```sh
+WG_BIN=/absolute/path/to/verified/wg bash tests/integration/wireguard_rootless_smoke.sh --run --policy-preview
+```
+
+This mode registers the actual lab-generated WireGuard public keys to a temporary SQLite management store on the lab’s 4 MiB private tmpfs, compiles an ICMP default deny and explicit allow preview, checks both with `nft -c`, and applies them **only inside the receiving disposable namespace**. It proves that preview text has a simple real-kernel effect; it does not create a production network agent, perform atomic updates, or handle connection tracking. See [nftables preview boundaries](NFT_INGRESS_PREVIEW.md).
+
 A successful smoke test checks:
 
 1. Layer-3 underlay communication through a veth pair between **two isolated network namespaces**.

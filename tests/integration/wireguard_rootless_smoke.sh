@@ -2,8 +2,9 @@
 # Explicit manual integration test. No host VPN, DNS, routes or firewall changes.
 # This script enters a fresh rootless user/network namespace BEFORE mutations.
 set -euo pipefail
-if [[ "${1:-}" != "--run" ]]; then
-  echo "Usage: WG_BIN=/absolute/path/to/verified/wg bash $0 --run" >&2
+if [[ "${1:-}" != "--run" || $# -gt 2 ||
+      ( $# -eq 2 && "${2:-}" != "--policy-preview" ) ]]; then
+  echo "Usage: WG_BIN=/absolute/path/to/verified/wg bash $0 --run [--policy-preview]" >&2
   exit 2
 fi
 if [[ -z "${WG_BIN:-}" ]]; then
@@ -25,7 +26,7 @@ if [[ "${GOREECLOUD_ISOLATED_LAB_CHILD:-0}" != "1" ]]; then
   parent_mountns=$(readlink /proc/self/ns/mnt)
   exec timeout 65 env GOREECLOUD_ISOLATED_LAB_CHILD=1 WG_BIN="$WG_BIN" \
     GOREECLOUD_PARENT_NETNS="$parent_netns" GOREECLOUD_PARENT_MOUNTNS="$parent_mountns" \
-    unshare -Urnm bash "$0" --run
+    unshare -Urnm bash "$0" "$@"
 fi
 WG="$WG_BIN"
 self_ns=$(readlink /proc/self/ns/net)
@@ -54,7 +55,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 143' TERM INT
 # Private mount namespace: test private keys never reach host-backed /tmp.
-mount -t tmpfs -o size=64k,mode=0700 tmpfs "$work"
+mount -t tmpfs -o size=4m,mode=0700 tmpfs "$work"
 mounted=1
 test "$(stat -f -c %T "$work")" = tmpfs
 
@@ -85,36 +86,55 @@ echo 'ISOLATED_UNDERLAY=PASS'
 
 nsenter -t "$a" -n ip link add wgA type wireguard
 nsenter -t "$b" -n ip link add wgB type wireguard
-nsenter -t "$a" -n "$WG" set wgA listen-port 51820 private-key "$work/a.priv" peer "$(cat "$work/b.pub")" allowed-ips 10.77.0.2/32 endpoint 172.29.50.2:51821
-nsenter -t "$b" -n "$WG" set wgB listen-port 51821 private-key "$work/b.priv" peer "$(cat "$work/a.pub")" allowed-ips 10.77.0.1/32 endpoint 172.29.50.1:51820
-nsenter -t "$a" -n ip addr add 10.77.0.1/32 dev wgA
-nsenter -t "$b" -n ip addr add 10.77.0.2/32 dev wgB
+nsenter -t "$a" -n "$WG" set wgA listen-port 51820 private-key "$work/a.priv" peer "$(cat "$work/b.pub")" allowed-ips 10.77.0.11/32 endpoint 172.29.50.2:51821
+nsenter -t "$b" -n "$WG" set wgB listen-port 51821 private-key "$work/b.priv" peer "$(cat "$work/a.pub")" allowed-ips 10.77.0.10/32 endpoint 172.29.50.1:51820
+nsenter -t "$a" -n ip addr add 10.77.0.10/32 dev wgA
+nsenter -t "$b" -n ip addr add 10.77.0.11/32 dev wgB
 nsenter -t "$a" -n ip link set wgA up
 nsenter -t "$b" -n ip link set wgB up
-nsenter -t "$a" -n ip route add 10.77.0.2/32 dev wgA
-nsenter -t "$b" -n ip route add 10.77.0.1/32 dev wgB
+nsenter -t "$a" -n ip route add 10.77.0.11/32 dev wgA
+nsenter -t "$b" -n ip route add 10.77.0.10/32 dev wgB
 
-nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 2 -W 3 10.77.0.2 >/dev/null
+nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 2 -W 3 10.77.0.11 >/dev/null
 handshake=$(nsenter -t "$a" -n "$WG" show wgA latest-handshakes | awk '{print $2}')
 test "$handshake" -gt 0
 echo 'KERNEL_WIREGUARD_ENCRYPTED_PING=PASS'
 echo 'KERNEL_WIREGUARD_HANDSHAKE=PASS'
 
+if [[ "${2:-}" == "--policy-preview" ]]; then
+  # The preview compiler is *pure*; only this disposable namespace test applies it.
+  root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
+  PYTHONPATH="$root/src" python3 "$root/tests/integration/generate_nft_fixtures.py" "$work"
+  nsenter -t "$b" -n nft -c -f "$work/deny.nft"
+  nsenter -t "$b" -n nft -c -f "$work/allow.nft"
+  nsenter -t "$b" -n nft -f "$work/deny.nft"
+  if nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null 2>&1; then
+    echo 'ERROR: generated default-deny policy failed' >&2
+    exit 5
+  fi
+  echo 'GENERATED_NFT_POLICY_DEFAULT_DENY=PASS'
+  # Delete/re-add below is LAB ONLY and NOT atomic or safe for deployment.
+  nsenter -t "$b" -n nft delete table inet goreecloud_vpn_preview
+  nsenter -t "$b" -n nft -f "$work/allow.nft"
+  nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null
+  echo 'GENERATED_NFT_POLICY_ICMP_ALLOW=PASS'
+else
 nsenter -t "$b" -n nft add table inet gcfilter
 nsenter -t "$b" -n nft 'add chain inet gcfilter input { type filter hook input priority 0; policy accept; }'
-nsenter -t "$b" -n nft add rule inet gcfilter input iifname wgB ip saddr 10.77.0.1 ip daddr 10.77.0.2 icmp type echo-request drop
-if nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 1 -W 2 10.77.0.2 >/dev/null 2>&1; then
+nsenter -t "$b" -n nft add rule inet gcfilter input iifname wgB ip saddr 10.77.0.10 ip daddr 10.77.0.11 icmp type echo-request drop
+if nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null 2>&1; then
   echo 'ERROR: expected policy-denied ping to fail' >&2
   exit 5
 fi
 echo 'ISOLATED_NFT_KERNEL_DROP=PASS'
 nsenter -t "$b" -n nft delete table inet gcfilter
 
-nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 1 -W 2 10.77.0.2 >/dev/null
+nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null
 echo 'KERNEL_WIREGUARD_POST_RULE_RESTORE=PASS'
+fi
 
 nsenter -t "$b" -n "$WG" set wgB peer "$(cat "$work/a.pub")" remove
-if nsenter -t "$a" -n ping -n -I 10.77.0.1 -c 1 -W 2 10.77.0.2 >/dev/null 2>&1; then
+if nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null 2>&1; then
   echo 'ERROR: expected revoked WireGuard peer traffic to fail' >&2
   exit 6
 fi
