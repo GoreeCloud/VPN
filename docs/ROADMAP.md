@@ -24,7 +24,8 @@
 - [x] Read-only Linux WireGuard lab prerequisite checker and regression tests (PR #19).
 - [x] Manual, explicitly opt-in rootless network/mount namespace WireGuard kernel handshake, nftables drop, rule restore and peer removal smoke, private tmpfs keys and safety-guard tests (PR #20).
 - [x] Clean-checkout Python 3.12 lab branch: 62 tests; GitHub CI Python 3.11/3.12/3.13 successful, Bash syntax-only in CI. **Not** a GoreeCloud-managed data plane.
-- [x] Experimental pure Python nftables IPv4 INPUT preview for approved peer/group/port policies with terminal default drop; optional disposable namespace policy-preview lab confirms generated ICMP deny/allow, allowed and denied TCP/UDP destination ports, and manual peer-key revocation. This is **not** production policy enforcement.
+- [x] Experimental **read-only** nftables IPv4 INPUT policy compiler merged in PR #21; manually applied in disposable rootless lab only. Generated ICMP deny/allow and peer removal were verified in kernel; Python 3.11/3.12/3.13 CI passed.
+- [x] Generated TCP 8443 and UDP 5353 allow versus listening TCP 8444 and UDP 5354 deny tested over real encrypted WireGuard in isolated lab (PR #23). Exact-head 73 local tests and GitHub CI Python 3.11/3.12/3.13 passed. **Neither PR implements an agent or production packet enforcement.**
 
 ## Management inspection additions
 
