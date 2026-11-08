@@ -212,6 +212,29 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
   fi
   echo 'GUARDED_LAB_UNAPPROVED_PEER_REJECTED_WITHOUT_NFT_CHANGE=PASS'
   nsenter -t "$b" -n "$WG" set wgB peer "$(cat "$work/unauthorized.pub")" remove
+  # Inject an UNEXPECTED accept rule ahead of the terminal drop. A loose
+  # string-search of drop + TCP/UDP patterns would miss this extra rule.
+  # The exact JSON AST validator must refuse to modify the tainted chain.
+  nsenter -t "$b" -n nft insert rule inet goreecloud_vpn_preview input iifname wgB accept
+  nsenter -t "$b" -n nft -j list chain inet goreecloud_vpn_preview input > "$work/tampered-before.json"
+  if nsenter -t "$b" -n env PYTHONPATH="$root/src" python3 \
+      "$root/tests/integration/lab_policy_transaction.py" --run \
+      --private-lab-directory "$work" --wg-binary "$WG" > "$work/tampered-result.log" 2>&1; then
+    echo 'ERROR: extra nftables accept rule was accepted' >&2
+    exit 15
+  fi
+  if ! grep -q 'exact lab ownership check' "$work/tampered-result.log"; then
+    echo 'ERROR: nftables extra-rule rejection was not confirmed' >&2
+    exit 15
+  fi
+  nsenter -t "$b" -n nft -j list chain inet goreecloud_vpn_preview input > "$work/tampered-after.json"
+  if ! cmp -s "$work/tampered-before.json" "$work/tampered-after.json"; then
+    echo 'ERROR: rejected unknown nftables rule changed the chain' >&2
+    exit 15
+  fi
+  echo 'GUARDED_LAB_EXTRA_NFT_ACCEPT_REJECTED_WITHOUT_CHAIN_CHANGE=PASS'
+  # Restore the known-good lab-only chain, then run the positive case.
+  nsenter -t "$b" -n nft -f "$work/allow.replace.nft"
   # The following tests use a real socket listener in the RECEIVING lab namespace.
   # A test-only, guarded local helper compiles from one approved snapshot,
   # reads PUBLIC kernel AllowedIPs, then applies a fixed, validated nft batch.

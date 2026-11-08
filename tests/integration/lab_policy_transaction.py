@@ -14,6 +14,7 @@ import sys
 
 from goreecloud_vpn.agent_preflight import build_offline_ingress_preflight
 from port_probe import _assert_isolated_lab
+from nft_exact_readback import check_exact_lab_chain
 
 NFT = Path("/usr/sbin/nft")
 IFACE = "wgB"
@@ -91,16 +92,20 @@ def apply_lab_only(directory: Path, wg_binary: Path) -> None:
     if transaction != expected or preview["allow_rule_count"] != 2:
         raise RuntimeError("generated kernel update does not match fixture intent")
     # Verify the fixed, dedicated chain already has an active interface drop.
-    before = _exec([str(NFT), "list", "chain", "inet", TABLE, "input"])
-    if f'iifname "{IFACE}" drop' not in before:
-        raise RuntimeError("existing dedicated lab chain lacks final fail-closed drop")
+    matches = [b for b in preflight["binding_manifest"]["bindings"]
+               if b["peer_id"] == source_id]
+    if len(matches) != 1:
+        raise RuntimeError("unapproved or duplicated source peer binding")
+    source_ip = matches[0]["allowed_ips"][0].removesuffix("/32")
+    target_ip = preview["target_ipv4"]
+    # Exact AST validation, not string-search. Before must be exactly the
+    # prior ICMP allow + final interface drop. Unknown/extra rules are fatal.
+    before = _exec([str(NFT), "-j", "list", "chain", "inet", TABLE, "input"])
+    check_exact_lab_chain(before, source=source_ip, target=target_ip, stage="pre")
     _exec([str(NFT), "-c", "-f", "-"], source=transaction)
     _exec([str(NFT), "-f", "-"], source=transaction)
-    after = _exec([str(NFT), "list", "chain", "inet", TABLE, "input"])
-    if (f'iifname "{IFACE}" drop' not in after
-            or "tcp dport 8443" not in after
-            or "udp dport 5353" not in after):
-        raise RuntimeError("generated policy was not read back as expected")
+    after = _exec([str(NFT), "-j", "list", "chain", "inet", TABLE, "input"])
+    check_exact_lab_chain(after, source=source_ip, target=target_ip, stage="post")
     print("GUARDED_ROOTLESS_COMPILED_POLICY_TRANSACTION=PASS")
 
 
