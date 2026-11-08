@@ -10,6 +10,8 @@ Verified November 7 checkpoint: MIT licensing and SPDX metadata are merged (PR #
 
 Draft PR #6 for X25519 device key-possession remains unmerged pending independent cryptographic review and a server merge-conflict resolution. A disposable merged-code test passed 63 tests with a different cryptography dependency version, not full exact-head release validation.
 
+November 7 isolated kernel lab milestone: PR #19 added an observation-only Linux prerequisite checker. PR #20 added a *manual, opt-in* unprivileged user/network/mount namespace test that demonstrated a real kernel WireGuard handshake and encrypted ICMP, an nftables drop of a decrypted packet, restored traffic after rule deletion and peer-key removal blocking traffic. Key material was held on private tmpfs and cleanup verified; the test was repeated from the public branch. The branch passed 62 local Python tests and GitHub CI on Python 3.11/3.12/3.13. **The VPN product did not provision these peers or enforce these rules**; a reviewed privileged agent, actual policy translation, cryptographic enrollment and an authorized deployment remain unimplemented. See [ISOLATED_WIREGUARD_LAB](ISOLATED_WIREGUARD_LAB.md).
+
 Priority sequence: secure identity and enrollment; real WireGuard data-plane enforcement; routing and DNS; clients; observability; remote access; enterprise and AI modules. GoreeCloud Mesh owns inter-product orchestration, while GoreeCloud UI governs visual surfaces.
 
 Management inspection additions: authenticated status (lifecycle, group and pool
