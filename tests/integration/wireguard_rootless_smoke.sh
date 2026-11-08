@@ -233,7 +233,31 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
     exit 15
   fi
   echo 'GUARDED_LAB_EXTRA_NFT_ACCEPT_REJECTED_WITHOUT_CHAIN_CHANGE=PASS'
-  # Restore the known-good lab-only chain, then run the positive case.
+  # Restore the known-good lab-only chain for a deterministic fault-injection.
+  nsenter -t "$b" -n nft -f "$work/allow.replace.nft"
+  # Force an ERROR after applying the expected port allowlist. The guarded
+  # helper must then restore compiler-generated default deny and attest it.
+  if nsenter -t "$b" -n env PYTHONPATH="$root/src" python3 \
+      "$root/tests/integration/lab_policy_transaction.py" --run \
+      --private-lab-directory "$work" --wg-binary "$WG" \
+      --test-force-postcheck-failure > "$work/recovery-refusal.log" 2>&1; then
+    echo 'ERROR: simulated post-apply readback failure was accepted' >&2
+    exit 16
+  fi
+  if ! grep -q 'emergency default deny installed and verified' "$work/recovery-refusal.log"; then
+    echo 'ERROR: fail-closed recovery could not be confirmed' >&2
+    exit 16
+  fi
+  nsenter -t "$b" -n nft -j list chain inet goreecloud_vpn_preview input > "$work/recovered-deny.json"
+  PYTHONPATH="$root/tests/integration" python3 -c \
+      'from pathlib import Path; from nft_exact_readback import check_exact_lab_chain; import sys; check_exact_lab_chain(Path(sys.argv[1]).read_text(encoding="ascii"), source="10.77.0.10", target="10.77.0.11", stage="deny")' \
+      "$work/recovered-deny.json"
+  if nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null 2>&1; then
+    echo 'ERROR: recovered default deny still permits packets' >&2
+    exit 16
+  fi
+  echo 'GUARDED_LAB_POSTCHECK_FAILURE_RESTORES_VERIFIED_DENY=PASS'
+  # Restore the known-good lab-only initial chain and run positive case.
   nsenter -t "$b" -n nft -f "$work/allow.replace.nft"
   # The following tests use a real socket listener in the RECEIVING lab namespace.
   # A test-only, guarded local helper compiles from one approved snapshot,

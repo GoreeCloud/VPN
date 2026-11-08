@@ -80,6 +80,17 @@ class IsolatedLabSafetyGuardTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 4, result.stderr)
                 self.assertIn("isolated", result.stderr)
 
+    def test_postcheck_fault_injection_refuses_host_network(self):
+        agent = SCRIPT.parent / "lab_policy_transaction.py"
+        result = subprocess.run(
+            [sys.executable, str(agent), "--run", "--test-force-postcheck-failure",
+             "--private-lab-directory", "/tmp/not-an-isolated-lab",
+             "--wg-binary", "/bin/true"],
+            text=True, capture_output=True, timeout=4, check=False,
+        )
+        self.assertEqual(result.returncode, 4, result.stderr)
+        self.assertIn("isolated", result.stderr)
+
     def test_test_only_policy_transaction_requires_explicit_opt_in(self):
         agent = SCRIPT.parent / "lab_policy_transaction.py"
         result = subprocess.run(

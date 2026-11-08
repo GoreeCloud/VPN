@@ -35,7 +35,9 @@ def _expected_rules(source: str, target: str, *, stage: str) -> list:
         _interface_expr(), _address_expr("saddr", source),
         _address_expr("daddr", target),
     ]
-    if stage == "pre":
+    if stage == "deny":
+        allowed = []
+    elif stage == "pre":
         allowed = [header + [
             _match({"payload": {"protocol": "ip", "field": "protocol"}}, "icmp"),
             {"accept": None},
