@@ -30,6 +30,8 @@ PR #35 merged nonpublishing packaging hardening: wheel verification requires **a
 
 Experimental local revision-ordering milestone: owner-restricted SQLite `BEGIN IMMEDIATE` high-water comparisons are serialized **per device audience**, including across controller signing-key changes. Independent connections reject stale concurrent revisions. Normal committed state survives reopening. A deliberate old-DB restore **reverts the counter**, documenting the unresolved tamper-resistant monotonic-storage and crash-to-kernel transaction gap. No policy signature is verified by the ledger; no network change is applied. See [OFFLINE_POLICY_REVISION_LEDGER](OFFLINE_POLICY_REVISION_LEDGER.md).
 
+IPv6 negative packet-path regression candidate: the disposable rootless lab temporarily establishes an IPv6 WireGuard overlay path, proves IPv6 traffic passes before filtering, then verifies the compiled interface-wide INPUT terminal drop blocks it under default deny and following a **target-specific IPv4** ICMP allow. Temporary IPv6 kernel mappings are restored to the original IPv4-only readback contract before later tests. This proves only unmatched IPv6 INPUT **denial**, not an IPv6 allow policy or production routing/security readiness.
+
 Priority sequence: secure identity and enrollment; real WireGuard data-plane enforcement; routing and DNS; clients; observability; remote access; enterprise and AI modules. GoreeCloud Mesh owns inter-product orchestration, while GoreeCloud UI governs visual surfaces.
 
 Management inspection additions: authenticated status (lifecycle, group and pool
