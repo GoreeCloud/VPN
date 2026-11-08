@@ -60,6 +60,11 @@ def generate(directory: Path) -> None:
             with path.open("x", encoding="ascii") as out:
                 out.write(plan["nftables_text"])
             path.chmod(0o600)
+            if name != "deny.nft":
+                update_path = directory / name.replace(".nft", ".replace.nft")
+                with update_path.open("x", encoding="ascii") as out:
+                    out.write(plan["nftables_replace_transaction_text"])
+                update_path.chmod(0o600)
         if outputs["deny.nft"]["allow_rule_count"] != 0:
             raise RuntimeError("expected no allow entries in deny fixture")
         if outputs["allow.nft"]["allow_rule_count"] != 1:

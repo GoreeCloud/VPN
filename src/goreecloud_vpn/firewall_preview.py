@@ -95,6 +95,7 @@ def build_nft_ingress_preview(
         "  chain input {",
         "    type filter hook input priority 0; policy accept;",
     ]
+    rule_statements = []
     for src, proto, ports in sorted(allow, key=lambda x: (int(x[0]), x[1], x[2])):
         base = (
             f'    iifname "{interface}" ip saddr {src} '
@@ -106,14 +107,29 @@ def build_nft_ingress_preview(
             statement = f"{proto} dport {ports[0]} accept"
         else:
             statement = f"{proto} dport {{ {', '.join(map(str, ports))} }} accept"
-        lines.append(base + statement)
+        rule = (base + statement).strip()
+        rule_statements.append(rule)
+        lines.append("    " + rule)
     # Last rule covers every non-allowed packet destined to this host through WG.
+    terminal_drop = f'iifname "{interface}" ip daddr {target["address"]} drop'
+    rule_statements.append(terminal_drop)
     lines.extend([
-        f'    iifname "{interface}" ip daddr {target["address"]} drop',
+        "    " + terminal_drop,
         "  }",
         "}",
         "",
     ])
+    # Intended only for an EXISTING preview chain. nft -f submits this batch
+    # transactionally, but this application never runs nft itself.
+    replacement = [
+        "# GoreeCloud VPN OFFLINE transactional preview: NOT APPLIED",
+        "flush chain inet goreecloud_vpn_preview input",
+    ]
+    replacement.extend(
+        "add rule inet goreecloud_vpn_preview input " + rule
+        for rule in rule_statements
+    )
+    replacement.append("")
     return {
         "schema": SCHEMA,
         "target_peer_id": target_peer_id,
@@ -121,8 +137,10 @@ def build_nft_ingress_preview(
         "interface": interface,
         "allow_rule_count": len(allow),
         "nftables_text": "\n".join(lines),
+        "nftables_replace_transaction_text": "\n".join(replacement),
+        "existing_table_required_for_replacement": True,
         "applied": False,
         "data_plane_enforced": False,
-        "scope": "Preview of IPv4 local INPUT only; no OUTPUT/FORWARD, conntrack or atomic application",
+        "scope": "Offline IPv4 INPUT preview only; no OUTPUT/FORWARD, conntrack or trusted agent",
         "warning": "A preview is not protection. Never apply to host or production networking.",
     }

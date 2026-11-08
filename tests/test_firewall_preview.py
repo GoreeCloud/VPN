@@ -89,6 +89,32 @@ class FirewallPreviewTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             build_nft_ingress_preview(self.store, self.server["id"])
 
+    def test_replacement_transaction_is_explicitly_offline_and_fail_closed(self):
+        self.approve(self.sender)
+        self.approve(self.server)
+        self.store.add_policy("users", "services", "tcp", [443])
+        plan = build_nft_ingress_preview(self.store, self.server["id"], interface="wgB")
+        text = plan["nftables_replace_transaction_text"]
+        lines = [line for line in text.splitlines() if not line.startswith("#")]
+        self.assertEqual(lines[0], "flush chain inet goreecloud_vpn_preview input")
+        self.assertEqual(len(lines), 3)
+        self.assertIn('ip saddr 10.77.0.10 ip daddr 10.77.0.11 tcp dport 443 accept', lines[1])
+        self.assertTrue(lines[-1].endswith('iifname "wgB" ip daddr 10.77.0.11 drop'))
+        self.assertNotIn('delete table', text)
+        self.assertNotIn('flush ruleset', text)
+        self.assertTrue(plan["existing_table_required_for_replacement"])
+        self.assertFalse(plan["applied"])
+        self.assertFalse(plan["data_plane_enforced"])
+
+    def test_default_deny_transaction_keeps_terminal_drop(self):
+        self.approve(self.server)
+        plan = build_nft_ingress_preview(self.store, self.server["id"])
+        lines = [line for line in plan["nftables_replace_transaction_text"].splitlines()
+                 if not line.startswith("#")]
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[0], "flush chain inet goreecloud_vpn_preview input")
+        self.assertTrue(lines[1].endswith('ip daddr 10.77.0.11 drop'))
+
     def test_reserved_network_and_broadcast_addresses_are_rejected(self):
         self.approve(self.sender)
         self.approve(self.server)
