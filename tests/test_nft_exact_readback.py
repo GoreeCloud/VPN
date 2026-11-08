@@ -47,6 +47,13 @@ class ExactNftRulesetTests(unittest.TestCase):
         validate(chain("pre"))
         validate(chain("post"), "post")
 
+    def test_emergency_deny_has_exactly_one_terminal_interface_drop(self):
+        validate(chain("deny"), "deny")
+        case = chain("deny")
+        case["nftables"].insert(2, copy.deepcopy(chain("pre")["nftables"][2]))
+        with self.assertRaises(RuntimeError):
+            validate(case, "deny")
+
     def test_unexpected_early_accept_rule_is_rejected(self):
         sample = chain()
         candidate = copy.deepcopy(sample["nftables"][2])
