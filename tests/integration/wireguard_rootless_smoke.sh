@@ -125,6 +125,9 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
   # The preview compiler is *pure*; only this disposable namespace test applies it.
   root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
   PYTHONPATH="$root/src" python3 "$root/tests/integration/generate_nft_fixtures.py" "$work"
+  # Nonsecret readback ONLY. Never use wg show dump (which includes private keys).
+  nsenter -t "$b" -n "$WG" show wgB allowed-ips > "$work/observed.allowedips"
+  PYTHONPATH="$root/src" python3 "$root/tests/integration/check_allowedips_readback.py" "$work"
   nsenter -t "$b" -n nft -c -f "$work/deny.nft"
   nsenter -t "$b" -n nft -c -f "$work/allow.nft"
   nsenter -t "$b" -n nft -f "$work/deny.nft"
