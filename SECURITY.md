@@ -15,6 +15,7 @@
 - `revoked` is terminal and the key tombstone remains for duplicate-key rejection. Existing pre-approval databases migrate peers to `pending` (fail closed).
 - Local lifecycle events are informational SQLite entries, **not** immutable enterprise audit evidence.
 - Approved-peer WireGuard adjacency is currently **read-only intent**; exported peer stanzas are not full configurations or enforced network access.
+- An experimental one-snapshot ingress preflight composes approved key-to-/32 intent, directional group/port policy and **untrusted public** WireGuard AllowedIPs text. A mismatched peer causes a `ValidationError`, not a deployable bundle; successful text matching still has no device or kernel attestation.
 - An experimental, offline nftables IPv4 INPUT preview now expresses group policies as stateless ingress matches and a terminal drop. It can also render a **nonapplied** `nft -f` replacement batch for a pre-existing dedicated preview chain. Only the manually invoked disposable lab tests the kernel batch and rejection behavior. No trusted GoreeCloud agent, production firewall owner, established-connection revocation, routing or authenticated peer key-to-IP binding exists.
 - VPN address pools and exported host prefixes must be within RFC1918 private IPv4 ranges.
 - SQLite state is local and owner-restricted on POSIX systems.
