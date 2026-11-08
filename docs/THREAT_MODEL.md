@@ -21,4 +21,4 @@ Status: Preliminary design review, November 3, 2026. No production security cert
 
 ## Current boundary
 
-The peer planner and generated stanzas are offline previews only. WireGuard peer AllowedIPs do not enforce port-level policies. The repository does not modify any live VPN, router or VPS, and local event history is not tamper-proof.
+A disposable rootless Linux lab now demonstrates real WireGuard kernel encryption, manual nftables packet dropping and peer-key removal (see [isolated lab](ISOLATED_WIREGUARD_LAB.md)), but **GoreeCloud VPN has not implemented the privileged agent, authenticated network policy distribution or automated data-plane enforcement**. The peer planner and generated stanzas remain offline previews only. WireGuard peer AllowedIPs do not enforce port-level policies. The repository does not modify any live VPN, router or VPS, and local event history is not tamper-proof.
