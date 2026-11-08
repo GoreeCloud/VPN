@@ -110,8 +110,10 @@ def build_nft_ingress_preview(
         rule = (base + statement).strip()
         rule_statements.append(rule)
         lines.append("    " + rule)
-    # Last rule covers every non-allowed packet destined to this host through WG.
-    terminal_drop = f'iifname "{interface}" ip daddr {target["address"]} drop'
+    # Drop ALL other traffic arriving on this WG interface, regardless of
+    # destination address or address family. Never permit a secondary local IP
+    # to bypass the per-target ingress policy. INPUT-only preview, not agent.
+    terminal_drop = f'iifname "{interface}" drop'
     rule_statements.append(terminal_drop)
     lines.extend([
         "    " + terminal_drop,

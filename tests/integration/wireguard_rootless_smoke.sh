@@ -128,6 +128,13 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
   # Nonsecret readback ONLY. Never use wg show dump (which includes private keys).
   nsenter -t "$b" -n "$WG" show wgB allowed-ips > "$work/observed.allowedips"
   PYTHONPATH="$root/src" python3 "$root/tests/integration/check_allowedips_readback.py" "$work"
+  # Secondary local destination: prove it is reachable over encrypted WG
+  # before any filter, so later denial cannot be a missing route or listener.
+  nsenter -t "$b" -n ip addr add 10.77.0.13/32 dev wgB
+  nsenter -t "$a" -n "$WG" set wgA peer "$(cat "$work/b.pub")" allowed-ips 10.77.0.11/32,10.77.0.13/32
+  nsenter -t "$a" -n ip route add 10.77.0.13/32 dev wgA
+  nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.13 >/dev/null
+  echo 'WG_SECONDARY_LOCAL_IP_BASELINE_REACHABLE=PASS'
   nsenter -t "$b" -n nft -c -f "$work/deny.nft"
   nsenter -t "$b" -n nft -c -f "$work/allow.nft"
   nsenter -t "$b" -n nft -f "$work/deny.nft"
@@ -136,6 +143,11 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
     exit 5
   fi
   echo 'GENERATED_NFT_POLICY_DEFAULT_DENY=PASS'
+  if nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.13 >/dev/null 2>&1; then
+    echo 'ERROR: secondary local IP bypassed interface-wide INPUT deny' >&2
+    exit 12
+  fi
+  echo 'WG_SECONDARY_LOCAL_IP_BYPASS_DENIED=PASS'
   # Negative transaction: a malformed update must NOT remove the active deny.
   cat "$work/allow.replace.nft" > "$work/broken.replace.nft"
   printf '%s\n' 'nft_intentionally_invalid_command' >> "$work/broken.replace.nft"
@@ -154,6 +166,11 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
   nsenter -t "$b" -n nft -f "$work/allow.replace.nft"
   nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.11 >/dev/null
   echo 'GENERATED_NFT_POLICY_ICMP_ALLOW=PASS'
+  if nsenter -t "$a" -n ping -n -I 10.77.0.10 -c 1 -W 2 10.77.0.13 >/dev/null 2>&1; then
+    echo 'ERROR: authorized target address accidentally opened alternate local IP' >&2
+    exit 12
+  fi
+  echo 'WG_SECONDARY_LOCAL_IP_STILL_DENIED_AFTER_TARGET_ALLOW=PASS'
   # Run reverse-direction check while the responder still permits ICMP replies.
   # The later TCP/UDP-only rule blocks ICMP replies and would be ambiguous.
   # Demonstrate reverse traffic is permitted by WireGuard adjacency alone,

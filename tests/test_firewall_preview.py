@@ -40,7 +40,7 @@ class FirewallPreviewTests(unittest.TestCase):
         self.assertFalse(plan["data_plane_enforced"])
         self.assertFalse(plan["applied"])
         self.assertEqual(plan["allow_rule_count"], 0)
-        self.assertIn('iifname "wgB" ip daddr 10.77.0.11 drop', plan["nftables_text"])
+        self.assertIn('iifname "wgB" drop', plan["nftables_text"])
         self.assertNotIn(" accept\n", plan["nftables_text"])
 
     def test_directional_group_protocol_and_ports(self):
@@ -69,7 +69,7 @@ class FirewallPreviewTests(unittest.TestCase):
         reverse = build_nft_ingress_preview(self.store, self.sender["id"], interface="wgA")
         self.assertEqual(forward["allow_rule_count"], 1)
         self.assertEqual(reverse["allow_rule_count"], 0)
-        self.assertIn('iifname "wgA" ip daddr 10.77.0.10 drop', reverse["nftables_text"])
+        self.assertIn('iifname "wgA" drop', reverse["nftables_text"])
         self.assertNotIn('ip saddr 10.77.0.11 ', reverse["nftables_text"])
         self.assertFalse(reverse["applied"])
 
@@ -111,12 +111,25 @@ class FirewallPreviewTests(unittest.TestCase):
         self.assertEqual(lines[0], "flush chain inet goreecloud_vpn_preview input")
         self.assertEqual(len(lines), 3)
         self.assertIn('ip saddr 10.77.0.10 ip daddr 10.77.0.11 tcp dport 443 accept', lines[1])
-        self.assertTrue(lines[-1].endswith('iifname "wgB" ip daddr 10.77.0.11 drop'))
+        self.assertTrue(lines[-1].endswith('iifname "wgB" drop'))
         self.assertNotIn('delete table', text)
         self.assertNotIn('flush ruleset', text)
         self.assertTrue(plan["existing_table_required_for_replacement"])
         self.assertFalse(plan["applied"])
         self.assertFalse(plan["data_plane_enforced"])
+
+    def test_terminal_drop_is_interface_wide_and_not_target_ip_scoped(self):
+        self.approve(self.sender)
+        self.approve(self.server)
+        self.store.add_policy("users", "services", "tcp", [443])
+        plan = build_nft_ingress_preview(self.store, self.server["id"], interface="wgB")
+        nft_lines = plan["nftables_text"].splitlines()
+        txn_lines = plan["nftables_replace_transaction_text"].splitlines()
+        self.assertEqual(nft_lines[-3].strip(), 'iifname "wgB" drop')
+        self.assertEqual(txn_lines[-1], 'add rule inet goreecloud_vpn_preview input iifname "wgB" drop')
+        self.assertEqual(plan["allow_rule_count"], 1)
+        self.assertNotIn('iifname "wgB" ip daddr 10.77.0.11 drop', plan["nftables_text"])
+        self.assertFalse(plan["applied"])
 
     def test_default_deny_transaction_keeps_terminal_drop(self):
         self.approve(self.server)
@@ -125,7 +138,7 @@ class FirewallPreviewTests(unittest.TestCase):
                  if not line.startswith("#")]
         self.assertEqual(len(lines), 2)
         self.assertEqual(lines[0], "flush chain inet goreecloud_vpn_preview input")
-        self.assertTrue(lines[1].endswith('ip daddr 10.77.0.11 drop'))
+        self.assertTrue(lines[1].endswith('iifname "wg0" drop'))
 
     def test_reserved_network_and_broadcast_addresses_are_rejected(self):
         self.approve(self.sender)
