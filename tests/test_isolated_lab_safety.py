@@ -31,6 +31,12 @@ class IsolatedLabSafetyGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("--run", result.stderr)
 
+    def test_unknown_or_unapproved_policy_mode_is_rejected(self):
+        for args in (["--policy-preview"], ["--run", "--unsafe-host"]):
+            with self.subTest(args=args):
+                result = self.run_guard(args)
+                self.assertEqual(result.returncode, 2, result.stderr)
+
     def test_missing_verified_wireguard_binary_rejected_before_unshare(self):
         result = self.run_guard(["--run"], {"WG_BIN": "/nonexistent/wg"})
         self.assertEqual(result.returncode, 3, result.stderr)
