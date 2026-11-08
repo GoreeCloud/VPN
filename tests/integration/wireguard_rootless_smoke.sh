@@ -188,10 +188,37 @@ if [[ "${2:-}" == "--policy-preview" ]]; then
   nsenter -t "$a" -n nft delete table inet goreecloud_vpn_preview
   nsenter -t "$b" -n ping -n -I 10.77.0.11 -c 1 -W 2 10.77.0.10 >/dev/null
   echo 'KERNEL_REVERSE_DIRECTION_RESTORED_AFTER_LAB_RULE_REMOVAL=PASS'
+  # Adversarial lab: inject an UNAPPROVED kernel WireGuard peer into the
+  # receiving namespace. The guarded helper must reject the extra public
+  # key BEFORE submitting any nft transaction; existing rules remain intact.
+  "$WG" genkey > "$work/unauthorized.priv"
+  "$WG" pubkey < "$work/unauthorized.priv" > "$work/unauthorized.pub"
+  nsenter -t "$b" -n "$WG" set wgB peer "$(cat "$work/unauthorized.pub")" allowed-ips 10.77.0.12/32
+  nsenter -t "$b" -n nft -j list chain inet goreecloud_vpn_preview input > "$work/before-rejection.json"
+  if nsenter -t "$b" -n env PYTHONPATH="$root/src" python3 \
+      "$root/tests/integration/lab_policy_transaction.py" --run \
+      --private-lab-directory "$work" --wg-binary "$WG" > "$work/denied-readback.log" 2>&1; then
+    echo 'ERROR: unapproved WireGuard peer was accepted by the guarded helper' >&2
+    exit 14
+  fi
+  if ! grep -q 'public WireGuard peer readback differs' "$work/denied-readback.log"; then
+    echo 'ERROR: unauthorized peer was not rejected for binding mismatch' >&2
+    exit 14
+  fi
+  nsenter -t "$b" -n nft -j list chain inet goreecloud_vpn_preview input > "$work/after-rejection.json"
+  if ! cmp -s "$work/before-rejection.json" "$work/after-rejection.json"; then
+    echo 'ERROR: rejected peer changed the active nft chain' >&2
+    exit 14
+  fi
+  echo 'GUARDED_LAB_UNAPPROVED_PEER_REJECTED_WITHOUT_NFT_CHANGE=PASS'
+  nsenter -t "$b" -n "$WG" set wgB peer "$(cat "$work/unauthorized.pub")" remove
   # The following tests use a real socket listener in the RECEIVING lab namespace.
-  # This is still a manual transaction, NOT a trusted production agent.
-  nsenter -t "$b" -n nft -c -f "$work/ports.replace.nft"
-  nsenter -t "$b" -n nft -f "$work/ports.replace.nft"
+  # A test-only, guarded local helper compiles from one approved snapshot,
+  # reads PUBLIC kernel AllowedIPs, then applies a fixed, validated nft batch.
+  # No host/production networking or trusted production agent is involved.
+  nsenter -t "$b" -n env PYTHONPATH="$root/src" python3 \
+    "$root/tests/integration/lab_policy_transaction.py" --run \
+    --private-lab-directory "$work" --wg-binary "$WG"
   nsenter -t "$b" -n python3 "$root/tests/integration/port_probe.py" serve --ready "$work/ports.ready" &
   port_server=$!
   for iteration in {1..40}; do
