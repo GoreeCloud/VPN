@@ -148,6 +148,20 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def bodyless_request(self):
+        """Reject declared bodies and conflicting framing on GET and DELETE.
+
+        Neither route family consumes a request body. Reject ambiguity before
+        authentication or a possible SQLite mutation, never drain unknown data.
+        """
+        lengths = self.headers.get_all("Content-Length", [])
+        if (self.headers.get_all("Transfer-Encoding", []) or len(lengths) > 1
+                or (lengths and lengths[0] != "0")):
+            self.close_connection = True
+            self.reply(400, {"error": "request body is unsupported"})
+            return False
+        return True
+
     def authorized(self):
         # A proxy and an application must not disagree about which bearer
         # credential is authoritative. Reject duplicate Authorization fields.
@@ -190,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
         return result
 
     def do_GET(self):
-        if not self.trusted_request():
+        if not self.trusted_request() or not self.bodyless_request():
             return
         path = urlsplit(self.path).path
         if path == "/healthz":
@@ -304,7 +318,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValidationError("unexpected request fields")
 
     def do_DELETE(self):
-        if not self.trusted_request():
+        if not self.trusted_request() or not self.bodyless_request():
             return
         if not self.authorized():
             return
