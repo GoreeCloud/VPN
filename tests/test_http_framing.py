@@ -115,7 +115,7 @@ class HTTPFramingRegressionTests(unittest.TestCase):
     def test_post_rejects_ambiguous_and_non_utf8_json_without_mutation(self):
         valid = b'{"source":"users","target":"services","protocol":"tcp","ports":[443]}'
         duplicate = b'{"source":"users","source":"admins","target":"services","protocol":"tcp","ports":[443]}'
-        escaped_alias = b'{"source":"users","so\u0075rce":"admins","target":"services","protocol":"tcp","ports":[443]}'
+        escaped_alias = b'{"source":"users","so\\u0075rce":"admins","target":"services","protocol":"tcp","ports":[443]}'
         utf16 = valid.decode("utf-8").encode("utf-16")
         nonstandard = b'{"source":"users","target":"services","protocol":"tcp","ports":[NaN]}'
         for body in (duplicate, escaped_alias, utf16, nonstandard):
