@@ -112,6 +112,31 @@ class HTTPFramingRegressionTests(unittest.TestCase):
         self.assertEqual(self.request("POST", target, (self.auth(), ("Content-Length", "0"))), 200)
         self.assertEqual(self.store.peers()[0]["status"], "approved")
 
+    def test_post_rejects_ambiguous_and_non_utf8_json_without_mutation(self):
+        valid = b'{"source":"users","target":"services","protocol":"tcp","ports":[443]}'
+        duplicate = b'{"source":"users","source":"admins","target":"services","protocol":"tcp","ports":[443]}'
+        escaped_alias = b'{"source":"users","so\\u0075rce":"admins","target":"services","protocol":"tcp","ports":[443]}'
+        utf16 = valid.decode("utf-8").encode("utf-16")
+        nonstandard = b'{"source":"users","target":"services","protocol":"tcp","ports":[NaN]}'
+        for body in (duplicate, escaped_alias, utf16, nonstandard):
+            with self.subTest(body=body[:50]):
+                fields = (self.auth(), ("Content-Type", "application/json"),
+                          ("Content-Length", str(len(body))))
+                self.assertEqual(self.request("POST", "/api/v1/policies", fields, body), 400)
+                self.assertEqual(self.store.policies(), [])
+
+        # Duplicate object fields are also forbidden in nested JSON payloads.
+        nested = b'{"checks":[{"source_id":"one","source_id":"two"}]}'
+        fields = (self.auth(), ("Content-Type", "application/json"),
+                  ("Content-Length", str(len(nested))))
+        self.assertEqual(self.request("POST", "/api/v1/access/simulate", fields, nested), 400)
+        self.assertEqual(self.store.policies(), [])
+
+        fields = (self.auth(), ("Content-Type", "application/json"),
+                  ("Content-Length", str(len(valid))))
+        self.assertEqual(self.request("POST", "/api/v1/policies", fields, valid), 201)
+        self.assertEqual(len(self.store.policies()), 1)
+
     def test_health_still_remains_public_without_authentication(self):
         self.assertEqual(self.request("GET", "/healthz"), 200)
 
