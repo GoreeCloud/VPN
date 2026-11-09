@@ -76,6 +76,9 @@ class ApprovalLifecycleTests(unittest.TestCase):
                     None, '["team"]', "2026-11-03T00:00:00+00:00"))
         db.commit()
         db.close()
+        # Legacy records must be protected before opening; the management
+        # service no longer silently chmods existing state files.
+        self.path.chmod(0o600)
         self.store = VPNStore(self.path)
         self.assertEqual(self.store.peers()[0]["status"], "pending")
         self.assertEqual(self.store.dns_records(), [])
