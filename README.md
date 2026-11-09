@@ -17,6 +17,7 @@
 - Experimental read-only manifest of canonical approved peer public keys bound to unique private IPv4 /32 host-intent addresses (not active WireGuard state or key-possession proof)
 - **Experimental:** offline source/destination/port nftables ingress rule preview with no automatic application; real kernel validation requires an explicitly opted-in disposable lab
 - Public WireGuard key format validation; private keys remain on devices
+- Peer endpoint syntax now rejects malformed DNS host labels, noncanonical numeric IPv4 spellings and invalid ports before storing metadata. This is syntactic validation only: no DNS resolution, IP reachability, ownership verification or WireGuard endpoint enforcement occurs.
 - Group-scoped, directional TCP/UDP/ICMP allow policies with a default-deny *decision evaluator*
 - Administrative peer and policy lifecycle APIs
 - Preview of internal DNS A records (not a live DNS server)
