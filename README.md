@@ -22,6 +22,7 @@
 - Preview of internal DNS A records (not a live DNS server)
 - Input validation, 16 KiB request size limits, owner-restricted database and constant-time bearer-token comparison
 - Strict single-value Authorization and Content-Length parsing; ambiguous duplicate headers and unsupported Transfer-Encoding requests fail closed (local management API only)
+- Bounded post-parser management header metadata (64 fields/8 KiB), 2,048-character request target, five-second idle socket timeout, and redacted HTTP request logging. The Python HTTP parser applies its own earlier limits; this is not protection against all slow clients or a remote management interface.
 - Management status with lifecycle/group counts and address-pool capacity
 - Explainable access decisions and bounded batch simulation against current policies
 - Static policy diagnostics for duplicate rules and rules without eligible approved peers
