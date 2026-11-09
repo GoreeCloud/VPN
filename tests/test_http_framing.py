@@ -137,6 +137,39 @@ class HTTPFramingRegressionTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/v1/policies", fields, valid), 201)
         self.assertEqual(len(self.store.policies()), 1)
 
+    def test_read_and_delete_refuse_ambiguous_bodies_before_changes(self):
+        key = base64.b64encode(bytes([83]) * 32).decode("ascii")
+        peer = self.store.add_peer("bodyless-peer", key, ["users"])
+        target = f"/api/v1/peers/{peer['id']}"
+        # GET and DELETE never consume bodies. Even an authenticated delete
+        # must not proceed when intermediaries could disagree about framing.
+        bad_fields = (
+            (("Transfer-Encoding", "chunked"),),
+            (("Transfer-Encoding", "identity"),),
+            (("Content-Length", "0"), ("Content-Length", "0")),
+            (("Content-Length", "00"),),
+            (("Content-Length", "1"),),
+            (("Content-Length", "+0"),),
+            (("Content-Length", "0"), ("Transfer-Encoding", "chunked")),
+        )
+        for method, path in (("GET", "/healthz"),
+                             ("GET", "/api/v1/peers"),
+                             ("DELETE", target)):
+            for fields in bad_fields:
+                with self.subTest(method=method, target=path, fields=fields):
+                    self.assertEqual(
+                        self.request(method, path, (self.auth(),) + fields),
+                        400,
+                    )
+                    self.assertEqual(self.store.peers()[0]["status"], "pending")
+
+        self.assertEqual(self.request("GET", "/healthz"), 200)
+        self.assertEqual(self.request("GET", "/api/v1/peers", (self.auth(),)), 200)
+        self.assertEqual(self.request(
+            "DELETE", target, (self.auth(), ("Content-Length", "0"))
+        ), 200)
+        self.assertEqual(self.store.peers()[0]["status"], "revoked")
+
     def test_health_still_remains_public_without_authentication(self):
         self.assertEqual(self.request("GET", "/healthz"), 200)
 
