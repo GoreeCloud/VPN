@@ -20,6 +20,12 @@ The Python API is a single-process *management-only* service. A read-only peer p
 
 The API binds loopback, requires a runtime administrator bearer token, validates inputs and limits body sizes. It does not authenticate the holder of a public key as a specific enrolled machine, and it has no per-user authorization. **Access decisions are hypothetical until a separately built and tested enforcement agent applies them to actual traffic.** Do not configure production endpoints or assume packet isolation from these database policies.
 
+## Local SQLite storage preflight
+
+Management state stays local to a private directory owned by the service's effective Unix user. The immediate database directory must be owner-only (no group/other permissions); the SQLite database must be a single-linked, regular, process-owned file with no group/other permissions. Existing files are opened without following a final symlink and checked before SQLite initialization. New files are created with exclusive owner-only permissions.
+
+**Upgrade behavior:** This preflight intentionally refuses preexisting permissive files or directories instead of silently changing their ownership or mode. The owner must first verify the correct backup and database path, preserve the existing state, and intentionally repair permissions using a trusted local administrator. Never delete or replace a failed-opening database automatically. A safe file preflight does not independently attest database contents or defend against a compromised same-user process; it does not provide signed policy, encrypted storage, or a deployed WireGuard data plane.
+
 ## GoreeCloud ecosystem roles
 
 GoreeCloud VPN owns private networking, tunnel lifecycle, routing and network access enforcement. [GoreeCloud Mesh](https://github.com/GoreeCloud/mesh) owns cross-product integration/orchestration. [GoreeCloud UI](https://github.com/GoreeCloud/gc-ui) owns design tokens and user-interface acceptance. Avoid duplicating those systems.
