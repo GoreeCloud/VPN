@@ -32,6 +32,8 @@ The Python helper `goreecloud_vpn.enrollment.device_proof(device_private_key, ch
 - Restarting the management process invalidates unconsumed challenges.
 - Revoked identities cannot be reapproved or successfully prove after revocation; the existing public key remains a tombstone.
 - Unknown, expired, modified, misbound and replayed proofs cannot mark devices verified.
+- The device-side v1 challenge parser rejects unknown fields, oversized or nonprinting/non-ASCII transcript fields, and malformed expiration metadata **before** doing X25519 exchange. This is input-resource/ambiguity hardening only.
+- The `expires_in_seconds` response field is advisory and is **not** included in the v1 authenticated transcript; the server enforces expiration with its own monotonic clock. Never rely on that client-visible number to determine authorization, and do not silently extend this protocol without a new version and independent review.
 - A database upgrade automatically resets previously approved **pre-proof** peer records to pending. An administrator must repeat proof and approval. This is intentionally disruptive and fail-closed.
 - The original key-possession protocol can verify that a holder knows the static X25519 private key. It does **not** establish OS integrity, hardware origin, user identity, remote service authenticity, or production-grade key custody.
 

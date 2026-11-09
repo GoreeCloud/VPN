@@ -26,6 +26,9 @@ from .core import VPNStore, ValidationError, check_key
 PROTOCOL = "goreecloud.vpn.key-possession.v1"
 _INFO = b"goreecloud-vpn/peer-key-possession/v1"
 _FIELDS = ("protocol", "peer_id", "challenge_id", "nonce", "server_public_key", "peer_public_key")
+_ALLOWED_CHALLENGE_FIELDS = frozenset((*_FIELDS, "expires_in_seconds"))
+_MAX_CHALLENGE_FIELD_CHARS = 128
+_MAX_TRANSCRIPT_BYTES = 1024
 
 
 def _b64(data: bytes) -> str:
@@ -54,12 +57,26 @@ def _public_bytes(private: X25519PrivateKey) -> bytes:
 def _transcript(challenge: dict) -> bytes:
     if not isinstance(challenge, dict) or challenge.get("protocol") != PROTOCOL:
         raise ValidationError("invalid challenge protocol")
-    if not all(isinstance(challenge.get(k), str) for k in _FIELDS):
+    # This object may arrive over an untrusted out-of-band channel. Reject
+    # ambiguous extensions and oversized/nonprinting values before ECDH.
+    if not set(challenge).issubset(_ALLOWED_CHALLENGE_FIELDS):
+        raise ValidationError("unexpected challenge fields")
+    if any(not isinstance(challenge.get(k), str)
+           or not 1 <= len(challenge[k]) <= _MAX_CHALLENGE_FIELD_CHARS
+           or not challenge[k].isascii() or not challenge[k].isprintable()
+           for k in _FIELDS):
         raise ValidationError("invalid challenge fields")
-    return json.dumps(
+    if "expires_in_seconds" in challenge:
+        ttl = challenge["expires_in_seconds"]
+        if type(ttl) is not int or not 1 <= ttl <= 600:
+            raise ValidationError("invalid challenge expiry metadata")
+    transcript = json.dumps(
         {key: challenge[key] for key in _FIELDS},
         sort_keys=True, separators=(",", ":"), ensure_ascii=True,
     ).encode("ascii")
+    if len(transcript) > _MAX_TRANSCRIPT_BYTES:
+        raise ValidationError("challenge transcript too large")
+    return transcript
 
 
 def _digest(shared: bytes, nonce: bytes, transcript: bytes) -> bytes:

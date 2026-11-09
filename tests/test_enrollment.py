@@ -51,6 +51,37 @@ class ProofTests(unittest.TestCase):
             "peer_approved", "peer_key_proved", "peer_registered"
         ])
 
+    def test_device_rejects_oversized_or_ambiguous_challenge_before_ecdh(self):
+        challenge = self.manager.issue(self.peer["id"])
+        edits = (
+            ("peer_id", "x" * 129),
+            ("challenge_id", "x" * 129),
+            ("nonce", "A" * 1024),
+            ("peer_id", "invalid\npeer"),
+            ("challenge_id", "nonascii-\u2603"),
+            ("expires_in_seconds", -1),
+            ("expires_in_seconds", 0),
+            ("expires_in_seconds", 601),
+            ("expires_in_seconds", "120"),
+            ("expires_in_seconds", False),
+            ("expires_in_seconds", None),
+            ("surprise_privilege", True),
+        )
+        for field, value in edits:
+            with self.subTest(field=field, value_type=type(value).__name__):
+                altered = dict(challenge)
+                altered[field] = value
+                with self.assertRaises(ValidationError):
+                    device_proof(self.private, altered)
+        self.assertFalse(self.store.approve_peer(self.peer["id"]))
+        # Rejected client-side metadata must not consume the *valid* one-time
+        # server challenge or cause any approval state transition.
+        self.assertTrue(self.manager.verify(
+            self.peer["id"], challenge["challenge_id"],
+            device_proof(self.private, challenge),
+        ))
+        self.assertTrue(self.store.approve_peer(self.peer["id"]))
+
     def test_wrong_key_and_invalid_proof_are_rejected_and_consumed(self):
         challenge = self.manager.issue(self.peer["id"])
         wrong_key, _ = identity(71)
