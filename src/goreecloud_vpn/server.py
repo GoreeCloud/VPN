@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import socket
+import sqlite3
 import threading
 from urllib.parse import parse_qs, urlsplit
 
@@ -212,7 +213,22 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self.authorized():
             return
-        if path == "/api/v1/status":
+        if path == "/api/v1/readiness":
+            # Authenticated, read-only MANAGEMENT storage probe. This never
+            # asserts tunnel, DNS or kernel firewall health. Fixed table names
+            # and LIMIT 1 keep probes bounded without exposing stored records.
+            try:
+                with self.server.store.lock:
+                    for table in ("peers", "policies", "events"):
+                        self.server.store.db.execute(
+                            f'SELECT 1 FROM "{table}" LIMIT 1'
+                        ).fetchone()
+            except sqlite3.Error:
+                LOG.warning("management readiness storage query unavailable")
+                self.reply(503, {"management_store": "unavailable", "data_plane_enforced": False})
+                return
+            self.reply(200, {"management_store": "queryable", "data_plane_enforced": False})
+        elif path == "/api/v1/status":
             self.reply(200, management_status(self.server.store))
         elif path == "/api/v1/policies/diagnostics":
             self.reply(200, policy_diagnostics(self.server.store))
