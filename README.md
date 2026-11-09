@@ -14,11 +14,15 @@
 - Only approved peers participate in management policy decisions or private DNS previews
 - Local peer lifecycle event history; events are not tamper-proof audit evidence
 - Read-only approved-peer planning and inspectable, unapplied WireGuard peer stanzas
+- Experimental read-only manifest of canonical approved peer public keys bound to unique private IPv4 /32 host-intent addresses (not active WireGuard state or key-possession proof)
+- **Experimental:** offline source/destination/port nftables ingress rule preview with no automatic application; real kernel validation requires an explicitly opted-in disposable lab
 - Public WireGuard key format validation; private keys remain on devices
 - Group-scoped, directional TCP/UDP/ICMP allow policies with a default-deny *decision evaluator*
 - Administrative peer and policy lifecycle APIs
 - Preview of internal DNS A records (not a live DNS server)
-- Input validation, request size limits, owner-restricted database and constant-time bearer-token comparison
+- Input validation, 16 KiB request size limits, owner-restricted database and constant-time bearer-token comparison
+- Strict single-value Authorization and Content-Length parsing; ambiguous duplicate headers and unsupported Transfer-Encoding requests fail closed (local management API only)
+- Bounded post-parser management header metadata (64 fields/8 KiB), 2,048-character request target, five-second idle socket timeout, and redacted HTTP request logging. The Python HTTP parser applies its own earlier limits; this is not protection against all slow clients or a remote management interface.
 - Management status with lifecycle/group counts and address-pool capacity
 - Explainable access decisions and bounded batch simulation against current policies
 - Static policy diagnostics for duplicate rules and rules without eligible approved peers
@@ -97,6 +101,14 @@ See [management inspection](docs/MANAGEMENT_INSPECTION.md) for CLI usage, batch
 simulation, decision reasons, pagination and limitations. These are local
 administrative tools, **not a functioning VPN client or live health monitor**.
 
+Before attempting any disposable privileged WireGuard lab, inspect the **read-only** prerequisites (this does not install WireGuard or modify interfaces):
+
+    goreecloud-vpn-lab --json
+
+The checker reports missing tools and privileges and never asserts that an actual tunnel or firewall enforcement has been verified. See [lab preflight](docs/LAB_PREFLIGHT.md).
+
+A separate **explicitly invoked, rootless and disposable** Linux kernel test checks real WireGuard handshake/ICMP traffic, a manual nftables packet drop, and removal of a peer key. It is not an actual GoreeCloud VPN agent or production policy enforcement. See [isolated WireGuard lab smoke](docs/ISOLATED_WIREGUARD_LAB.md) for prerequisite checks, safe invocation and limitations. This test is never run automatically in CI.
+
 Run the test suite:
 
     python -m unittest discover -s tests -v
@@ -106,7 +118,7 @@ For a nonpublishing wheel/package-integrity check:
     python -m pip wheel --no-deps --wheel-dir dist .
     python scripts/verify_wheel.py dist
 
-This confirms build metadata, inclusion of the MIT license, and a basic wheel file manifest; it does not establish a deployable VPN or a signed production release.
+This confirms build metadata, inclusion of the MIT license, and **every wheel file’s secure RECORD digest and byte length** (including rejection of duplicate/unrecorded paths and unsafe symlinks). The RECORD check detects inconsistent or tampered local artifacts, **not** a malicious wheel whose content and RECORD were both rewritten. A signed artifact, authenticated provenance, SBOM and independent release review remain required before distribution; it does not establish a functioning VPN.
 
 ## Product documentation
 
@@ -117,6 +129,14 @@ This confirms build metadata, inclusion of the MIT license, and a basic wheel fi
 - [Threat model and release boundaries](docs/THREAT_MODEL.md)
 - [WireGuard key-possession protocol](docs/KEY_PROOF.md)
 - [Progress and delivery limits](docs/STATUS.md)
+- [Read-only Linux WireGuard lab prerequisites](docs/LAB_PREFLIGHT.md)
+- [Disposable kernel WireGuard handshake, policy and revocation lab](docs/ISOLATED_WIREGUARD_LAB.md)
+- [Experimental offline nftables ingress policy preview](docs/NFT_INGRESS_PREVIEW.md)
+- [Offline approved peer key-to-IP binding manifest](docs/IDENTITY_BINDING_INTENT.md)
+- [Offline public WireGuard AllowedIPs readback reconciliation](docs/KERNEL_ALLOWEDIPS_READBACK.md)
+- [Experimental one-snapshot ingress preflight — offline only](docs/OFFLINE_AGENT_PREFLIGHT.md)
+- [Guarded rootless-only policy application test](docs/ROOTLESS_LAB_POLICY_TRANSACTION.md)
+- [Experimental offline SQLite policy revision ledger — not rollback-resistant](docs/OFFLINE_POLICY_REVISION_LEDGER.md)
 
 ## Ecosystem boundaries
 

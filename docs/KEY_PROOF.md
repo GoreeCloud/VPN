@@ -40,3 +40,12 @@ The Python helper `goreecloud_vpn.enrollment.device_proof(device_private_key, ch
 Before production use: mutually authenticated encrypted enrollment transport; delegated one-time invitations rather than distributing a global administrator token; device-specific identities and recovery; authenticated agent-to-management communication; rate limits and durable audit; threat-model review by a cryptography specialist; real WireGuard interface configuration; and packet-level enforcement/teardown on revocation. See [THREAT_MODEL](THREAT_MODEL.md) and [ROADMAP](ROADMAP.md).
 
 No live GoreeCloud VPN, NetBird, VPS or firewall state is changed by this work.
+
+
+## November 9, 2026 — current-main integration review (still draft)
+
+An isolated merge-based reconciliation of this draft with current GoreeCloud VPN main brought in the merged policy-intent, kernel readback, HTTP framing and request-resource test suites. The initial combined Python test run failed **36 tests and raised 10 errors** because the inherited fixtures attempted approval using a registered public key alone; those calls must not bypass the proposed key-possession requirement.
+
+The changed **test-only** fixtures now generate deterministic disposable X25519 private/public pairs and exercise the real `ProofChallenges.issue → device_proof → ProofChallenges.verify → administrator approve` sequence before accepting a peer. The fixture helpers and seeded keys live strictly in `tests/` and are not part of the installed application wheel. An HTTP framing regression now verifies a correctly framed approval request still returns 404 **until** the genuine proof succeeds, then 200 after it succeeds. Additional negative fixtures reject unowned private keys and revoked peers. Existing production code never derives device secrets from a public key; the test seed mapping is intentionally artificial and must never be reused for real clients.
+
+The current branch remains **DRAFT / nondeployable**. Test and wheel integrity do not replace independent scrutiny of static WireGuard X25519 key reuse in a separate protocol, its transcript/channel binding, KDF and HMAC inputs, approval race semantics, migration of previously approved records, key revocation, audit/logging, authenticated remote enrollment, packet enforcement, or host compromise/backup rollback. Do not merge or deploy without those explicit gates.
