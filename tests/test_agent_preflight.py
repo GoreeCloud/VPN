@@ -1,17 +1,15 @@
 """Single-generation offline preflight tests: no kernel or networking invoked."""
-import base64
 from pathlib import Path
 import tempfile
 import unittest
 
 from goreecloud_vpn.core import VPNStore, ValidationError
+from proven_peer_fixture import key, prove_and_approve
 from goreecloud_vpn.agent_preflight import (
     SCHEMA, build_offline_ingress_preflight,
 )
 
 
-def key(n):
-    return base64.b64encode(bytes([n]) * 32).decode("ascii")
 
 
 class OfflineAgentPreflightTests(unittest.TestCase):
@@ -21,8 +19,8 @@ class OfflineAgentPreflightTests(unittest.TestCase):
         self.source = self.db.add_peer("source", key(110), ["users"])
         self.target = self.db.add_peer("target", key(111), ["services"])
         self.stranger = self.db.add_peer("stranger", key(112), ["guests"])
-        self.assertTrue(self.db.approve_peer(self.source["id"]))
-        self.assertTrue(self.db.approve_peer(self.target["id"]))
+        self.assertTrue(prove_and_approve(self.db, self.source))
+        self.assertTrue(prove_and_approve(self.db, self.target))
         self.valid_readback = key(110) + "\t10.77.0.10/32\n"
 
     def tearDown(self):
@@ -80,7 +78,7 @@ class OfflineAgentPreflightTests(unittest.TestCase):
     def test_pending_peer_never_bypasses_approval(self):
         self.db.add_policy("guests", "services", "udp", [53])
         self.assertEqual(self.compile("")["source_peer_ids"], [])
-        self.assertTrue(self.db.approve_peer(self.stranger["id"]))
+        self.assertTrue(prove_and_approve(self.db, self.stranger))
         report = self.compile(key(112) + "\t10.77.0.12/32\n")
         self.assertEqual(report["source_peer_ids"], [self.stranger["id"]])
 

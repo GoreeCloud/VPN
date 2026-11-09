@@ -3,7 +3,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from goreecloud_vpn.core import VPNStore, ValidationError
+from goreecloud_vpn.enrollment import ProofChallenges, device_proof
 from goreecloud_vpn.diagnostics import management_status, policy_diagnostics, simulate_access
 
 
@@ -13,16 +16,33 @@ class DiagnosticsTests(unittest.TestCase):
         self.store = VPNStore(Path(self.temp.name) / "state.db", subnet="10.0.0.0/28")
         self.addCleanup(self.temp.cleanup)
         self.addCleanup(self.store.close)
+        self.private_keys = {}
+        self.proofs = ProofChallenges(self.store)
         self.a = self.peer("alice", 1, ["users"])
         self.b = self.peer("server", 2, ["infra"])
         self.rule = self.store.add_policy("users", "infra", "tcp", [22, 443])
 
     def peer(self, name, number, groups):
-        return self.store.add_peer(name, base64.b64encode(bytes([number]) * 32).decode(), groups)
+        private = X25519PrivateKey.from_private_bytes(bytes([number]) * 32)
+        public = private.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        peer = self.store.add_peer(name, base64.b64encode(public).decode("ascii"), groups)
+        self.private_keys[peer["id"]] = private
+        return peer
+
+    def approve_peer(self, peer):
+        # Exercise the actual single-use proof flow; direct approval must fail closed.
+        self.assertFalse(self.store.approve_peer(peer["id"]))
+        challenge = self.proofs.issue(peer["id"])
+        proof = device_proof(self.private_keys[peer["id"]], challenge)
+        self.assertTrue(self.proofs.verify(peer["id"], challenge["challenge_id"], proof))
+        self.assertTrue(self.store.approve_peer(peer["id"]))
 
     def approve(self):
-        self.store.approve_peer(self.a["id"])
-        self.store.approve_peer(self.b["id"])
+        self.approve_peer(self.a)
+        self.approve_peer(self.b)
 
     def explain(self, **overrides):
         args = dict(source_id=self.a["id"], target_id=self.b["id"], protocol="tcp", port=22)
@@ -85,6 +105,23 @@ class DiagnosticsTests(unittest.TestCase):
         self.store.revoke_peer(self.b["id"])
         self.assertEqual(self.explain()["reason"], "peer_not_approved")
 
+    def test_approved_without_key_proof_cannot_bypass_policy_gate(self):
+        # A legacy or tampered database status must not bypass device proof.
+        with self.store.lock, self.store.db:
+            self.store.db.execute(
+                "UPDATE peers SET status='approved' WHERE id IN (?,?)",
+                (self.a["id"], self.b["id"]),
+            )
+        self.assertEqual(self.explain()["reason"], "peer_not_approved")
+        self.assertFalse(self.store.allowed(self.a["id"], self.b["id"], "tcp", 22))
+        self.assertFalse(simulate_access(self.store, [{
+            "source_id": self.a["id"], "target_id": self.b["id"],
+            "protocol": "tcp", "port": 22,
+        }])["results"][0]["allowed"])
+        self.assertEqual(self.store.dns_records(), [])
+        self.assertEqual(management_status(self.store)["dns_record_count"], 0)
+        self.assertEqual(policy_diagnostics(self.store)["policies"][0]["eligible_peer_pairs"], 0)
+
     def test_all_matching_policies_and_icmp(self):
         self.approve()
         duplicate = self.store.add_policy("users", "infra", "tcp", [22])
@@ -136,7 +173,7 @@ class DiagnosticsTests(unittest.TestCase):
         rows = policy_diagnostics(self.store)["policies"]
         self.assertEqual(rows[-1]["warnings"], ["no_distinct_peer_pairs"])
         third = self.peer("bob", 3, ["users"])
-        self.store.approve_peer(third["id"])
+        self.approve_peer(third)
         self.assertEqual(policy_diagnostics(self.store)["policies"][-1]["eligible_peer_pairs"], 2)
 
     def test_event_pages_survive_new_events_without_duplicate_rows(self):
@@ -144,11 +181,18 @@ class DiagnosticsTests(unittest.TestCase):
         first = self.store.event_page(limit=2)
         self.assertIsNotNone(first["next_before"])
         self.store.revoke_peer(self.b["id"])
-        second = self.store.event_page(limit=2, before=first["next_before"])
-        seqs = [e["seq"] for e in first["events"] + second["events"]]
-        self.assertEqual(len(set(seqs)), 4)
+        # Two registrations, two proofs and two approvals predate the new revoke event.
+        seqs = [e["seq"] for e in first["events"]]
+        cursor = first["next_before"]
+        while cursor is not None:
+            page = self.store.event_page(limit=2, before=cursor)
+            seqs.extend(event["seq"] for event in page["events"])
+            cursor = page["next_before"]
+        self.assertEqual(len(seqs), 6)
+        self.assertEqual(len(set(seqs)), len(seqs))
         self.assertEqual(seqs, sorted(seqs, reverse=True))
-        self.assertIsNone(second["next_before"])
+        proved = self.store.event_page(peer_id=self.b["id"], kind="peer_key_proved")
+        self.assertEqual(len(proved["events"]), 1)
         filtered = self.store.event_page(peer_id=self.b["id"], kind="peer_revoked")
         self.assertEqual(len(filtered["events"]), 1)
         self.assertFalse(filtered["tamper_proof"])

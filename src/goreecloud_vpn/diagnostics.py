@@ -20,7 +20,8 @@ def evaluate_access(peers, policies, source_id, target_id, protocol, port=None):
     matches = []
     if source is None or target is None:
         reason = "peer_not_found"
-    elif source["status"] != "approved" or target["status"] != "approved":
+    elif (source["status"] != "approved" or target["status"] != "approved"
+          or not source.get("proof_verified_at") or not target.get("proof_verified_at")):
         reason = "peer_not_approved"
     elif source_id == target_id:
         reason = "self_access_denied"
@@ -71,7 +72,8 @@ def management_status(store):
     return {
         "component": "management", "maturity": "alpha",
         "peers": {"total": len(peers), **{s: counts[s] for s in ("pending", "approved", "revoked")}},
-        "policy_count": len(policies), "dns_record_count": counts["approved"],
+        "policy_count": len(policies),
+        "dns_record_count": sum(peer["status"] == "approved" and bool(peer.get("proof_verified_at")) for peer in peers),
         "domain": store.domain,
         "address_pool": {"subnet": str(store.network), "capacity": capacity,
                          "allocated": in_pool, "available": capacity - in_pool,
@@ -89,7 +91,7 @@ def policy_diagnostics(store):
     peers, policies = store.snapshot()
     members = {}
     for peer in peers:
-        if peer["status"] == "approved":
+        if peer["status"] == "approved" and peer.get("proof_verified_at"):
             for group in peer["groups"]:
                 members.setdefault(group, set()).add(peer["id"])
     signatures = {}

@@ -1,15 +1,13 @@
 """Offline nftables preview never applies firewall, routes or network state."""
-import base64
 from pathlib import Path
 import tempfile
 import unittest
 
 from goreecloud_vpn.core import VPNStore, ValidationError
+from proven_peer_fixture import key, prove_and_approve
 from goreecloud_vpn.firewall_preview import build_nft_ingress_preview, SCHEMA
 
 
-def key(n):
-    return base64.b64encode(bytes([n]) * 32).decode("ascii")
 
 
 class FirewallPreviewTests(unittest.TestCase):
@@ -25,7 +23,7 @@ class FirewallPreviewTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def approve(self, peer):
-        self.assertTrue(self.store.approve_peer(peer["id"]))
+        self.assertTrue(prove_and_approve(self.store, peer))
 
     def test_pending_target_rejected_even_with_policy(self):
         self.store.add_policy("users", "services", "tcp", [443])

@@ -8,6 +8,9 @@
 - [x] Loopback-only bearer-authenticated administrative interface.
 - [x] Private IPv4 allocation, peer name/key/group metadata and SQLite persistence.
 - [x] Explicit pending/approved/revoked lifecycle, fail-closed schema migration and terminal revocation of management records.
+- [x] Prototype X25519 key-possession challenge using HKDF/HMAC, short expiry, one-attempt replay prevention and proof-bound approval.
+- [x] Pre-proof approved records demoted to pending; peer access decisions and DNS previews require newly verified approvals.
+- [x] Offline device-side proof helper; private keys are never accepted by the server.
 - [x] Pending/revoked peer exclusion from management policy decisions and private DNS previews.
 - [x] Local lifecycle history and regression tests (not tamper-proof auditing).
 - [x] Read-only WireGuard adjacency planning for approved peers and offline peer stanzas.
@@ -16,6 +19,7 @@
 - [x] Directional TCP/UDP/ICMP default-deny **policy evaluation only**.
 - [x] DNS record preview (not a DNS service).
 - [x] Input checks, body limits, owner file permissions, unit/HTTP tests and CI configuration.
+- [ ] Exact-head CI verification and independent crypto review for proposed key-possession change before merging.
 - [x] Individual repository MIT license, README scope and SPDX package metadata (PR #16).
 - [x] Exact loopback Host and browser Origin request boundaries with IPv4/IPv6 regressions (PR #17).
 - [x] Nonpublishing Python wheel build and included license/SPDX/package integrity validation (PR #18).
@@ -55,7 +59,7 @@ complete any identity, data-plane, live telemetry or production deployment gate.
 ## Priority 0 — establish a real secure VPN
 
 - [ ] Threat model, security review and architecture decision on client engine.
-- [ ] Client-held key generation and authenticated production enrollment. Local key-possession prototype in draft PR #6 remains unmerged, under independent cryptographic review and branch-reconciliation gates.
+- [ ] Client-held key generation and authenticated production enrollment. The proposed local key-possession primitive is pending independent cryptographic review; it does not provide secure remote enrollment.
 - [ ] WireGuard tunnel/peer lifecycle and server-client coordination.
 - [ ] Enforce identity/policy in actual data plane, including deny/revoke tests.
 - [ ] TLS/mTLS for remote management and enrollment.

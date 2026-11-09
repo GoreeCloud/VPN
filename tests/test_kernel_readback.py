@@ -1,18 +1,16 @@
 """Untrusted WireGuard public AllowedIPs text inspection regressions."""
-import base64
 from pathlib import Path
 import tempfile
 import unittest
 
 from goreecloud_vpn.core import VPNStore, ValidationError
+from proven_peer_fixture import key, prove_and_approve
 from goreecloud_vpn.identity_binding import build_key_address_binding_intent
 from goreecloud_vpn.kernel_readback import (
     SCHEMA, compare_allowedips_to_intent, parse_allowedips_text,
 )
 
 
-def key(number):
-    return base64.b64encode(bytes([number]) * 32).decode("ascii")
 
 
 class KernelAllowedIPsReadbackTests(unittest.TestCase):
@@ -21,8 +19,8 @@ class KernelAllowedIPsReadbackTests(unittest.TestCase):
         self.store = VPNStore(Path(self.temp.name) / "state.db", subnet="10.77.0.0/24")
         self.source = self.store.add_peer("source", key(100), ["users"])
         self.target = self.store.add_peer("target", key(101), ["services"])
-        self.assertTrue(self.store.approve_peer(self.source["id"]))
-        self.assertTrue(self.store.approve_peer(self.target["id"]))
+        self.assertTrue(prove_and_approve(self.store, self.source))
+        self.assertTrue(prove_and_approve(self.store, self.target))
         self.intent = build_key_address_binding_intent(self.store)
         self.selected = [self.source["id"]]
         self.good_text = key(100) + "\t10.77.0.10/32\n"

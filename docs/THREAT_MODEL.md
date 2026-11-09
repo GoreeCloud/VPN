@@ -4,7 +4,7 @@ Status: Preliminary design review, November 3, 2026. No production security cert
 
 ## Trust boundaries
 
-- Devices and public keys remain untrusted until authenticated enrollment and approval.
+- Devices and public keys remain untrusted until authenticated enrollment and approval. A local short-lived key-possession challenge is implemented, but remote transport, per-user enrollment authorization, device attestation, independent cryptographic review and real packet enforcement remain unimplemented.
 - Administrators control management state, not live traffic, in this alpha.
 - Future privileged network agents must validate changes and apply default-deny packet rules.
 - Routing, DNS, relays, gateways and file access require independent authorization.

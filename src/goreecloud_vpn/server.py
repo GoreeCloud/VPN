@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .core import VPNStore, ValidationError
 from .plan import build_peer_plan
+from .enrollment import ProofChallenges
 from .diagnostics import management_status, policy_diagnostics, simulate_access
 
 LOG = logging.getLogger("goreecloud_vpn")
@@ -23,6 +24,20 @@ MAX_MANAGEMENT_HEADER_BYTES = 8192
 MAX_MANAGEMENT_TARGET_CHARS = 2048
 MANAGEMENT_SOCKET_TIMEOUT_SECONDS = 5
 
+
+def _unique_json_object(pairs):
+    """Reject ambiguous JSON names in every nested object, before mutation."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite(_value):
+    """JSON does not permit NaN, Infinity, or -Infinity."""
+    raise ValueError("non-finite JSON number")
 
 class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
     """Bind the IPv6 loopback with an IPv6 socket, never an IPv4 wildcard."""
@@ -115,7 +130,11 @@ class Handler(BaseHTTPRequestHandler):
         if len(types) != 1 or self.headers.get_content_type() != "application/json":
             raise ValidationError("one application/json Content-Type required")
         try:
-            result = json.loads(self.rfile.read(length))
+            result = json.loads(
+                self.rfile.read(length),
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_nonfinite,
+            )
         except (ValueError, UnicodeDecodeError) as exc:
             raise ValidationError("invalid JSON") from exc
         if not isinstance(result, dict):
@@ -174,6 +193,33 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             return
         path = urlsplit(self.path).path
+        if path.startswith("/api/v1/peers/") and (
+            path.endswith("/challenge") or path.endswith("/prove")
+        ):
+            action = "challenge" if path.endswith("/challenge") else "prove"
+            peer_id = path[len("/api/v1/peers/"):-len("/" + action)]
+            if not peer_id or "/" in peer_id:
+                self.reply(404, {"error": "not found"})
+                return
+            try:
+                if action == "challenge":
+                    if (self.headers.get("Transfer-Encoding") or
+                            self.headers.get("Content-Length", "0") != "0"):
+                        raise ValidationError("challenge creation accepts no body")
+                    result = {"challenge": self.server.proofs.issue(peer_id)}
+                    status = 201
+                else:
+                    payload = self.body()
+                    self.keys(payload, {"challenge_id", "proof"})
+                    success = self.server.proofs.verify(
+                        peer_id, payload.get("challenge_id"), payload.get("proof")
+                    )
+                    result = {"verified": success, "data_plane_enforced": False}
+                    status = 200 if success else 400
+                self.reply(status, result)
+            except ValidationError as exc:
+                self.reply(400, {"error": str(exc)})
+            return
         if path.startswith("/api/v1/peers/") and (
             path.endswith("/approve") or path.endswith("/revoke")
         ):
@@ -275,6 +321,7 @@ def create_server(store, token, host="127.0.0.1", port=8176):
     server.socket_timeout_seconds = MANAGEMENT_SOCKET_TIMEOUT_SECONDS
     server.store = store
     server.admin_token = token
+    server.proofs = ProofChallenges(store)
     return server
 
 

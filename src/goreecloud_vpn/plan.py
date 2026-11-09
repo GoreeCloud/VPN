@@ -23,7 +23,7 @@ def build_peer_plan(store: VPNStore, local_peer_id: str) -> dict:
     """
     if not isinstance(local_peer_id, str):
         raise ValidationError("local peer id must be a string")
-    peers = {p["id"]: p for p in store.peers() if p["status"] == "approved"}
+    peers = {p["id"]: p for p in store.peers() if p["status"] == "approved" and p["proof_verified_at"]}
     local = peers.get(local_peer_id)
     if local is None:
         raise ValidationError("local peer is absent or not approved")

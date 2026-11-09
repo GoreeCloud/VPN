@@ -3,7 +3,6 @@
 All network connections are limited to an ephemeral local management socket.
 No VPN tunnel, firewall rule, route, production database, or peer is modified.
 """
-import base64
 import http.client
 import json
 from pathlib import Path
@@ -13,6 +12,7 @@ import unittest
 
 from goreecloud_vpn.core import VPNStore
 from goreecloud_vpn.server import create_server
+from proven_peer_fixture import key as fixture_key, prove_peer
 
 
 class HTTPFramingRegressionTests(unittest.TestCase):
@@ -97,8 +97,8 @@ class HTTPFramingRegressionTests(unittest.TestCase):
         self.assertEqual(len(self.store.policies()), 1)
 
     def test_peer_approval_rejects_ambiguous_zero_length_without_mutating(self):
-        key = base64.b64encode(bytes([79]) * 32).decode("ascii")
-        peer = self.store.add_peer("test-peer", key, ["users"])
+        public_key = fixture_key(79)
+        peer = self.store.add_peer("test-peer", public_key, ["users"])
         target = f"/api/v1/peers/{peer['id']}/approve"
         for headers in (
             (("Content-Length", "0"), ("Content-Length", "0")),
@@ -109,6 +109,11 @@ class HTTPFramingRegressionTests(unittest.TestCase):
             with self.subTest(headers=headers):
                 self.assertEqual(self.request("POST", target, (self.auth(),) + headers), 400)
                 self.assertEqual(self.store.peers()[0]["status"], "pending")
+        # Valid framing must not bypass proof-gated approval.
+        self.assertEqual(self.request("POST", target, (self.auth(), ("Content-Length", "0"))), 404)
+        self.assertEqual(self.store.peers()[0]["status"], "pending")
+        self.assertTrue(prove_peer(self.store, peer, proof_manager=self.server.proofs))
+        self.assertEqual(self.store.peers()[0]["status"], "pending")
         self.assertEqual(self.request("POST", target, (self.auth(), ("Content-Length", "0"))), 200)
         self.assertEqual(self.store.peers()[0]["status"], "approved")
 

@@ -12,8 +12,11 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from goreecloud_vpn import cli
 from goreecloud_vpn.core import VPNStore, ValidationError
+from goreecloud_vpn.enrollment import device_proof
 from goreecloud_vpn.server import create_server
 
 
@@ -28,10 +31,25 @@ class InspectionHTTPTests(unittest.TestCase):
         cls.worker.start()
         cls.port = cls.server.server_port
         cls.base = f"http://127.0.0.1:{cls.port}"
-        cls.a = cls.store.add_peer("alice", base64.b64encode(b"a" * 32).decode(), ["users"])
-        cls.b = cls.store.add_peer("server", base64.b64encode(b"b" * 32).decode(), ["infra"])
-        cls.store.approve_peer(cls.a["id"])
-        cls.store.approve_peer(cls.b["id"])
+        def approved_peer(name, seed, groups):
+            private = X25519PrivateKey.from_private_bytes(bytes([seed]) * 32)
+            public = private.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+            peer = cls.store.add_peer(name, base64.b64encode(public).decode("ascii"), groups)
+            if cls.store.approve_peer(peer["id"]):
+                raise AssertionError("Unproved peer must not be approved")
+            challenge = cls.server.proofs.issue(peer["id"])
+            signed = device_proof(private, challenge)
+            if not cls.server.proofs.verify(peer["id"], challenge["challenge_id"], signed):
+                raise AssertionError("Valid key-possession proof refused")
+            if not cls.store.approve_peer(peer["id"]):
+                raise AssertionError("Proved peer not approved")
+            return peer
+
+        cls.a = approved_peer("alice", 73, ["users"])
+        cls.b = approved_peer("server", 74, ["infra"])
         cls.store.add_policy("users", "infra", "tcp", [22])
         cls.query = {"source_id": cls.a["id"], "target_id": cls.b["id"], "protocol": "tcp", "port": 22}
 

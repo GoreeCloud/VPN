@@ -1,5 +1,4 @@
 """Offline key-to-/32 binding manifest security and determinism tests."""
-import base64
 import ipaddress
 import json
 from pathlib import Path
@@ -8,13 +7,12 @@ import tempfile
 import unittest
 
 from goreecloud_vpn.core import VPNStore, ValidationError
+from proven_peer_fixture import key, prove_and_approve
 from goreecloud_vpn.identity_binding import (
     BINDING_SCHEMA, build_key_address_binding_intent,
 )
 
 
-def key(i):
-    return base64.b64encode(bytes([i]) * 32).decode("ascii")
 
 
 class KeyAddressBindingManifestTests(unittest.TestCase):
@@ -47,8 +45,8 @@ class KeyAddressBindingManifestTests(unittest.TestCase):
         self.assertFalse(record["data_plane_enforced"])
 
     def test_approved_only_deterministic_host_prefixes(self):
-        self.store.approve_peer(self.a["id"])
-        self.store.approve_peer(self.b["id"])
+        prove_and_approve(self.store, self.a)
+        prove_and_approve(self.store, self.b)
         before = self.store.snapshot()
         first = build_key_address_binding_intent(self.store)
         second = build_key_address_binding_intent(self.store)
@@ -63,8 +61,8 @@ class KeyAddressBindingManifestTests(unittest.TestCase):
         self.assertEqual(self.store.snapshot(), before)
 
     def test_revocation_changes_plan_and_does_not_mutate_state(self):
-        self.store.approve_peer(self.a["id"])
-        self.store.approve_peer(self.b["id"])
+        prove_and_approve(self.store, self.a)
+        prove_and_approve(self.store, self.b)
         before = build_key_address_binding_intent(self.store)
         self.assertTrue(self.store.revoke_peer(self.b["id"]))
         after = build_key_address_binding_intent(self.store)
@@ -73,8 +71,8 @@ class KeyAddressBindingManifestTests(unittest.TestCase):
         self.assertNotIn(key(92), json.dumps(after))
 
     def test_duplicate_identity_or_address_fails_closed(self):
-        self.store.approve_peer(self.a["id"])
-        self.store.approve_peer(self.b["id"])
+        prove_and_approve(self.store, self.a)
+        prove_and_approve(self.store, self.b)
         peers = [p for p in self.store.peers() if p["status"] == "approved"]
         for field in ("id", "public_key", "address"):
             with self.subTest(field=field):
@@ -84,7 +82,7 @@ class KeyAddressBindingManifestTests(unittest.TestCase):
                     self.manifest(changed)
 
     def test_invalid_approved_keys_and_addresses_fail_closed(self):
-        self.store.approve_peer(self.a["id"])
+        prove_and_approve(self.store, self.a)
         peers = [p for p in self.store.peers() if p["status"] == "approved"]
         for field, bad in (
             ("public_key", "not-a-key"),
@@ -103,7 +101,7 @@ class KeyAddressBindingManifestTests(unittest.TestCase):
 
     def test_pending_and_revoked_are_not_binding_targets(self):
         self.assertTrue(self.store.revoke_peer(self.c["id"]))
-        self.assertTrue(self.store.approve_peer(self.a["id"]))
+        self.assertTrue(prove_and_approve(self.store, self.a))
         record = build_key_address_binding_intent(self.store)
         self.assertEqual(record["binding_count"], 1)
         self.assertEqual(record["bindings"][0]["peer_id"], self.a["id"])
