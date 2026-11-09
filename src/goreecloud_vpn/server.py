@@ -63,25 +63,29 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def authorized(self):
-        value = self.headers.get("Authorization", "")
-        if not value.startswith("Bearer ") or not hmac.compare_digest(
-            value[7:].encode("utf-8"), self.server.admin_token.encode("utf-8")
+        # A proxy and an application must not disagree about which bearer
+        # credential is authoritative. Reject duplicate Authorization fields.
+        values = self.headers.get_all("Authorization", [])
+        if len(values) != 1 or not values[0].startswith("Bearer ") or not hmac.compare_digest(
+            values[0][7:].encode("utf-8"), self.server.admin_token.encode("utf-8")
         ):
             self.reply(401, {"error": "unauthorized"})
             return False
         return True
 
     def body(self):
-        if self.headers.get("Transfer-Encoding"):
-            raise ValidationError("chunked body not supported")
-        try:
-            length = int(self.headers.get("Content-Length", ""))
-        except ValueError as exc:
-            raise ValidationError("Content-Length required") from exc
-        if not 0 <= length <= 16384:
+        if self.headers.get_all("Transfer-Encoding", []):
+            raise ValidationError("Transfer-Encoding is unsupported")
+        lengths = self.headers.get_all("Content-Length", [])
+        # A single strict decimal length prevents conflicting request framing.
+        if len(lengths) != 1 or not lengths[0].isascii() or not lengths[0].isdigit() or len(lengths[0]) > 5:
+            raise ValidationError("one decimal Content-Length required")
+        length = int(lengths[0])
+        if length > 16384:
             raise ValidationError("body size limit exceeded")
-        if self.headers.get_content_type() != "application/json":
-            raise ValidationError("Content-Type must be application/json")
+        types = self.headers.get_all("Content-Type", [])
+        if len(types) != 1 or self.headers.get_content_type() != "application/json":
+            raise ValidationError("one application/json Content-Type required")
         try:
             result = json.loads(self.rfile.read(length))
         except (ValueError, UnicodeDecodeError) as exc:
@@ -150,7 +154,9 @@ class Handler(BaseHTTPRequestHandler):
             if not peer_id or "/" in peer_id:
                 self.reply(404, {"error": "not found"})
                 return
-            if self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length", "0") != "0":
+            lengths = self.headers.get_all("Content-Length", [])
+            if (self.headers.get_all("Transfer-Encoding", []) or len(lengths) > 1
+                    or (lengths and lengths[0] != "0")):
                 self.reply(400, {"error": "state transitions do not accept a request body"})
                 return
             transitioned = (self.server.store.approve_peer(peer_id) if action == "approve"
