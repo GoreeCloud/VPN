@@ -26,6 +26,21 @@ MANAGEMENT_SOCKET_TIMEOUT_SECONDS = 5
 MAX_MANAGEMENT_CONCURRENT_CONNECTIONS = 16
 
 
+def _unique_json_object(pairs):
+    """Reject ambiguous keys at every depth, including Unicode escape aliases."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValidationError("duplicate JSON field")
+        result[key] = value
+    return result
+
+
+def _reject_nonstandard_json_constant(_value):
+    # Python's json.loads otherwise accepts NaN/Infinity despite JSON's grammar.
+    raise ValidationError("nonstandard JSON constant")
+
+
 class _BoundedManagementHTTPServer(ThreadingHTTPServer):
     """Reject excess loopback sockets before creating unbounded worker threads.
 
@@ -158,7 +173,16 @@ class Handler(BaseHTTPRequestHandler):
         if len(types) != 1 or self.headers.get_content_type() != "application/json":
             raise ValidationError("one application/json Content-Type required")
         try:
-            result = json.loads(self.rfile.read(length))
+            raw = self.rfile.read(length)
+            if len(raw) != length:
+                raise ValidationError("incomplete JSON body")
+            result = json.loads(
+                raw.decode("utf-8"),
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except ValidationError:
+            raise
         except (ValueError, UnicodeDecodeError) as exc:
             raise ValidationError("invalid JSON") from exc
         if not isinstance(result, dict):
