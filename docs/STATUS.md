@@ -41,3 +41,8 @@ counts), access explanations/batch simulation, static policy diagnostics,
 filtered event pagination and a local `goreecloud-vpnctl` inspection CLI. See
 [usage and limits](MANAGEMENT_INSPECTION.md). They are management-only and do not
 change the security/production gates above. No database schema change is needed.
+
+
+## November 8, 2026 — local management request-resource hardening (source candidate)
+
+A new development change bounds **post-parser** incoming management headers to 64 fields and 8 KiB, request-target length to 2,048 characters, and idle local socket reads to five seconds. It redacts request paths and query parameters from management HTTP logs. Ephemeral 127.0.0.1 tests reject large/overspecified requests with 431, long targets with 414, and incomplete idle reads without creating state. Python's built-in HTTP parser still processes request headers before these application checks: this is not a byte-perfect wire-level pre-parser limit, remote administration approval, slow-client immunity, production release, packet enforcement, or a functioning VPN.
