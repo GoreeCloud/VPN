@@ -16,6 +16,12 @@ from .plan import build_peer_plan
 from .diagnostics import management_status, policy_diagnostics, simulate_access
 
 LOG = logging.getLogger("goreecloud_vpn")
+# Bounded post-parser management headers; Python HTTP parser's own limits
+# still apply *before* this application-level check.
+MAX_MANAGEMENT_HEADER_FIELDS = 64
+MAX_MANAGEMENT_HEADER_BYTES = 8192
+MAX_MANAGEMENT_TARGET_CHARS = 2048
+MANAGEMENT_SOCKET_TIMEOUT_SECONDS = 5
 
 
 class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
@@ -25,6 +31,12 @@ class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "GoreeCloudVPN-alpha"
+
+    def setup(self):
+        super().setup()
+        # Bounds idle or incomplete requests on the *loopback* management
+        # socket; this is not a complete network-layer or parser limit.
+        self.connection.settimeout(self.server.socket_timeout_seconds)
 
     def reply(self, status, body):
         payload = json.dumps(body, separators=(",", ":")).encode("utf-8")
@@ -39,11 +51,27 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def trusted_request(self):
-        """Disallow DNS-rebound hosts and browser-originated management calls.
+        """Bound parsed metadata and reject browser/rebinding management calls.
 
-        The development service is intentionally usable only through the exact
-        bound loopback IP and port. No browser-based administration is shipped.
+        Checks run before authorization and before all state changes, including
+        the unauthenticated health endpoint. Stdlib parser-level limits still
+        operate before these application checks.
         """
+        fields = list(self.headers.raw_items())
+        metadata_bytes = sum(
+            len(name.encode("latin-1", errors="replace")) +
+            len(value.encode("latin-1", errors="replace")) + 4
+            for name, value in fields
+        )
+        if (len(fields) > MAX_MANAGEMENT_HEADER_FIELDS
+                or metadata_bytes > MAX_MANAGEMENT_HEADER_BYTES):
+            self.close_connection = True
+            self.reply(431, {"error": "management headers exceed limit"})
+            return False
+        if len(self.path) > MAX_MANAGEMENT_TARGET_CHARS:
+            self.close_connection = True
+            self.reply(414, {"error": "management request target exceeds limit"})
+            return False
         bound_ip = ipaddress.ip_address(self.server.server_address[0])
         port = self.server.server_port
         expected_host = (f"[{bound_ip}]:{port}" if bound_ip.version == 6
@@ -63,25 +91,29 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def authorized(self):
-        value = self.headers.get("Authorization", "")
-        if not value.startswith("Bearer ") or not hmac.compare_digest(
-            value[7:].encode("utf-8"), self.server.admin_token.encode("utf-8")
+        # A proxy and an application must not disagree about which bearer
+        # credential is authoritative. Reject duplicate Authorization fields.
+        values = self.headers.get_all("Authorization", [])
+        if len(values) != 1 or not values[0].startswith("Bearer ") or not hmac.compare_digest(
+            values[0][7:].encode("utf-8"), self.server.admin_token.encode("utf-8")
         ):
             self.reply(401, {"error": "unauthorized"})
             return False
         return True
 
     def body(self):
-        if self.headers.get("Transfer-Encoding"):
-            raise ValidationError("chunked body not supported")
-        try:
-            length = int(self.headers.get("Content-Length", ""))
-        except ValueError as exc:
-            raise ValidationError("Content-Length required") from exc
-        if not 0 <= length <= 16384:
+        if self.headers.get_all("Transfer-Encoding", []):
+            raise ValidationError("Transfer-Encoding is unsupported")
+        lengths = self.headers.get_all("Content-Length", [])
+        # A single strict decimal length prevents conflicting request framing.
+        if len(lengths) != 1 or not lengths[0].isascii() or not lengths[0].isdigit() or len(lengths[0]) > 5:
+            raise ValidationError("one decimal Content-Length required")
+        length = int(lengths[0])
+        if length > 16384:
             raise ValidationError("body size limit exceeded")
-        if self.headers.get_content_type() != "application/json":
-            raise ValidationError("Content-Type must be application/json")
+        types = self.headers.get_all("Content-Type", [])
+        if len(types) != 1 or self.headers.get_content_type() != "application/json":
+            raise ValidationError("one application/json Content-Type required")
         try:
             result = json.loads(self.rfile.read(length))
         except (ValueError, UnicodeDecodeError) as exc:
@@ -150,7 +182,9 @@ class Handler(BaseHTTPRequestHandler):
             if not peer_id or "/" in peer_id:
                 self.reply(404, {"error": "not found"})
                 return
-            if self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length", "0") != "0":
+            lengths = self.headers.get_all("Content-Length", [])
+            if (self.headers.get_all("Transfer-Encoding", []) or len(lengths) > 1
+                    or (lengths and lengths[0] != "0")):
                 self.reply(400, {"error": "state transitions do not accept a request body"})
                 return
             transitioned = (self.server.store.approve_peer(peer_id) if action == "approve"
@@ -220,7 +254,10 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def log_message(self, fmt, *args):
-        LOG.info("%s %s", self.address_string(), fmt % args)
+        # BaseHTTPRequestHandler logs the entire request target by default,
+        # including query parameters. Avoid secrets in local audit logs.
+        status = args[1] if len(args) >= 2 and str(args[1]).isdigit() else "unknown"
+        LOG.info("loopback management HTTP status=%s", status)
 
 
 def create_server(store, token, host="127.0.0.1", port=8176):
@@ -235,6 +272,7 @@ def create_server(store, token, host="127.0.0.1", port=8176):
     server_class = _IPv6ThreadingHTTPServer if address.version == 6 else ThreadingHTTPServer
     server = server_class((host, port), Handler)
     server.daemon_threads = True
+    server.socket_timeout_seconds = MANAGEMENT_SOCKET_TIMEOUT_SECONDS
     server.store = store
     server.admin_token = token
     return server
