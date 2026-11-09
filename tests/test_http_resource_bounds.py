@@ -101,17 +101,19 @@ class ManagementWorkerAdmissionTests(unittest.TestCase):
                 for _ in range(MAX_MANAGEMENT_CONCURRENT_CONNECTIONS):
                     sock = socket.create_connection(("127.0.0.1", server.server_port), timeout=2)
                     stalled.append(sock)
-                    sock.sendall(b"GET /healthz HTTP/1.1\\r\\nHost:")
+                    sock.sendall(b"GET /healthz HTTP/1.1\r\nHost:")
                 deadline = time.monotonic() + 3
                 while server._worker_slots._value != 0 and time.monotonic() < deadline:
                     time.sleep(0.01)
                 self.assertEqual(server._worker_slots._value, 0)
                 with socket.create_connection(("127.0.0.1", server.server_port), timeout=2) as extra:
                     extra.settimeout(2)
-                    extra.sendall(b"GET /healthz HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r\\n")
+                    extra.sendall(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
                     response = extra.recv(1024)
-                    self.assertIn(b"503 Service Unavailable", response)
-                    self.assertIn(b"Connection: close", response)
+                    self.assertEqual(response.split(b"\r\n", 1)[0],
+                                     b"HTTP/1.1 503 Service Unavailable")
+                    self.assertIn(b"\r\nConnection: close\r\n", response)
+                    self.assertTrue(response.endswith(b"\r\n\r\n"))
                 for sock in stalled:
                     sock.close()
                 stalled.clear()
