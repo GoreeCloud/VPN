@@ -4,11 +4,14 @@ import logging
 from pathlib import Path
 import socket
 import tempfile
+import time
 import threading
 import unittest
 
 from goreecloud_vpn.core import VPNStore
-from goreecloud_vpn.server import create_server
+from goreecloud_vpn.server import (
+    MAX_MANAGEMENT_CONCURRENT_CONNECTIONS, create_server,
+)
 
 
 class ManagementHTTPResourceTests(unittest.TestCase):
@@ -81,6 +84,58 @@ class ManagementHTTPResourceTests(unittest.TestCase):
             self.server.socket_timeout_seconds = 5
         self.assertEqual(self.store.peers(), [])
         self.assertEqual(self.request(), 200)
+
+
+class ManagementWorkerAdmissionTests(unittest.TestCase):
+    """Synthetic slow clients on an owned, ephemeral 127.0.0.1 listener."""
+
+    def test_excess_connections_are_rejected_and_capacity_recovers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = VPNStore(Path(directory) / "management.db")
+            server = create_server(store, "L" * 48, "127.0.0.1", 0)
+            worker = threading.Thread(target=server.serve_forever, daemon=True)
+            stalled = []
+            worker.start()
+            server.socket_timeout_seconds = 1.5
+            try:
+                for _ in range(MAX_MANAGEMENT_CONCURRENT_CONNECTIONS):
+                    sock = socket.create_connection(("127.0.0.1", server.server_port), timeout=2)
+                    stalled.append(sock)
+                    sock.sendall(b"GET /healthz HTTP/1.1\r\nHost:")
+                deadline = time.monotonic() + 3
+                while server._worker_slots._value != 0 and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertEqual(server._worker_slots._value, 0)
+                with socket.create_connection(("127.0.0.1", server.server_port), timeout=2) as extra:
+                    extra.settimeout(2)
+                    extra.sendall(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+                    response = extra.recv(1024)
+                    self.assertEqual(response.split(b"\r\n", 1)[0],
+                                     b"HTTP/1.1 503 Service Unavailable")
+                    self.assertIn(b"\r\nConnection: close\r\n", response)
+                    self.assertTrue(response.endswith(b"\r\n\r\n"))
+                for sock in stalled:
+                    sock.close()
+                stalled.clear()
+                deadline = time.monotonic() + 3
+                while server._worker_slots._value != MAX_MANAGEMENT_CONCURRENT_CONNECTIONS and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertEqual(server._worker_slots._value, MAX_MANAGEMENT_CONCURRENT_CONNECTIONS)
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                try:
+                    conn.request("GET", "/healthz")
+                    response = conn.getresponse()
+                    self.assertEqual(response.status, 200)
+                    response.read()
+                finally:
+                    conn.close()
+            finally:
+                for sock in stalled:
+                    sock.close()
+                server.shutdown()
+                server.server_close()
+                worker.join(timeout=3)
+                store.close()
 
 
 if __name__ == "__main__":
