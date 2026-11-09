@@ -44,10 +44,10 @@ class _BoundedManagementHTTPServer(ThreadingHTTPServer):
             try:
                 request.settimeout(0.2)
                 request.sendall(
-                    b"HTTP/1.1 503 Service Unavailable\\r\\n"
-                    b"Content-Length: 0\\r\\n"
-                    b"Connection: close\\r\\n"
-                    b"Cache-Control: no-store\\r\\n\\r\\n"
+                    b"HTTP/1.1 503 Service Unavailable\r\n"
+                    b"Content-Length: 0\r\n"
+                    b"Connection: close\r\n"
+                    b"Cache-Control: no-store\r\n\r\n"
                 )
             except OSError:
                 pass
