@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import threading
 from uuid import uuid4
 
@@ -69,6 +70,45 @@ def check_endpoint(value):
     return value
 
 
+def _prepare_private_database(path: Path) -> tuple[int, int]:
+    """Fail closed on unsafe existing SQLite files without chmod or following links.
+
+    This is a local-owner preflight, not protection against a compromised
+    account or a privileged process replacing the file after it is opened.
+    """
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "geteuid"):
+        raise ValidationError("secure local database opening unavailable")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        parent = os.stat(path.parent, follow_symlinks=False)
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid()
+                or parent.st_mode & 0o077):
+            raise ValidationError("database directory must be owner-only")
+        read_flags = (os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+                      | getattr(os, "O_CLOEXEC", 0))
+        try:
+            fd = os.open(path, read_flags)
+        except FileNotFoundError:
+            # Exclusive creation prevents a second actor from racing a
+            # missing file into a symlink or foreign-owned inode.
+            fd = os.open(
+                path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+                | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0), 0o600
+            )
+        try:
+            info = os.fstat(fd)
+            named = os.stat(path, follow_symlinks=False)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                    or info.st_nlink != 1 or info.st_mode & 0o077
+                    or (info.st_dev, info.st_ino) != (named.st_dev, named.st_ino)):
+                raise ValidationError("database file must be owner-only")
+            return info.st_dev, info.st_ino
+        finally:
+            os.close(fd)
+    except OSError:
+        raise ValidationError("unsafe database storage path") from None
+
+
 class VPNStore:
     """SQLite records for peer identities, policies and private address allocation."""
 
@@ -86,13 +126,18 @@ class VPNStore:
             raise ValidationError("invalid domain")
         self.domain = domain
         path = Path(path).expanduser()
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if path.is_symlink():
-            raise ValidationError("database path cannot be a symlink")
-        path.touch(mode=0o600, exist_ok=True)
-        os.chmod(path, 0o600)
+        identity = _prepare_private_database(path)
         self.lock = threading.RLock()
         self.db = sqlite3.connect(path, check_same_thread=False, timeout=5)
+        try:
+            opened = os.stat(path, follow_symlinks=False)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.geteuid()
+                    or opened.st_nlink != 1 or opened.st_mode & 0o077
+                    or (opened.st_dev, opened.st_ino) != identity):
+                raise ValidationError("database identity changed before initialization")
+        except (OSError, ValidationError):
+            self.db.close()
+            raise ValidationError("unsafe database storage path") from None
         self.db.row_factory = sqlite3.Row
         with self.db:
             self.db.execute("""CREATE TABLE IF NOT EXISTS peers (
