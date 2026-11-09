@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import socket
+import threading
 from urllib.parse import parse_qs, urlsplit
 
 from .core import VPNStore, ValidationError
@@ -22,9 +23,51 @@ MAX_MANAGEMENT_HEADER_FIELDS = 64
 MAX_MANAGEMENT_HEADER_BYTES = 8192
 MAX_MANAGEMENT_TARGET_CHARS = 2048
 MANAGEMENT_SOCKET_TIMEOUT_SECONDS = 5
+MAX_MANAGEMENT_CONCURRENT_CONNECTIONS = 16
 
 
-class _IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+class _BoundedManagementHTTPServer(ThreadingHTTPServer):
+    """Reject excess loopback sockets before creating unbounded worker threads.
+
+    This bounds concurrent handlers, not all kernel listen-backlog sockets or
+    connection rates. It does not make this alpha API safe for public ingress.
+    """
+
+    def __init__(self, server_address, request_handler_class):
+        self._worker_slots = threading.BoundedSemaphore(MAX_MANAGEMENT_CONCURRENT_CONNECTIONS)
+        super().__init__(server_address, request_handler_class)
+
+    def process_request(self, request, client_address):
+        if not self._worker_slots.acquire(blocking=False):
+            # Protocol-independent fixed refusal. Do not parse, authenticate or
+            # log raw request bytes when all slots are occupied.
+            try:
+                request.settimeout(0.2)
+                request.sendall(
+                    b"HTTP/1.1 503 Service Unavailable\\r\\n"
+                    b"Content-Length: 0\\r\\n"
+                    b"Connection: close\\r\\n"
+                    b"Cache-Control: no-store\\r\\n\\r\\n"
+                )
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._worker_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._worker_slots.release()
+
+
+class _IPv6ThreadingHTTPServer(_BoundedManagementHTTPServer):
     """Bind the IPv6 loopback with an IPv6 socket, never an IPv4 wildcard."""
     address_family = socket.AF_INET6
 
@@ -269,7 +312,7 @@ def create_server(store, token, host="127.0.0.1", port=8176):
         raise ValidationError("management interface must be loopback only")
     if not isinstance(token, str) or not 32 <= len(token) <= 4096:
         raise ValidationError("admin token must be at least 32 characters")
-    server_class = _IPv6ThreadingHTTPServer if address.version == 6 else ThreadingHTTPServer
+    server_class = _IPv6ThreadingHTTPServer if address.version == 6 else _BoundedManagementHTTPServer
     server = server_class((host, port), Handler)
     server.daemon_threads = True
     server.socket_timeout_seconds = MANAGEMENT_SOCKET_TIMEOUT_SECONDS
