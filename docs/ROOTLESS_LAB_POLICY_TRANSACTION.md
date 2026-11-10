@@ -31,3 +31,7 @@ All temporary keys, snapshot files and checks live on a private tmpfs in the dis
 - This helper is not usable on a VPS, NetBird deployment, everyday Linux host or Android/Windows/macOS client. It is not distributed as a production entry point.
 
 See [security requirements](../SECURITY.md), [release status](STATUS.md) and P0 [issue #22](https://github.com/GoreeCloud/VPN/issues/22). Never infer production readiness from a passing rootless kernel test.
+
+## November 10, 2026 — bounded private lab fixture source
+
+The optional rootless WireGuard test transaction now reads its three fixed fixture files only through a held private-directory descriptor and `O_NOFOLLOW|O_NONBLOCK` regular-file descriptors. It enforces ownership, no group/other access, single link, unchanged inode/size/timestamps, and strict ASCII with fixed caps: 64 KiB for `lab-state.json`, 256 bytes for `binding-source-id.txt`, and 64 KiB for `ports.replace.nft`. Errors remain fixed and redacted. Eight synthetic file-gate tests exercise symlinks, hardlinks, public permissions, FIFO, oversized and non-ASCII input; no nft or wg subprocess executes in these tests. The mount/namespace and exactly owned nft kernel chain checks are still mandatory on any **separately authorized isolated rootless lab**. This does not establish a production agent, signed intent, protected kernel networking or a successful live WireGuard packet test.
