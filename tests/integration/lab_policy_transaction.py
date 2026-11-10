@@ -86,6 +86,48 @@ def _read_lab_fixture(directory: Path, name: str) -> str:
             os.close(parent_fd)
 
 
+def _reject_duplicate_lab_fields(pairs):
+    record = {}
+    for key, value in pairs:
+        if key in record:
+            raise ValueError("ambiguous lab JSON field")
+        record[key] = value
+    return record
+
+
+def _reject_non_json_constant(_value):
+    raise ValueError("nonstandard lab JSON constant")
+
+
+def _load_lab_bundle(directory: Path):
+    """Validate every fixed lab fixture BEFORE even a read-only wg process.
+
+    Do not allow duplicate JSON fields, NaN/Infinity, unexpected root keys,
+    oversized peer/policy inventories or external network pools.
+    """
+    try:
+        state = json.loads(
+            _read_lab_fixture(directory, "lab-state.json"),
+            object_pairs_hook=_reject_duplicate_lab_fields,
+            parse_constant=_reject_non_json_constant,
+        )
+        if (type(state) is not dict or set(state) !=
+                {"pool", "target_peer_id", "peers", "policies"}
+                or state["pool"] != "10.77.0.0/24"
+                or type(state["target_peer_id"]) is not str
+                or not 1 <= len(state["target_peer_id"]) <= 128
+                or type(state["peers"]) is not list
+                or not 1 <= len(state["peers"]) <= 4
+                or type(state["policies"]) is not list
+                or not 1 <= len(state["policies"]) <= 4):
+            raise ValueError("unexpected lab fixture schema")
+    except (ValueError, TypeError, KeyError, RecursionError):
+        raise RuntimeError("invalid isolated lab policy fixture") from None
+    source_id = _read_lab_fixture(directory, "binding-source-id.txt")
+    expected = _read_lab_fixture(directory, "ports.replace.nft")
+    return state, source_id, expected
+
+
 def _exec(command: list[str], *, source: str | None = None) -> str:
     result = subprocess.run(
         command, input=source, text=True, capture_output=True,
@@ -131,13 +173,12 @@ def apply_lab_only(directory: Path, wg_binary: Path, *, test_force_postcheck_fai
     if not NFT.is_file() or not os.access(NFT, os.X_OK):
         raise RuntimeError("nft executable not found")
 
+    # Fail closed on ALL three owner-only fixtures before spawning wg or nft.
+    # This is a disposable lab gate, not a remotely authenticated policy.
+    state, source_id, expected = _load_lab_bundle(directory)
     # Only public WireGuard peer source-prefix data is requested. No dump,
     # private key, or arbitrary interface selector is accepted by this tool.
     observed = _exec([str(wg_binary), "show", IFACE, "allowed-ips"])
-    try:
-        state = json.loads(_read_lab_fixture(directory, "lab-state.json"))
-    except (ValueError, TypeError, RecursionError):
-        raise RuntimeError("invalid isolated lab policy fixture") from None
     snapshot = _OneSnapshot(state)
     preflight = build_offline_ingress_preflight(
         snapshot, state["target_peer_id"], observed, interface=IFACE
@@ -147,12 +188,10 @@ def apply_lab_only(directory: Path, wg_binary: Path, *, test_force_postcheck_fai
             or preflight["kernel_readback_authenticated"]
             or preflight["allowed_source_count"] != 1):
         raise RuntimeError("unexpected offline preflight result")
-    source_id = _read_lab_fixture(directory, "binding-source-id.txt")
     if preflight["source_peer_ids"] != [source_id]:
         raise RuntimeError("lab source does not match approved policy")
 
     preview = preflight["firewall_preview"]
-    expected = _read_lab_fixture(directory, "ports.replace.nft")
     transaction = preview["nftables_replace_transaction_text"]
     if transaction != expected or preview["allow_rule_count"] != 2:
         raise RuntimeError("generated kernel update does not match fixture intent")
