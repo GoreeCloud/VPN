@@ -307,6 +307,46 @@ class VPNStore:
         with self.lock:
             return self.peers(), self.policies()
 
+    def snapshot_bounded(self, *, max_peers: int, max_policies: int):
+        """Consistent SQLite read for nonapplying offline compilers only.
+
+        LIMIT n+1 enforces resource caps before JSON decoding or expanding
+        rows in Python. A SQLite read transaction also serializes the peer and
+        policy snapshots against writers using other SQLite connections.
+        This does NOT bound SQLite row bytes or authorize a live agent.
+        """
+        if (type(max_peers) is not int or type(max_policies) is not int
+                or not 1 <= max_peers <= 4096
+                or not 1 <= max_policies <= 4096):
+            raise ValidationError("invalid bounded offline snapshot limits")
+        with self.lock:
+            try:
+                self.db.execute("BEGIN")
+                peer_rows = self.db.execute(
+                    "SELECT * FROM peers ORDER BY name LIMIT ?", (max_peers + 1,)
+                ).fetchall()
+                if len(peer_rows) > max_peers:
+                    raise ValidationError("offline policy preflight exceeds bounded input limits")
+                policy_rows = self.db.execute(
+                    "SELECT * FROM policies ORDER BY created,id LIMIT ?",
+                    (max_policies + 1,),
+                ).fetchall()
+                if len(policy_rows) > max_policies:
+                    raise ValidationError("offline policy preflight exceeds bounded input limits")
+                peers = [self._peer(row) for row in peer_rows]
+                policies = [self._policy(row) for row in policy_rows]
+                self.db.execute("COMMIT")
+                return peers, policies
+            except (sqlite3.Error, ValidationError, ValueError, TypeError) as exc:
+                if self.db.in_transaction:
+                    try:
+                        self.db.execute("ROLLBACK")
+                    except sqlite3.Error:
+                        pass
+                if isinstance(exc, ValidationError):
+                    raise
+                raise ValidationError("bounded offline snapshot unavailable") from None
+
     def explain_access(self, source_id, target_id, protocol, port=None):
         from .diagnostics import evaluate_access
         peers, policies = self.snapshot()
