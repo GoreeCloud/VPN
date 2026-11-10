@@ -73,6 +73,48 @@ class OfflineAgentPreflightTests(unittest.TestCase):
                 self.assertEqual(snapshot.calls, 1)
         self.assertEqual(self.db.snapshot(), (good_peers, good_policies))
 
+    def test_sql_query_caps_reject_before_peer_policy_decoding(self):
+        # Existing fixture has three peers. LIMIT 2 is enough to detect
+        # oversize without decoding every stored peer.
+        with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+            self.db.snapshot_bounded(max_peers=1, max_policies=1)
+        self.assertFalse(self.db.db.in_transaction)
+        with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+            self.db.snapshot_bounded(max_peers=3, max_policies=1)
+        self.db.add_policy("users", "services", "tcp", [443])
+        self.db.add_policy("services", "guests", "icmp", [])
+        with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+            self.db.snapshot_bounded(max_peers=3, max_policies=1)
+        self.assertFalse(self.db.db.in_transaction)
+        # A failed snapshot never corrupts or advances the SQLite store.
+        self.assertEqual(len(self.db.peers()), 3)
+        self.assertEqual(len(self.db.policies()), 2)
+
+    def test_sql_bounded_snapshot_preserves_single_generation(self):
+        before = self.db.snapshot()
+        capped = self.db.snapshot_bounded(max_peers=3, max_policies=2)
+        self.assertEqual(capped, before)
+        self.assertFalse(self.db.db.in_transaction)
+        with self.assertRaises(ValidationError):
+            self.db.snapshot_bounded(max_peers=True, max_policies=2)
+        with self.assertRaises(ValidationError):
+            self.db.snapshot_bounded(max_peers=4097, max_policies=2)
+        with self.assertRaises(ValidationError):
+            self.db.snapshot_bounded(max_peers=3, max_policies=0)
+
+    def test_preflight_prefers_sql_limited_store_snapshot(self):
+        from unittest.mock import patch
+        with patch.object(self.db, "snapshot", side_effect=AssertionError(
+            "offline preflight must not use the unbounded SQL snapshot"
+        )):
+            report = self.compile("")
+        self.assertFalse(report["production_ready"])
+        # This forces a small SQL cap without inserting thousands of peers.
+        with patch("goreecloud_vpn.agent_preflight.MAX_PREFLIGHT_PEERS", 1):
+            with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+                self.compile("")
+        self.assertFalse(self.db.db.in_transaction)
+
     def test_small_normal_snapshot_remains_accepted(self):
         report = self.compile("")
         self.assertEqual(report["allowed_source_count"], 0)
