@@ -49,8 +49,16 @@ def build_offline_ingress_preflight(
     """
     if not isinstance(target_peer_id, str) or not target_peer_id:
         raise ValidationError("invalid target peer identifier")
-    # snapshot is one atomic read. No fresh DB reads after this point.
-    peers, policies = store.snapshot()
+    # Prefer source-side SQL limits when supported by the trusted VPNStore,
+    # instead of loading the entire DB before checking Python list lengths.
+    # Synthetic snapshot fixtures retain the legacy read contract.
+    bounded_reader = getattr(store, "snapshot_bounded", None)
+    if callable(bounded_reader):
+        peers, policies = bounded_reader(
+            max_peers=MAX_PREFLIGHT_PEERS, max_policies=MAX_PREFLIGHT_POLICIES
+        )
+    else:
+        peers, policies = store.snapshot()
     if (type(peers) is not list or type(policies) is not list
             or len(peers) > MAX_PREFLIGHT_PEERS
             or len(policies) > MAX_PREFLIGHT_POLICIES
