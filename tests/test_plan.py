@@ -74,6 +74,19 @@ class PeerPlanningTests(unittest.TestCase):
                 build_peer_plan(self.store, self.client["id"])
         self.assertFalse(self.store.db.in_transaction)
 
+    def test_plan_refuses_nested_sql_snapshot_without_rolling_back_caller(self):
+        self.store.approve_peer(self.client["id"])
+        self.store.approve_peer(self.server["id"])
+        self.store.db.execute("BEGIN")
+        try:
+            with self.assertRaises(ValidationError):
+                build_peer_plan(self.store, self.client["id"])
+            self.assertTrue(self.store.db.in_transaction)
+        finally:
+            self.store.db.execute("ROLLBACK")
+        self.assertFalse(self.store.db.in_transaction)
+        self.assertFalse(build_peer_plan(self.store, self.client["id"])["peers"])
+
     def test_legacy_atomic_snapshot_still_enforces_resource_caps(self):
         class Synthetic:
             def __init__(self, peers, policies):
