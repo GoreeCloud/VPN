@@ -12,6 +12,11 @@ from .core import VPNStore, ValidationError, RFC1918, check_endpoint, check_key
 
 PLAN_SCHEMA = "goreecloud.vpn.peer-plan.v1"
 MAX_RENDERED_PEERS = 4096  # bounded offline preview, not tunnel capacity
+# Align with the separately tested offline ingress preflight: no unbounded
+# full-table reads and no quadratic peer/policy explosion in the CLI/API.
+MAX_PLAN_PEERS = 4096
+MAX_PLAN_POLICIES = 4096
+MAX_PLAN_EVALUATIONS = 1_000_000
 
 
 def build_peer_plan(store: VPNStore, local_peer_id: str) -> dict:
@@ -24,12 +29,27 @@ def build_peer_plan(store: VPNStore, local_peer_id: str) -> dict:
     """
     if not isinstance(local_peer_id, str):
         raise ValidationError("local peer id must be a string")
-    peers = {p["id"]: p for p in store.peers() if p["status"] == "approved"}
+    # Separate peers()/policies() reads can straddle concurrent revocation
+    # and policy edits, falsely advertising a flow no longer permitted by one
+    # consistent generation. Prefer SQL LIMIT-backed atomic snapshots.
+    bounded_reader = getattr(store, "snapshot_bounded", None)
+    if callable(bounded_reader):
+        peer_rows, policies = bounded_reader(
+            max_peers=MAX_PLAN_PEERS, max_policies=MAX_PLAN_POLICIES,
+        )
+    else:
+        # Synthetic source-only stores may implement just the older atomic
+        # snapshot() contract. Never fall back to separate reads.
+        peer_rows, policies = store.snapshot()
+    if (type(peer_rows) is not list or type(policies) is not list
+            or len(peer_rows) > MAX_PLAN_PEERS
+            or len(policies) > MAX_PLAN_POLICIES
+            or len(peer_rows) * len(policies) > MAX_PLAN_EVALUATIONS):
+        raise ValidationError("offline peer plan exceeds bounded input limits")
+    peers = {p["id"]: p for p in peer_rows if p["status"] == "approved"}
     local = peers.get(local_peer_id)
     if local is None:
         raise ValidationError("local peer is absent or not approved")
-
-    policies = store.policies()
     targets = []
     for peer in peers.values():
         if peer["id"] == local_peer_id:
