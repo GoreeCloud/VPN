@@ -103,6 +103,43 @@ class OfflineAgentPreflightTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.db.snapshot_bounded(max_peers=3, max_policies=0)
 
+    def test_nested_snapshot_does_not_rollback_caller_owned_sqlite_work(self):
+        # Only a disposable local SQLite store is used. The snapshot API
+        # must refuse an existing transaction without closing it or erasing
+        # an unrelated pending update owned by the caller.
+        with self.db.lock:
+            self.db.db.execute("BEGIN IMMEDIATE")
+            try:
+                self.db.db.execute(
+                    "UPDATE peers SET status='revoked' WHERE id=?",
+                    (self.source["id"],),
+                )
+                with self.assertRaisesRegex(
+                    ValidationError, "requires an idle connection"
+                ):
+                    self.db.snapshot_bounded(max_peers=10, max_policies=10)
+                self.assertTrue(self.db.db.in_transaction)
+                row = self.db.db.execute(
+                    "SELECT status FROM peers WHERE id=?", (self.source["id"],)
+                ).fetchone()
+                self.assertEqual(row[0], "revoked",
+                    "nested snapshot must not undo caller's pending work")
+                with self.assertRaisesRegex(
+                    ValidationError, "requires an idle connection"
+                ):
+                    self.compile("")
+                self.assertTrue(self.db.db.in_transaction)
+                self.db.db.execute("ROLLBACK")
+            finally:
+                if self.db.db.in_transaction:
+                    self.db.db.execute("ROLLBACK")
+        self.assertEqual(
+            self.db.db.execute(
+                "SELECT status FROM peers WHERE id=?", (self.source["id"],)
+            ).fetchone()[0], "approved",
+            "only the caller's own rollback should undo its staged change"
+        )
+
     def test_preflight_prefers_sql_limited_store_snapshot(self):
         from unittest.mock import patch
         with patch.object(self.db, "snapshot", side_effect=AssertionError(
