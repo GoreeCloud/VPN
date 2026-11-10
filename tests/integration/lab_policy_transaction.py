@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import stat
 
 from goreecloud_vpn.agent_preflight import build_offline_ingress_preflight
 from goreecloud_vpn.firewall_preview import build_nft_ingress_preview
@@ -48,7 +49,7 @@ def _read_lab_fixture(directory: Path, name: str) -> str:
             | getattr(os, "O_CLOEXEC", 0),
         )
         parent = os.fstat(parent_fd)
-        if (not os.path.isdir(directory) or parent.st_uid != os.geteuid()
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid()
                 or parent.st_mode & 0o077):
             raise RuntimeError("unsafe isolated lab fixture directory")
         fd = os.open(
@@ -56,7 +57,6 @@ def _read_lab_fixture(directory: Path, name: str) -> str:
             | getattr(os, "O_CLOEXEC", 0),
             dir_fd=parent_fd,
         )
-        import stat
         before = os.fstat(fd)
         limit = LAB_FIXTURE_LIMITS[name]
         if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
