@@ -34,6 +34,50 @@ class OfflineAgentPreflightTests(unittest.TestCase):
             self.db, self.target["id"], readback, interface="wgB"
         )
 
+    def test_malformed_or_unbounded_snapshot_fails_before_compiling(self):
+        from goreecloud_vpn.agent_preflight import (
+            MAX_PREFLIGHT_PEERS, MAX_PREFLIGHT_POLICIES,
+            MAX_POLICY_PEER_EVALUATIONS,
+        )
+
+        class SyntheticSnapshot:
+            network = self.db.network
+
+            def __init__(self, peers, policies):
+                self.peers = peers
+                self.policies = policies
+                self.calls = 0
+
+            def snapshot(self):
+                self.calls += 1
+                return self.peers, self.policies
+
+        good_peers, good_policies = self.db.snapshot()
+        large_peer_count = MAX_PREFLIGHT_PEERS + 1
+        large_rule_count = MAX_PREFLIGHT_POLICIES + 1
+        both = int(MAX_POLICY_PEER_EVALUATIONS ** 0.5) + 1
+        invalid = [
+            (tuple(good_peers), good_policies),
+            (good_peers, tuple(good_policies)),
+            (good_peers[:1] * large_peer_count, good_policies),
+            (good_peers, [{"synthetic": True}] * large_rule_count),
+            (good_peers[:1] * both, [{"synthetic": True}] * both),
+        ]
+        for peers, policies in invalid:
+            with self.subTest(peer_count=len(peers), rule_count=len(policies)):
+                snapshot = SyntheticSnapshot(peers, policies)
+                with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+                    build_offline_ingress_preflight(
+                        snapshot, self.target["id"], "", interface="wgB"
+                    )
+                self.assertEqual(snapshot.calls, 1)
+        self.assertEqual(self.db.snapshot(), (good_peers, good_policies))
+
+    def test_small_normal_snapshot_remains_accepted(self):
+        report = self.compile("")
+        self.assertEqual(report["allowed_source_count"], 0)
+        self.assertFalse(report["production_ready"])
+
     def test_policy_scoped_exact_match_is_unapplied(self):
         self.db.add_policy("users", "services", "tcp", [443])
         before = self.db.snapshot()

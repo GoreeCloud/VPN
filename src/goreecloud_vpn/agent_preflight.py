@@ -18,6 +18,11 @@ from .identity_binding import build_key_address_binding_intent
 from .kernel_readback import compare_allowedips_to_intent
 
 SCHEMA = "goreecloud.vpn.offline-ingress-preflight.v1"
+# Keep policy-to-peer evaluation bounded before running preview compilers.
+# These are offline input caps, NOT an assertion of deployable fleet scale.
+MAX_PREFLIGHT_PEERS = 4096
+MAX_PREFLIGHT_POLICIES = 4096
+MAX_POLICY_PEER_EVALUATIONS = 1_000_000
 
 
 class _FrozenSnapshot:
@@ -46,6 +51,11 @@ def build_offline_ingress_preflight(
         raise ValidationError("invalid target peer identifier")
     # snapshot is one atomic read. No fresh DB reads after this point.
     peers, policies = store.snapshot()
+    if (type(peers) is not list or type(policies) is not list
+            or len(peers) > MAX_PREFLIGHT_PEERS
+            or len(policies) > MAX_PREFLIGHT_POLICIES
+            or len(peers) * len(policies) > MAX_POLICY_PEER_EVALUATIONS):
+        raise ValidationError("offline policy preflight exceeds bounded input limits")
     frozen = _FrozenSnapshot(store.network, peers, policies)
     manifest = build_key_address_binding_intent(frozen)
     firewall = build_nft_ingress_preview(
