@@ -320,8 +320,16 @@ class VPNStore:
                 or not 1 <= max_policies <= 4096):
             raise ValidationError("invalid bounded offline snapshot limits")
         with self.lock:
+            # A snapshot is read-only and must never assume ownership of an
+            # existing transaction started by another caller of this store.
+            # Otherwise a nested BEGIN error could roll back that caller's
+            # pending writes when handled below.
+            if self.db.in_transaction:
+                raise ValidationError("bounded snapshot requires an idle connection")
+            started = False
             try:
                 self.db.execute("BEGIN")
+                started = True
                 peer_rows = self.db.execute(
                     "SELECT * FROM peers ORDER BY name LIMIT ?", (max_peers + 1,)
                 ).fetchall()
@@ -338,7 +346,7 @@ class VPNStore:
                 self.db.execute("COMMIT")
                 return peers, policies
             except (sqlite3.Error, ValidationError, ValueError, TypeError) as exc:
-                if self.db.in_transaction:
+                if started and self.db.in_transaction:
                     try:
                         self.db.execute("ROLLBACK")
                     except sqlite3.Error:
