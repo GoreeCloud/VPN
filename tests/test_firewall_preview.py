@@ -3,6 +3,7 @@ import base64
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from goreecloud_vpn.core import VPNStore, ValidationError
 from goreecloud_vpn.firewall_preview import build_nft_ingress_preview, SCHEMA
@@ -26,6 +27,69 @@ class FirewallPreviewTests(unittest.TestCase):
 
     def approve(self, peer):
         self.assertTrue(self.store.approve_peer(peer["id"]))
+
+    def test_prefers_bounded_sql_snapshot_without_fallback_unbounded_reads(self):
+        self.approve(self.sender)
+        self.approve(self.server)
+        with patch.object(self.store, "snapshot", side_effect=AssertionError(
+            "direct preview must not load unbounded SQL rows"
+        )), patch.object(self.store, "peers", side_effect=AssertionError(
+            "preview must not independently read peers"
+        )), patch.object(self.store, "policies", side_effect=AssertionError(
+            "preview must not independently read policies"
+        )):
+            report = build_nft_ingress_preview(self.store, self.server["id"])
+        self.assertEqual(report["allow_rule_count"], 0)
+        self.assertFalse(self.store.db.in_transaction)
+        with patch("goreecloud_vpn.firewall_preview.MAX_PREVIEW_PEERS", 1):
+            with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+                build_nft_ingress_preview(self.store, self.server["id"])
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_preview_rejects_caller_owned_sql_transaction_without_rollback(self):
+        self.approve(self.sender)
+        self.approve(self.server)
+        self.store.db.execute("BEGIN")
+        try:
+            with self.assertRaises(ValidationError):
+                build_nft_ingress_preview(self.store, self.server["id"])
+            self.assertTrue(self.store.db.in_transaction)
+        finally:
+            self.store.db.execute("ROLLBACK")
+        self.assertFalse(self.store.db.in_transaction)
+        self.assertEqual(
+            build_nft_ingress_preview(self.store, self.server["id"])["allow_rule_count"], 0,
+        )
+
+    def test_synthetic_frozen_snapshot_is_bounded_before_evaluation(self):
+        from goreecloud_vpn.firewall_preview import (
+            MAX_PREVIEW_PEERS, MAX_PREVIEW_POLICIES, MAX_PREVIEW_EVALUATIONS,
+        )
+        class Snapshot:
+            network = self.store.network
+            def __init__(self, peers, rules):
+                self.peers = peers
+                self.rules = rules
+                self.calls = 0
+            def snapshot(self):
+                self.calls += 1
+                return self.peers, self.rules
+
+        peers, rules = self.store.snapshot()
+        both = int(MAX_PREVIEW_EVALUATIONS ** 0.5) + 1
+        cases = [
+            (tuple(peers), rules),
+            (peers, tuple(rules)),
+            (peers[:1] * (MAX_PREVIEW_PEERS + 1), rules),
+            (peers, [None] * (MAX_PREVIEW_POLICIES + 1)),
+            (peers[:1] * both, [None] * both),
+        ]
+        for candidate_peers, candidate_rules in cases:
+            with self.subTest(peers=len(candidate_peers), policies=len(candidate_rules)):
+                source = Snapshot(candidate_peers, candidate_rules)
+                with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+                    build_nft_ingress_preview(source, self.server["id"])
+                self.assertEqual(source.calls, 1)
 
     def test_pending_target_rejected_even_with_policy(self):
         self.store.add_policy("users", "services", "tcp", [443])
