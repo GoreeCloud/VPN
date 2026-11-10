@@ -95,6 +95,29 @@ class ManagementWorkerAdmissionTests(unittest.TestCase):
             server = create_server(store, "L" * 48, "127.0.0.1", 0)
             worker = threading.Thread(target=server.serve_forever, daemon=True)
             stalled = []
+            # Hold the actual server worker threads at a test-owned barrier
+            # *after* the admission semaphore is acquired. Relying on
+            # incomplete HTTP header timeouts to keep 16 slots occupied is
+            # flaky under concurrent CI builds: earlier workers can time out
+            # before the last client is accepted.
+            admitted = 0
+            admitted_lock = threading.Lock()
+            all_admitted = threading.Event()
+            release_workers = threading.Event()
+            actual_worker = server.process_request_thread
+
+            def held_worker(request, client_address):
+                nonlocal admitted
+                with admitted_lock:
+                    admitted += 1
+                    if admitted == MAX_MANAGEMENT_CONCURRENT_CONNECTIONS:
+                        all_admitted.set()
+                # Bounded even if this test fails: finally releases all
+                # workers before shutting down the ephemeral listener.
+                release_workers.wait(timeout=8)
+                actual_worker(request, client_address)
+
+            server.process_request_thread = held_worker
             worker.start()
             server.socket_timeout_seconds = 1.5
             try:
@@ -102,9 +125,10 @@ class ManagementWorkerAdmissionTests(unittest.TestCase):
                     sock = socket.create_connection(("127.0.0.1", server.server_port), timeout=2)
                     stalled.append(sock)
                     sock.sendall(b"GET /healthz HTTP/1.1\r\nHost:")
-                deadline = time.monotonic() + 3
-                while server._worker_slots._value != 0 and time.monotonic() < deadline:
-                    time.sleep(0.01)
+                self.assertTrue(
+                    all_admitted.wait(timeout=6),
+                    "all held workers must start before the overflow check"
+                )
                 self.assertEqual(server._worker_slots._value, 0)
                 with socket.create_connection(("127.0.0.1", server.server_port), timeout=2) as extra:
                     extra.settimeout(2)
@@ -114,6 +138,9 @@ class ManagementWorkerAdmissionTests(unittest.TestCase):
                                      b"HTTP/1.1 503 Service Unavailable")
                     self.assertIn(b"\r\nConnection: close\r\n", response)
                     self.assertTrue(response.endswith(b"\r\n\r\n"))
+                # Only after an extra client was denied do existing
+                # workers proceed into the HTTP parser and release slots.
+                release_workers.set()
                 for sock in stalled:
                     sock.close()
                 stalled.clear()
@@ -130,6 +157,7 @@ class ManagementWorkerAdmissionTests(unittest.TestCase):
                 finally:
                     conn.close()
             finally:
+                release_workers.set()
                 for sock in stalled:
                     sock.close()
                 server.shutdown()
