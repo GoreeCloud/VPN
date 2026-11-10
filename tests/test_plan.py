@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from goreecloud_vpn.core import VPNStore, ValidationError
 from goreecloud_vpn.plan import build_peer_plan, render_wireguard_peer_fragments, PLAN_SCHEMA
@@ -26,6 +27,94 @@ class PeerPlanningTests(unittest.TestCase):
     def tearDown(self):
         self.store.close()
         self.temp.cleanup()
+
+    def test_peer_plan_uses_one_consistent_snapshot_not_separate_reads(self):
+        self.store.add_policy("users", "services", "tcp", [443])
+        self.store.approve_peer(self.client["id"])
+        self.store.approve_peer(self.server["id"])
+        good_peers, _ = self.store.snapshot()
+
+        class MixedGenerationStore:
+            # These separate reads previously advertised an authorized
+            # adjacency after the source peer was already revoked.
+            def peers(self):
+                return good_peers
+
+            def policies(self):
+                return [{"source": "users", "target": "services",
+                         "protocol": "tcp", "ports": [443]}]
+
+            def snapshot(self):
+                current = deepcopy(good_peers)
+                for peer in current:
+                    if peer["id"] == self_server_id:
+                        peer["status"] = "revoked"
+                return current, []
+
+        self_server_id = self.server["id"]
+        plan = build_peer_plan(MixedGenerationStore(), self.client["id"])
+        self.assertEqual(plan["peers"], [])
+        self.assertFalse(plan["wireguard_tunnels_active"])
+
+    def test_real_store_uses_bounded_sql_snapshot_not_separate_reads(self):
+        self.store.approve_peer(self.client["id"])
+        self.store.approve_peer(self.server["id"])
+        with patch.object(self.store, "snapshot", side_effect=AssertionError(
+            "offline plan must use SQL-bounded atomic source"
+        )), patch.object(self.store, "peers", side_effect=AssertionError(
+            "offline plan must never separately read peers"
+        )), patch.object(self.store, "policies", side_effect=AssertionError(
+            "offline plan must never separately read policies"
+        )):
+            plan = build_peer_plan(self.store, self.client["id"])
+        self.assertEqual(plan["peers"], [])
+        self.assertFalse(self.store.db.in_transaction)
+        with patch("goreecloud_vpn.plan.MAX_PLAN_PEERS", 1):
+            with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+                build_peer_plan(self.store, self.client["id"])
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_plan_refuses_nested_sql_snapshot_without_rolling_back_caller(self):
+        self.store.approve_peer(self.client["id"])
+        self.store.approve_peer(self.server["id"])
+        self.store.db.execute("BEGIN")
+        try:
+            with self.assertRaises(ValidationError):
+                build_peer_plan(self.store, self.client["id"])
+            self.assertTrue(self.store.db.in_transaction)
+        finally:
+            self.store.db.execute("ROLLBACK")
+        self.assertFalse(self.store.db.in_transaction)
+        self.assertFalse(build_peer_plan(self.store, self.client["id"])["peers"])
+
+    def test_legacy_atomic_snapshot_still_enforces_resource_caps(self):
+        class Synthetic:
+            def __init__(self, peers, policies):
+                self._peers, self._policies = peers, policies
+                self.calls = 0
+
+            def snapshot(self):
+                self.calls += 1
+                return self._peers, self._policies
+
+        good_peers, good_policies = self.store.snapshot()
+        from goreecloud_vpn.plan import (
+            MAX_PLAN_PEERS, MAX_PLAN_POLICIES, MAX_PLAN_EVALUATIONS,
+        )
+        both = int(MAX_PLAN_EVALUATIONS ** 0.5) + 1
+        cases = [
+            (tuple(good_peers), good_policies),
+            (good_peers, tuple(good_policies)),
+            (good_peers[:1] * (MAX_PLAN_PEERS + 1), good_policies),
+            (good_peers, [None] * (MAX_PLAN_POLICIES + 1)),
+            (good_peers[:1] * both, [None] * both),
+        ]
+        for peers, policies in cases:
+            with self.subTest(peer_count=len(peers), policy_count=len(policies)):
+                source = Synthetic(peers, policies)
+                with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+                    build_peer_plan(source, self.client["id"])
+                self.assertEqual(source.calls, 1)
 
     def test_unapproved_local_peer_is_rejected(self):
         with self.assertRaises(ValidationError):
