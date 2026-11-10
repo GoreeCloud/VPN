@@ -14,6 +14,11 @@ from .core import RFC1918, VPNStore, ValidationError, check_group
 SCHEMA = "goreecloud.vpn.nft-ingress-preview.v1"
 _INTERFACE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,14}$")
 _PROTOCOLS = {"tcp", "udp", "icmp"}
+# Source-only admission limits. These match the related offline ingress
+# preflight and peer-plan work budgets, not the capacity of a real VPN agent.
+MAX_PREVIEW_PEERS = 4096
+MAX_PREVIEW_POLICIES = 4096
+MAX_PREVIEW_EVALUATIONS = 1_000_000
 
 
 def _address(value: object, pool) -> ipaddress.IPv4Address:
@@ -65,7 +70,21 @@ def build_nft_ingress_preview(
     if not isinstance(interface, str) or not _INTERFACE.fullmatch(interface):
         raise ValidationError("invalid kernel interface name")
 
-    peers, policies = store.snapshot()
+    bounded_reader = getattr(store, "snapshot_bounded", None)
+    if callable(bounded_reader):
+        peers, policies = bounded_reader(
+            max_peers=MAX_PREVIEW_PEERS, max_policies=MAX_PREVIEW_POLICIES,
+        )
+    else:
+        # The synthetic frozen-snapshot adapter used by the offline agent
+        # preflight has no SQLite connection. It must still supply one
+        # consistent peer/policy generation and pass the Python-side limits.
+        peers, policies = store.snapshot()
+    if (type(peers) is not list or type(policies) is not list
+            or len(peers) > MAX_PREVIEW_PEERS
+            or len(policies) > MAX_PREVIEW_POLICIES
+            or len(peers) * len(policies) > MAX_PREVIEW_EVALUATIONS):
+        raise ValidationError("offline firewall preview exceeds bounded input limits")
     eligible = []
     for peer in peers:
         if peer["status"] != "approved":
