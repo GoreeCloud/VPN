@@ -17,6 +17,7 @@ from uuid import uuid4
 LABEL = re.compile(r"^[a-z](?:[a-z0-9-]{0,30}[a-z0-9])?$")
 GROUP = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 ENDPOINT = re.compile(r"^(\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9.-]+):([0-9]{1,5})$")
+DNS_HOST_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 RFC1918 = tuple(ipaddress.ip_network(cidr) for cidr in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
 ))
@@ -62,11 +63,25 @@ def check_endpoint(value):
     m = ENDPOINT.fullmatch(value)
     if not m or not 1 <= int(m.group(2)) <= 65535:
         raise ValidationError("invalid endpoint: expected host:port or [IPv6]:port")
-    if m.group(1).startswith("["):
+    host = m.group(1)
+    if host.startswith("["):
         try:
-            ipaddress.IPv6Address(m.group(1)[1:-1])
+            ipaddress.IPv6Address(host[1:-1])
         except ValueError as exc:
             raise ValidationError("invalid IPv6 endpoint") from exc
+    else:
+        # A management endpoint is hostname syntax, not an instruction to
+        # connect. Reject malformed/ambiguous numeric IPv4 spellings which
+        # permissive DNS-name matching otherwise misclassifies as hostnames.
+        try:
+            ipaddress.IPv4Address(host)
+        except ValueError as exc:
+            if all(character in "0123456789." for character in host):
+                raise ValidationError("invalid IPv4 endpoint") from exc
+            if (len(host) > 253 or not all(
+                DNS_HOST_LABEL.fullmatch(label) for label in host.split(".")
+            )):
+                raise ValidationError("invalid DNS endpoint hostname") from exc
     return value
 
 
