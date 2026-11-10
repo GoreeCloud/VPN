@@ -1,5 +1,7 @@
 import base64
 import json
+import sqlite3
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import threading
@@ -49,6 +51,22 @@ class ManagementHTTPTests(unittest.TestCase):
         self.assertEqual(self.api("/healthz", authenticated=False)[0], 200)
         self.assertEqual(self.api("/api/v1/peers", authenticated=False)[0], 401)
         self.assertEqual(self.api("/api/v1/peers")[0], 200)
+
+    def test_management_readiness_is_authenticated_and_not_a_tunnel_probe(self):
+        self.assertEqual(self.api("/api/v1/readiness", authenticated=False)[0], 401)
+        code, body = self.api("/api/v1/readiness")
+        self.assertEqual(code, 200)
+        self.assertEqual(body, {"management_store": "queryable", "data_plane_enforced": False})
+
+    def test_management_readiness_returns_503_on_sqlite_failure(self):
+        class UnavailableDB:
+            def execute(self, _query):
+                raise sqlite3.OperationalError("synthetic storage failure")
+
+        with patch.object(self.store, "db", UnavailableDB()):
+            code, body = self.api("/api/v1/readiness")
+        self.assertEqual(code, 503)
+        self.assertEqual(body, {"management_store": "unavailable", "data_plane_enforced": False})
 
     def test_enrollment_and_policy_preview(self):
         self.assertEqual(self.api("/api/v1/peers", "POST", {"name": "missing"})[0], 400)

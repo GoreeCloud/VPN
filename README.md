@@ -84,6 +84,7 @@ To create a directional management policy allowing TCP/22 from group `users` to 
 | POST | /api/v1/access/check | Management-only directional policy decision |
 | GET | /api/v1/dns | Preview A records; DNS server not active |
 | GET | /api/v1/status | Management counts, group inventory and address-pool usage (not live VPN health) |
+| GET | /api/v1/readiness | Authenticated read-only checks of management SQLite table queryability (200) or unavailable storage (503); never tunnel or firewall readiness |
 | GET | /api/v1/policies/diagnostics | Eligible peer-pair counts, inactive-rule warnings and exact duplicate sets |
 | POST | /api/v1/access/explain | Decision reason and matching policy IDs; no enforcement |
 | POST | /api/v1/access/simulate | Evaluate 1–100 access queries against current management state |
