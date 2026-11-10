@@ -32,6 +32,12 @@ The preflight now rejects non-list peer or policy snapshots, more than 4,096 pee
 
 Failure returns `ValidationError` without a candidate bundle and does not invoke network, nftables or WireGuard commands. Synthetic tests verify oversized peer inventories, oversized policies, combinations that exceed the evaluation budget, non-list snapshots and normal small valid snapshots. The limits govern **offline alpha acceptance only**, not an approved production fleet capacity. All existing trust, identity, rollback and kernel enforcement gates remain open.
 
+## November 10, 2026 — preserve caller-owned SQL transactions
+
+The bounded offline snapshot now first requires the shared SQLite connection to be idle. It refuses a nested request with a fixed `ValidationError` instead of accidentally rolling back the caller's existing transaction when SQLite rejects a second `BEGIN`. The snapshot's error handler also rolls back only a transaction that this specific snapshot successfully started. A disposable regression test stages a peer change in a caller-owned transaction, verifies both direct bounded reads and the preflight refuse the nested call, and proves the pending update remains until the caller performs its own rollback.
+
+This check is not a substitute for a dedicated read-only SQLite connection, cross-process database protection, a signed policy transaction, crash-safe firewall application, or production acceptance.
+
 ## November 10, 2026 — bounded SQLite source snapshot
 
 Production `VPNStore` now implements an explicit `snapshot_bounded(max_peers=..., max_policies=...)` read for this **offline, unapplied** preflight. Each fixed-order SQL query uses `LIMIT n+1`, refuses a count overflow **before decoding all rows into Python objects**, and reads peers and policies inside the same SQLite read transaction under the store lock. The preflight selects this bounded method when it exists; synthetic snapshot adapters retain their previous single-call read interface and still face post-read size checks.
