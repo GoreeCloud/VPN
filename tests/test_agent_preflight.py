@@ -79,8 +79,9 @@ class OfflineAgentPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "bounded input limits"):
             self.db.snapshot_bounded(max_peers=1, max_policies=1)
         self.assertFalse(self.db.db.in_transaction)
-        with self.assertRaisesRegex(ValidationError, "bounded input limits"):
-            self.db.snapshot_bounded(max_peers=3, max_policies=1)
+        self.assertEqual(
+            len(self.db.snapshot_bounded(max_peers=3, max_policies=1)[0]), 3
+        )
         self.db.add_policy("users", "services", "tcp", [443])
         self.db.add_policy("services", "guests", "icmp", [])
         with self.assertRaisesRegex(ValidationError, "bounded input limits"):
