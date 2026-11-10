@@ -11,6 +11,7 @@ import ipaddress
 from .core import VPNStore, ValidationError, RFC1918, check_endpoint, check_key
 
 PLAN_SCHEMA = "goreecloud.vpn.peer-plan.v1"
+MAX_RENDERED_PEERS = 4096  # bounded offline preview, not tunnel capacity
 
 
 def build_peer_plan(store: VPNStore, local_peer_id: str) -> dict:
@@ -73,8 +74,15 @@ def render_wireguard_peer_fragments(plan: dict) -> str:
     if not isinstance(plan, dict) or plan.get("schema") != PLAN_SCHEMA:
         raise ValidationError("invalid peer plan schema")
     peers = plan.get("peers")
-    if not isinstance(peers, list):
-        raise ValidationError("invalid peer plan")
+    if not isinstance(peers, list) or len(peers) > MAX_RENDERED_PEERS:
+        raise ValidationError("invalid or oversized peer plan")
+    # Never turn a forged enabled/enforced runtime claim into an apparently
+    # ordinary approved preview. The management foundation cannot attest
+    # active WireGuard or packet-filter state.
+    if (plan.get("wireguard_tunnels_active") is not False
+            or plan.get("data_plane_enforced") is not False):
+        raise ValidationError("peer plan must explicitly remain unenforced")
+    seen_ids, seen_keys, seen_addresses = set(), set(), set()
     out = [
         "# GoreeCloud VPN: OFFLINE REVIEW ONLY; NOT AN ENFORCED VPN CONFIG",
         "# Do not apply without separately verified WireGuard identity and firewall controls.",
@@ -82,6 +90,9 @@ def render_wireguard_peer_fragments(plan: dict) -> str:
     for peer in peers:
         if not isinstance(peer, dict) or not isinstance(peer.get("allowed_ips"), list):
             raise ValidationError("invalid peer plan entry")
+        peer_id = peer.get("peer_id")
+        if not isinstance(peer_id, str) or not peer_id or peer_id in seen_ids:
+            raise ValidationError("duplicate or invalid peer identity")
         prefixes = peer["allowed_ips"]
         if len(prefixes) != 1:
             raise ValidationError("peer must have exactly one private host prefix")
@@ -92,6 +103,11 @@ def render_wireguard_peer_fragments(plan: dict) -> str:
         if network.version != 4 or network.prefixlen != 32 or not any(network.subnet_of(r) for r in RFC1918):
             raise ValidationError("only private IPv4 /32 peer prefixes are accepted")
         key = check_key(peer.get("public_key"))
+        if key in seen_keys or str(network) in seen_addresses:
+            raise ValidationError("duplicate peer key or private host prefix")
+        seen_ids.add(peer_id)
+        seen_keys.add(key)
+        seen_addresses.add(str(network))
         endpoint = check_endpoint(peer.get("endpoint"))
         out.extend(("", "[Peer]", "PublicKey = " + key, "AllowedIPs = " + str(network)))
         if endpoint:
