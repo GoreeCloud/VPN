@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import stat
 
 from goreecloud_vpn.agent_preflight import build_offline_ingress_preflight
 from goreecloud_vpn.firewall_preview import build_nft_ingress_preview
@@ -20,6 +21,69 @@ from nft_exact_readback import check_exact_lab_chain
 NFT = Path("/usr/sbin/nft")
 IFACE = "wgB"
 TABLE = "goreecloud_vpn_preview"
+# Limits apply only to disposable test inputs, not production VPN states.
+LAB_FIXTURE_LIMITS = {
+    "lab-state.json": 65536,
+    "binding-source-id.txt": 256,
+    "ports.replace.nft": 65536,
+}
+
+
+def _read_lab_fixture(directory: Path, name: str) -> str:
+    """Open only fixed, owner-private lab fixtures and return bounded ASCII.
+
+    A held O_NOFOLLOW directory FD pins the source; a FIFO or device cannot
+    block the test runner. No file path/content/exception is ever reported.
+    This pure reader does not call a network, nft or WireGuard binary.
+    """
+    if name not in LAB_FIXTURE_LIMITS:
+        raise RuntimeError("unrecognized isolated lab fixture")
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise RuntimeError("private lab file operations unavailable")
+    parent_fd = None
+    fd = None
+    try:
+        parent_fd = os.open(
+            directory,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
+            | getattr(os, "O_CLOEXEC", 0),
+        )
+        parent = os.fstat(parent_fd)
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid()
+                or parent.st_mode & 0o077):
+            raise RuntimeError("unsafe isolated lab fixture directory")
+        fd = os.open(
+            name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            | getattr(os, "O_CLOEXEC", 0),
+            dir_fd=parent_fd,
+        )
+        before = os.fstat(fd)
+        limit = LAB_FIXTURE_LIMITS[name]
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+                or before.st_mode & 0o077 or before.st_nlink != 1
+                or not 0 < before.st_size <= limit):
+            raise RuntimeError("unsafe isolated lab fixture file")
+        data = bytearray()
+        while len(data) <= limit:
+            chunk = os.read(fd, min(4096, limit + 1 - len(data)))
+            if not chunk:
+                break
+            data.extend(chunk)
+        after = os.fstat(fd)
+        if (len(data) != before.st_size or len(data) > limit
+                or (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino)
+                or before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+                or before.st_ctime_ns != after.st_ctime_ns):
+            raise RuntimeError("unstable isolated lab fixture file")
+        return data.decode("ascii")
+    except (OSError, UnicodeError, ValueError):
+        raise RuntimeError("isolated lab fixture unreadable") from None
+    finally:
+        if fd is not None:
+            os.close(fd)
+        if parent_fd is not None:
+            os.close(parent_fd)
 
 
 def _exec(command: list[str], *, source: str | None = None) -> str:
@@ -70,10 +134,10 @@ def apply_lab_only(directory: Path, wg_binary: Path, *, test_force_postcheck_fai
     # Only public WireGuard peer source-prefix data is requested. No dump,
     # private key, or arbitrary interface selector is accepted by this tool.
     observed = _exec([str(wg_binary), "show", IFACE, "allowed-ips"])
-    state_path = directory / "lab-state.json"
-    if state_path.is_symlink():
-        raise RuntimeError("lab snapshot cannot be a symlink")
-    state = json.loads(state_path.read_text(encoding="ascii"))
+    try:
+        state = json.loads(_read_lab_fixture(directory, "lab-state.json"))
+    except (ValueError, TypeError, RecursionError):
+        raise RuntimeError("invalid isolated lab policy fixture") from None
     snapshot = _OneSnapshot(state)
     preflight = build_offline_ingress_preflight(
         snapshot, state["target_peer_id"], observed, interface=IFACE
@@ -83,12 +147,12 @@ def apply_lab_only(directory: Path, wg_binary: Path, *, test_force_postcheck_fai
             or preflight["kernel_readback_authenticated"]
             or preflight["allowed_source_count"] != 1):
         raise RuntimeError("unexpected offline preflight result")
-    source_id = (directory / "binding-source-id.txt").read_text(encoding="ascii")
+    source_id = _read_lab_fixture(directory, "binding-source-id.txt")
     if preflight["source_peer_ids"] != [source_id]:
         raise RuntimeError("lab source does not match approved policy")
 
     preview = preflight["firewall_preview"]
-    expected = (directory / "ports.replace.nft").read_text(encoding="ascii")
+    expected = _read_lab_fixture(directory, "ports.replace.nft")
     transaction = preview["nftables_replace_transaction_text"]
     if transaction != expected or preview["allow_rule_count"] != 2:
         raise RuntimeError("generated kernel update does not match fixture intent")
