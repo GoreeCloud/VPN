@@ -73,6 +73,43 @@ class OfflineAgentPreflightTests(unittest.TestCase):
                 self.assertEqual(snapshot.calls, 1)
         self.assertEqual(self.db.snapshot(), (good_peers, good_policies))
 
+    def test_bounded_policy_scan_uses_created_id_index_without_temp_sort(self):
+        self.db.add_policy("users", "services", "tcp", [443])
+        self.db.add_policy("services", "guests", "udp", [53])
+        detail = " ".join(
+            row[3] for row in self.db.db.execute(
+                "EXPLAIN QUERY PLAN "
+                "SELECT * FROM policies ORDER BY created,id LIMIT ?", (3,)
+            )
+        ).upper()
+        self.assertIn("IDX_VPN_POLICIES_CREATED_ID", detail)
+        self.assertNotIn("USE TEMP B-TREE", detail)
+        peers, policies = self.db.snapshot_bounded(
+            max_peers=4, max_policies=4
+        )
+        self.assertEqual(len(peers), 3)
+        self.assertEqual(
+            [(p["created"], p["id"]) for p in policies],
+            sorted((p["created"], p["id"]) for p in policies),
+        )
+
+    def test_existing_database_recreates_missing_read_order_index(self):
+        import sqlite3
+        self.db.close()
+        path = Path(self.temp.name) / "db"
+        with sqlite3.connect(path) as db:
+            db.execute("DROP INDEX idx_vpn_policies_created_id")
+        self.db = VPNStore(path, subnet="10.77.0.0/24")
+        indexes = {
+            row[1] for row in
+            self.db.db.execute("PRAGMA index_list('policies')")
+        }
+        self.assertIn("idx_vpn_policies_created_id", indexes)
+        self.assertFalse(self.db.db.in_transaction)
+        self.assertEqual(len(self.db.snapshot_bounded(
+            max_peers=4, max_policies=4
+        )[0]), 3)
+
     def test_sql_query_caps_reject_before_peer_policy_decoding(self):
         # Existing fixture has three peers. LIMIT 2 is enough to detect
         # oversize without decoding every stored peer.

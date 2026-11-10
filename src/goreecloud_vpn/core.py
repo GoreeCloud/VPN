@@ -170,6 +170,16 @@ class VPNStore:
                 id TEXT PRIMARY KEY, source TEXT NOT NULL, target TEXT NOT NULL,
                 protocol TEXT NOT NULL, ports TEXT NOT NULL, created TEXT NOT NULL
             )""")
+            # The bounded offline snapshot sorts by (created,id). Without
+            # this covering order index, SQLite can sort *all* policy rows
+            # in a temporary B-tree before LIMIT n+1 detects an oversize
+            # inventory. Add the index in the same idempotent schema step
+            # for both fresh and existing alpha databases. It never edits
+            # peer/policy values or invokes the VPN data plane.
+            self.db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vpn_policies_created_id "
+                "ON policies(created,id)"
+            )
             # Fail closed when upgrading pre-approval alpha databases.
             columns = {row[1] for row in self.db.execute("PRAGMA table_info(peers)")}
             if "status" not in columns:
