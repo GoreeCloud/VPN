@@ -13,6 +13,10 @@
 - The high-water mark is keyed by **device audience rather than controller signing-key ID**. Key rotation cannot silently reset or fork the per-device sequence counter. Independent audiences have separate counters.
 - Unit tests cover reopen persistence, concurrent writers, stale/duplicate/lower sequence refusal, controller signing-key change, malformed input, unsafe database paths and failure rollback. One test *explicitly demonstrates* a rollback attack by restoring old database bytes.
 
+## Stored-record corruption refusal — November 10, 2026
+
+A ledger read and a compare-and-swap transition now both reject malformed **existing** key IDs, lowercase SHA-256 digests and stored revision integers, rather than trusting the sequence integer alone. The revision remains per audience; failure raises a fixed `ValidationError` before any revision is advanced. This is an integrity-*format* check, not cryptographic authentication, corruption repair or source provenance. Independently modified **well-formed** records and complete SQLite file restores can still pass local syntax checks, so a trusted external monotonic anchor and atomic firewall state transition remain P0 release gates. Tests intentionally tamper with a disposable SQLite fixture and confirm no new sequence is committed.
+
 ## Integration is deliberately blocked
 
 A future agent may need to read a trusted revision floor, verify a controller signature with a trusted clock and signing key, parse and validate the *entire* proposed policy, then reconcile kernel state and update the revision atomically. **This module does not combine any of those steps.** It will happily store a caller-provided digest without proving it was signed. There is no allowed IPC, network endpoint, permission escalation, privileged nftables execution or WireGuard access. A successful SQLite write **must not** be interpreted as permission to accept traffic.

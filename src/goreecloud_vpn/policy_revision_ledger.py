@@ -35,6 +35,23 @@ def _check_seq(value: int) -> int:
     return value
 
 
+def _check_stored_record(row: tuple) -> int:
+    """Reject malformed stored identity/digest before trusting its sequence.
+
+    This validates *format only*. A privileged writer can replace a complete,
+    well-formed row or restore an old database; neither is authenticated.
+    """
+    if not isinstance(row, tuple) or len(row) != 3:
+        raise ValidationError("invalid stored policy revision record")
+    stored_key, sequence, stored_digest = row
+    if (not isinstance(stored_key, str) or not _KEY.fullmatch(stored_key)
+            or type(sequence) is not int or not 1 <= sequence <= _MAX_SEQ
+            or not isinstance(stored_digest, str)
+            or not _HEX.fullmatch(stored_digest)):
+        raise ValidationError("invalid stored policy revision record")
+    return sequence
+
+
 class OfflinePolicyRevisionLedger:
     """One explicitly private user-owned DB; one owner of local revision state.
 
@@ -120,14 +137,14 @@ class OfflinePolicyRevisionLedger:
             raise ValidationError("invalid policy ledger audience")
         try:
             row = self.db.execute(
-                "SELECT sequence FROM policy_revisions WHERE audience=?",
+                "SELECT key_id,sequence,digest FROM policy_revisions WHERE audience=?",
                 (audience,),
             ).fetchone()
         except sqlite3.Error as exc:
             raise ValidationError("policy sequence read failed closed") from exc
         if row is None:
             return 0
-        return _check_seq(row[0])
+        return _check_stored_record(row)
 
     def compare_and_advance(
         self,
@@ -153,10 +170,10 @@ class OfflinePolicyRevisionLedger:
         try:
             self.db.execute("BEGIN IMMEDIATE")
             row = self.db.execute(
-                "SELECT sequence FROM policy_revisions WHERE audience=?",
+                "SELECT key_id,sequence,digest FROM policy_revisions WHERE audience=?",
                 (audience,),
             ).fetchone()
-            current = 0 if row is None else _check_seq(row[0])
+            current = 0 if row is None else _check_stored_record(row)
             if current != expected_previous:
                 raise ValidationError("stale or conflicting local policy revision")
             if row is None:

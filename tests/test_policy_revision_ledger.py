@@ -128,6 +128,62 @@ class OfflineRevisionLedgerTests(unittest.TestCase):
             self.assertEqual(db.read(audience=AUDIENCE), 4)
             self.assertEqual(self.advance(db, old=4, seq=6), 6)
 
+    def test_corrupt_stored_key_or_digest_blocks_read_and_cas(self):
+        with self.new() as ledger:
+            self.advance(ledger, seq=7)
+            for field, corrupt in (
+                ("key_id", "invalid/key"),
+                ("key_id", ""),
+                ("digest", "X" * 64),
+                ("digest", "0" * 63),
+            ):
+                with self.subTest(field=field, corrupt=corrupt):
+                    # This is a synthetic corruption fixture, not permission
+                    # to edit operational policy revision evidence.
+                    ledger.db.execute(
+                        f"UPDATE policy_revisions SET {field}=? WHERE audience=?",
+                        (corrupt, AUDIENCE),
+                    )
+                    with self.assertRaisesRegex(
+                        ValidationError, "invalid stored policy revision record"
+                    ):
+                        ledger.read(audience=AUDIENCE)
+                    with self.assertRaisesRegex(
+                        ValidationError, "invalid stored policy revision record"
+                    ):
+                        self.advance(ledger, old=7, seq=8)
+                    self.assertEqual(
+                        ledger.db.execute(
+                            "SELECT sequence FROM policy_revisions WHERE audience=?",
+                            (AUDIENCE,),
+                        ).fetchone()[0],
+                        7,
+                    )
+                    ledger.db.execute(
+                        f"UPDATE policy_revisions SET {field}=? WHERE audience=?",
+                        ("key-1" if field == "key_id" else DIGEST, AUDIENCE),
+                    )
+            self.assertEqual(ledger.read(audience=AUDIENCE), 7)
+            self.assertEqual(self.advance(ledger, old=7, seq=8), 8)
+
+    def test_corrupt_revision_row_on_reopen_is_not_trusted(self):
+        with self.new() as ledger:
+            self.advance(ledger, seq=9)
+        with sqlite3.connect(self.db_file) as db:
+            db.execute("UPDATE policy_revisions SET digest=?",
+                       ("not-a-sha256",))
+        with self.new() as ledger:
+            with self.assertRaises(ValidationError):
+                ledger.read(audience=AUDIENCE)
+            with self.assertRaises(ValidationError):
+                self.advance(ledger, old=9, seq=10)
+        # The malformed row is preserved as evidence; no reset or repair.
+        with sqlite3.connect(self.db_file) as db:
+            self.assertEqual(db.execute(
+                "SELECT digest FROM policy_revisions WHERE audience=?",
+                (AUDIENCE,),
+            ).fetchone()[0], "not-a-sha256")
+
     def test_invalid_metadata_and_boolean_revision_rejected(self):
         with self.new() as db:
             invalid = [
