@@ -124,6 +124,12 @@ def _prepare_private_database(path: Path) -> tuple[int, int]:
         raise ValidationError("unsafe database storage path") from None
 
 
+# Conservative per-connection SQLite read bounds for OFFLINE compilation only.
+# SQLite enforces the field/row limit before handing giant values to Python.
+MAX_OFFLINE_SQL_ROW_BYTES = 64 * 1024
+MAX_OFFLINE_SQL_SNAPSHOT_BYTES = 8 * 1024 * 1024
+
+
 class VPNStore:
     """SQLite records for peer identities, policies and private address allocation."""
 
@@ -308,44 +314,75 @@ class VPNStore:
             return self.peers(), self.policies()
 
     def snapshot_bounded(self, *, max_peers: int, max_policies: int):
-        """Consistent SQLite read for nonapplying offline compilers only.
+        """One consistent, bounded, nonapplying SQLite snapshot for offline QA.
 
-        LIMIT n+1 enforces resource caps before JSON decoding or expanding
-        rows in Python. A SQLite read transaction also serializes the peer and
-        policy snapshots against writers using other SQLite connections.
-        This does NOT bound SQLite row bytes or authorize a live agent.
+        Bound counts via SQL LIMIT n+1, individual SQLite rows via the
+        connection's SQLITE_LIMIT_LENGTH, and combined row bytes while
+        fetching in fixed-size batches. Never roll back another caller's
+        transaction, and always restore the connection's prior row limit.
+        No kernel VPN or firewall commands are executed here.
         """
         if (type(max_peers) is not int or type(max_policies) is not int
                 or not 1 <= max_peers <= 4096
                 or not 1 <= max_policies <= 4096):
             raise ValidationError("invalid bounded offline snapshot limits")
         with self.lock:
-            # A snapshot is read-only and must never assume ownership of an
-            # existing transaction started by another caller of this store.
-            # Otherwise a nested BEGIN error could roll back that caller's
-            # pending writes when handled below.
             if self.db.in_transaction:
                 raise ValidationError("bounded snapshot requires an idle connection")
             started = False
+            prior_sql_limit = None
+            lowered_sql_limit = False
+            total_bytes = 0
+
+            def get_rows(query, limit):
+                nonlocal total_bytes
+                cursor = self.db.execute(query, (limit + 1,))
+                rows = []
+                while True:
+                    batch = cursor.fetchmany(64)
+                    if not batch:
+                        return rows
+                    if len(rows) + len(batch) > limit:
+                        raise ValidationError(
+                            "offline policy preflight exceeds bounded input limits"
+                        )
+                    for row in batch:
+                        for value in row:
+                            if isinstance(value, str):
+                                total_bytes += len(value.encode("utf-8"))
+                            elif isinstance(value, bytes):
+                                total_bytes += len(value)
+                            else:
+                                total_bytes += 8
+                            if total_bytes > MAX_OFFLINE_SQL_SNAPSHOT_BYTES:
+                                raise ValidationError(
+                                    "offline policy preflight exceeds bounded byte limits"
+                                )
+                    rows.extend(batch)
+
             try:
+                prior_sql_limit = self.db.getlimit(sqlite3.SQLITE_LIMIT_LENGTH)
+                if prior_sql_limit > MAX_OFFLINE_SQL_ROW_BYTES:
+                    self.db.setlimit(
+                        sqlite3.SQLITE_LIMIT_LENGTH, MAX_OFFLINE_SQL_ROW_BYTES
+                    )
+                    lowered_sql_limit = True
                 self.db.execute("BEGIN")
                 started = True
-                peer_rows = self.db.execute(
-                    "SELECT * FROM peers ORDER BY name LIMIT ?", (max_peers + 1,)
-                ).fetchall()
-                if len(peer_rows) > max_peers:
-                    raise ValidationError("offline policy preflight exceeds bounded input limits")
-                policy_rows = self.db.execute(
+                peer_rows = get_rows(
+                    "SELECT * FROM peers ORDER BY name LIMIT ?", max_peers
+                )
+                policy_rows = get_rows(
                     "SELECT * FROM policies ORDER BY created,id LIMIT ?",
-                    (max_policies + 1,),
-                ).fetchall()
-                if len(policy_rows) > max_policies:
-                    raise ValidationError("offline policy preflight exceeds bounded input limits")
+                    max_policies,
+                )
                 peers = [self._peer(row) for row in peer_rows]
                 policies = [self._policy(row) for row in policy_rows]
                 self.db.execute("COMMIT")
+                started = False
                 return peers, policies
-            except (sqlite3.Error, ValidationError, ValueError, TypeError) as exc:
+            except (sqlite3.Error, ValidationError, ValueError, TypeError,
+                    AttributeError, UnicodeError) as exc:
                 if started and self.db.in_transaction:
                     try:
                         self.db.execute("ROLLBACK")
@@ -354,6 +391,11 @@ class VPNStore:
                 if isinstance(exc, ValidationError):
                     raise
                 raise ValidationError("bounded offline snapshot unavailable") from None
+            finally:
+                if lowered_sql_limit:
+                    self.db.setlimit(
+                        sqlite3.SQLITE_LIMIT_LENGTH, prior_sql_limit
+                    )
 
     def explain_access(self, source_id, target_id, protocol, port=None):
         from .diagnostics import evaluate_access
