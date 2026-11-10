@@ -1,5 +1,6 @@
 """Offline peer planning tests; no network capabilities required."""
 import base64
+from copy import deepcopy
 import json
 from pathlib import Path
 import tempfile
@@ -71,6 +72,51 @@ class PeerPlanningTests(unittest.TestCase):
         self.assertTrue(self.store.revoke_peer(self.server["id"]))
         self.assertEqual(build_peer_plan(self.store, self.client["id"])["peers"], [])
         self.assertFalse(self.store.approve_peer(self.server["id"]))
+
+    def test_renderer_refuses_duplicate_cryptokey_or_private_address_intents(self):
+        self.store.add_policy("users", "services", "tcp", [443])
+        self.store.approve_peer(self.client["id"])
+        self.store.approve_peer(self.server["id"])
+        original = build_peer_plan(self.store, self.client["id"])
+        peer = original["peers"][0]
+
+        plan = deepcopy(original)
+        duplicate = deepcopy(peer)
+        duplicate["peer_id"] = "synthetic-second-identity"
+        plan["peers"].append(duplicate)
+        with self.assertRaises(ValidationError):
+            render_wireguard_peer_fragments(plan)
+
+        # A different public key cannot share the same AllowedIPs /32.
+        plan["peers"][1]["public_key"] = key(32)
+        with self.assertRaises(ValidationError):
+            render_wireguard_peer_fragments(plan)
+
+        # Duplicate identity labels cannot shadow separate keys/addresses.
+        plan["peers"][1]["allowed_ips"] = ["10.234.12.12/32"]
+        plan["peers"][1]["peer_id"] = peer["peer_id"]
+        with self.assertRaises(ValidationError):
+            render_wireguard_peer_fragments(plan)
+
+    def test_renderer_refuses_forged_active_status_or_unbounded_peer_lists(self):
+        self.store.add_policy("users", "services", "tcp", [443])
+        self.store.approve_peer(self.client["id"])
+        self.store.approve_peer(self.server["id"])
+        original = build_peer_plan(self.store, self.client["id"])
+        for field in ("wireguard_tunnels_active", "data_plane_enforced"):
+            with self.subTest(field=field):
+                plan = deepcopy(original)
+                plan[field] = True
+                with self.assertRaises(ValidationError):
+                    render_wireguard_peer_fragments(plan)
+                del plan[field]
+                with self.assertRaises(ValidationError):
+                    render_wireguard_peer_fragments(plan)
+        plan = deepcopy(original)
+        plan["peers"] = [deepcopy(plan["peers"][0])] * 4097
+        with self.assertRaises(ValidationError):
+            render_wireguard_peer_fragments(plan)
+        self.assertIn("[Peer]", render_wireguard_peer_fragments(original))
 
     def test_renderer_rejects_tampered_prefixes(self):
         self.store.add_policy("users", "services", "tcp", [443])

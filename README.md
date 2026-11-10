@@ -13,7 +13,9 @@
 - Explicit `pending → approved → revoked` peer lifecycle (revocation is terminal for the recorded key)
 - Only approved peers participate in management policy decisions or private DNS previews
 - Local peer lifecycle event history; events are not tamper-proof audit evidence
-- Read-only approved-peer planning and inspectable, unapplied WireGuard peer stanzas
+- Read-only approved-peer planning and inspectable, unapplied WireGuard peer
+  stanzas; the renderer rejects duplicate keys, private /32 addresses,
+  identities, oversized peer arrays and falsely claimed active enforcement
 - Experimental read-only manifest of canonical approved peer public keys bound to unique private IPv4 /32 host-intent addresses (not active WireGuard state or key-possession proof)
 - **Experimental:** offline source/destination/port nftables ingress rule preview with no automatic application; real kernel validation requires an explicitly opted-in disposable lab
 - Public WireGuard key format validation; private keys remain on devices
