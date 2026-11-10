@@ -103,6 +103,56 @@ class OfflineAgentPreflightTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.db.snapshot_bounded(max_peers=3, max_policies=0)
 
+    def test_oversized_sqlite_row_refused_and_limit_restored(self):
+        import json
+        import sqlite3
+        from goreecloud_vpn.core import MAX_OFFLINE_SQL_ROW_BYTES
+        original = self.db.db.getlimit(sqlite3.SQLITE_LIMIT_LENGTH)
+        self.assertGreaterEqual(original, MAX_OFFLINE_SQL_ROW_BYTES)
+        self.db.db.execute(
+            "UPDATE peers SET groups=? WHERE id=?",
+            (json.dumps(["x" * (MAX_OFFLINE_SQL_ROW_BYTES + 1)]),
+             self.source["id"]),
+        )
+        self.db.db.commit()
+        with self.assertRaisesRegex(
+            ValidationError, "bounded offline snapshot unavailable"
+        ):
+            self.db.snapshot_bounded(max_peers=10, max_policies=10)
+        self.assertEqual(self.db.db.getlimit(sqlite3.SQLITE_LIMIT_LENGTH), original)
+        self.assertFalse(self.db.db.in_transaction)
+        # A failed offline preflight must never mutate the oversized row.
+        row = self.db.db.execute(
+            "SELECT length(groups) FROM peers WHERE id=?",
+            (self.source["id"],),
+        ).fetchone()
+        self.assertGreater(row[0], MAX_OFFLINE_SQL_ROW_BYTES)
+
+    def test_aggregate_byte_budget_rejects_before_compiling(self):
+        from unittest.mock import patch
+        from goreecloud_vpn.core import MAX_OFFLINE_SQL_SNAPSHOT_BYTES
+        self.assertGreater(MAX_OFFLINE_SQL_SNAPSHOT_BYTES, 1024)
+        with patch("goreecloud_vpn.core.MAX_OFFLINE_SQL_SNAPSHOT_BYTES", 64):
+            with self.assertRaisesRegex(ValidationError, "bounded byte limits"):
+                self.compile("")
+        self.assertFalse(self.db.db.in_transaction)
+        self.assertFalse(self.compile("")["production_ready"])
+
+    def test_stricter_existing_sqlite_length_limit_is_never_relaxed(self):
+        import sqlite3
+        limit = sqlite3.SQLITE_LIMIT_LENGTH
+        original = self.db.db.getlimit(limit)
+        try:
+            self.db.db.setlimit(limit, 8192)
+            peers, policies = self.db.snapshot_bounded(
+                max_peers=10, max_policies=10
+            )
+            self.assertEqual(len(peers), 3)
+            self.assertEqual(policies, [])
+            self.assertEqual(self.db.db.getlimit(limit), 8192)
+        finally:
+            self.db.db.setlimit(limit, original)
+
     def test_nested_snapshot_does_not_rollback_caller_owned_sqlite_work(self):
         # Only a disposable local SQLite store is used. The snapshot API
         # must refuse an existing transaction without closing it or erasing
