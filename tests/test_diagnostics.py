@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from goreecloud_vpn.core import VPNStore, ValidationError
-from goreecloud_vpn.diagnostics import management_status, policy_diagnostics, simulate_access
+from goreecloud_vpn.diagnostics import evaluate_access, management_status, policy_diagnostics, simulate_access
 
 
 class DiagnosticsTests(unittest.TestCase):
@@ -95,6 +95,16 @@ class DiagnosticsTests(unittest.TestCase):
                           {"protocol": "icmp"}, {"protocol": "all"}, {"source_id": None}):
             with self.subTest(overrides=overrides), self.assertRaises(ValidationError):
                 self.explain(**overrides)
+
+    def test_duplicate_peer_id_fails_closed_in_access_explanation(self):
+        self.approve()
+        peers, policies = self.store.snapshot()
+        duplicate = dict(peers[1])
+        duplicate["id"] = peers[0]["id"]
+        duplicate["groups"] = ["infra"]
+        for rows in (peers + [duplicate], [duplicate] + peers):
+            with self.assertRaisesRegex(ValidationError, "duplicate peer identity"):
+                evaluate_access(rows, policies, self.a["id"], self.b["id"], "tcp", 22)
 
     def test_batch_matches_single_evaluator_and_does_not_mutate(self):
         self.approve()

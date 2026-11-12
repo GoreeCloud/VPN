@@ -15,6 +15,11 @@ def evaluate_access(peers, policies, source_id, target_id, protocol, port=None):
         type(port) is not int or not 1 <= port <= 65535
     )):
         raise ValidationError("invalid port for protocol")
+    # A corrupted or synthetic snapshot must never silently select the last
+    # record for a duplicate identity when explaining an allow decision.
+    ids = [peer["id"] for peer in peers]
+    if len(ids) != len(set(ids)):
+        raise ValidationError("duplicate peer identity in management snapshot")
     by_id = {peer["id"]: peer for peer in peers}
     source, target = by_id.get(source_id), by_id.get(target_id)
     matches = []
