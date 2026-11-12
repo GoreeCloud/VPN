@@ -30,3 +30,7 @@ A future agent may need to read a trusted revision floor, verify a controller si
 5. The management alpha still does **not** provide a functional VPN. Full least-privileged agent, INPUT/OUTPUT/FORWARD/IPv6/conntrack controls, kernel peer AllowedIPs, secure key management, outage recovery and independent review remain P0 in [issue #22](https://github.com/GoreeCloud/VPN/issues/22).
 
 Do not combine this with draft [PR #34](https://github.com/GoreeCloud/VPN/pull/34) in a production path without an independently reviewed atomic state-transition protocol. GoreeShield privacy and Wardveil security constraints remain in force; GoreeCloud Mesh cannot bypass them.
+
+## November 12, 2026 — preserve caller-owned SQLite transactions
+
+The offline policy revision high-water ledger now refuses `compare_and_advance` when its SQLite connection is already in a transaction, **before issuing `BEGIN IMMEDIATE` or entering its rollback handler**. SQLite's rejection of nested `BEGIN` previously risked causing the ledger to roll back an unrelated caller-owned transaction. New tests demonstrate that uncommitted caller data remains intact after refusal, that caller-managed commit/rollback still works, and that subsequent independent compare-and-swap updates advance normally. This remains an experimental local, untrusted SQLite high-water record: neither a signature verifier nor a hardware/remote rollback-proof monotonic anchor, and it cannot attest real WireGuard/nftables policy application or production readiness.
