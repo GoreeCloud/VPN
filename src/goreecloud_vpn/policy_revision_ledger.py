@@ -167,6 +167,11 @@ class OfflinePolicyRevisionLedger:
                 or not isinstance(payload_sha256, str)
                 or not _HEX.fullmatch(payload_sha256)):
             raise ValidationError("invalid policy digest or nonincreasing revision")
+        # Never roll back a transaction owned by a caller who shares this
+        # connection. SQLite rejects nested BEGIN, but our exception handler
+        # otherwise could ROLLBACK the caller's unrelated uncommitted work.
+        if self.db.in_transaction:
+            raise ValidationError("policy revision ledger requires idle connection")
         try:
             self.db.execute("BEGIN IMMEDIATE")
             row = self.db.execute(
