@@ -205,6 +205,47 @@ class OfflineRevisionLedgerTests(unittest.TestCase):
                     self.advance(db, **item)
             self.assertEqual(db.read(audience=AUDIENCE), 0)
 
+    def test_refuses_caller_transaction_without_rolling_back_its_work(self):
+        with self.new() as ledger:
+            ledger.db.execute(
+                "CREATE TABLE other_offline_work (id INTEGER PRIMARY KEY, note TEXT)"
+            )
+            ledger.db.execute("BEGIN")
+            ledger.db.execute(
+                "INSERT INTO other_offline_work(note) VALUES (?)", ("keep",)
+            )
+            with self.assertRaisesRegex(
+                ValidationError, "requires idle connection"
+            ):
+                self.advance(ledger)
+            self.assertTrue(ledger.db.in_transaction)
+            self.assertEqual(
+                ledger.db.execute("SELECT note FROM other_offline_work").fetchone()[0],
+                "keep",
+            )
+            ledger.db.execute("COMMIT")
+            self.assertEqual(ledger.read(audience=AUDIENCE), 0)
+        with self.new() as ledger:
+            self.assertEqual(
+                ledger.db.execute("SELECT note FROM other_offline_work").fetchone()[0],
+                "keep",
+            )
+            self.assertEqual(self.advance(ledger), 1)
+
+    def test_nested_request_preserves_preexisting_revision_and_caller_data(self):
+        with self.new() as ledger:
+            self.advance(ledger, seq=12)
+            ledger.db.execute("BEGIN")
+            ledger.db.execute("UPDATE policy_revisions SET digest=? WHERE audience=?",
+                              ("b" * 64, AUDIENCE))
+            with self.assertRaisesRegex(ValidationError, "requires idle connection"):
+                self.advance(ledger, old=12, seq=13)
+            self.assertTrue(ledger.db.in_transaction)
+            self.assertEqual(ledger.read(audience=AUDIENCE), 12)
+            ledger.db.execute("ROLLBACK")
+            self.assertEqual(ledger.read(audience=AUDIENCE), 12)
+            self.assertEqual(self.advance(ledger, old=12, seq=13), 13)
+
     def test_rejects_relative_paths_world_accessible_parent_and_symlink(self):
         with self.assertRaises(ValidationError):
             self.new("relative.sqlite3")
