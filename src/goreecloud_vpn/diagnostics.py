@@ -43,6 +43,21 @@ def evaluate_access(peers, policies, source_id, target_id, protocol, port=None):
 def simulate_access(store, checks):
     if not isinstance(checks, list) or not 1 <= len(checks) <= 100:
         raise ValidationError("checks must contain 1 to 100 access queries")
+    # Reject malformed batches before accessing any management-state reader.
+    # This avoids unnecessary database work and prevents partial batches from
+    # causing a snapshot read before their invalid entries are discovered.
+    for check in checks:
+        if (type(check) is not dict or
+                set(check) - {"source_id", "target_id", "protocol", "port"}):
+            raise ValidationError("invalid access query fields")
+        if not isinstance(check.get("source_id"), str) or not isinstance(check.get("target_id"), str):
+            raise ValidationError("invalid peer identity")
+        protocol, port = check.get("protocol"), check.get("port")
+        if protocol not in ("tcp", "udp", "icmp"):
+            raise ValidationError("invalid protocol")
+        if (protocol == "icmp" and port is not None) or (protocol != "icmp" and (
+                type(port) is not int or not 1 <= port <= 65535)):
+            raise ValidationError("invalid port for protocol")
     bounded_reader = getattr(store, "snapshot_bounded", None)
     if callable(bounded_reader):
         peers, policies = bounded_reader(max_peers=4096, max_policies=4096)
@@ -54,8 +69,6 @@ def simulate_access(store, checks):
         raise ValidationError("access simulation exceeds bounded input limits")
     results = []
     for check in checks:
-        if not isinstance(check, dict) or set(check) - {"source_id", "target_id", "protocol", "port"}:
-            raise ValidationError("invalid access query fields")
         results.append(evaluate_access(peers, policies, check.get("source_id"),
                                        check.get("target_id"), check.get("protocol"), check.get("port")))
     return {"results": results, "data_plane_enforced": False}
