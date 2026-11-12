@@ -119,6 +119,34 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(before, (self.store.snapshot(), self.store.events()))
         self.assertEqual(len(simulate_access(self.store, checks[:1] * 100)["results"]), 100)
 
+    def test_access_simulation_uses_bounded_reader_when_available(self):
+        self.approve()
+        peers, policies = self.store.snapshot()
+
+        class BoundedFixture:
+            def snapshot(self):
+                raise AssertionError("unbounded snapshot must not be used")
+
+            def snapshot_bounded(self, *, max_peers, max_policies):
+                self.limits = (max_peers, max_policies)
+                return peers, policies
+
+        fixture = BoundedFixture()
+        checks = [{"source_id": self.a["id"], "target_id": self.b["id"],
+                   "protocol": "tcp", "port": 22}]
+        self.assertTrue(simulate_access(fixture, checks)["results"][0]["allowed"])
+        self.assertEqual(fixture.limits, (4096, 4096))
+
+    def test_access_simulation_rejects_oversized_fallback_snapshot(self):
+        class UnboundedFixture:
+            def snapshot(self):
+                return [{"id": str(i)} for i in range(4097)], []
+
+        checks = [{"source_id": "a", "target_id": "b",
+                   "protocol": "icmp"}]
+        with self.assertRaisesRegex(ValidationError, "bounded input limits"):
+            simulate_access(UnboundedFixture(), checks)
+
     def test_batch_rejects_invalid_shapes_and_partial_invalid_batches(self):
         good = {"source_id": self.a["id"], "target_id": self.b["id"], "protocol": "icmp"}
         for checks in (None, {}, [], [good] * 101, [None], [good, {}], [{**good, "extra": True}],
