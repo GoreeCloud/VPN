@@ -154,6 +154,30 @@ class DiagnosticsTests(unittest.TestCase):
             with self.subTest(checks=checks), self.assertRaises(ValidationError):
                 simulate_access(self.store, checks)
 
+    def test_invalid_batch_never_reads_management_snapshot(self):
+        class NoReadFixture:
+            def snapshot_bounded(self, **_kwargs):
+                raise AssertionError("invalid batch must not access management state")
+
+            def snapshot(self):
+                raise AssertionError("invalid batch must not use fallback snapshot")
+
+        valid = {"source_id": self.a["id"], "target_id": self.b["id"],
+                 "protocol": "tcp", "port": 22}
+        invalid = [
+            {**valid, "port": True},
+            {**valid, "port": 0},
+            {**valid, "protocol": "unknown"},
+            {**valid, "source_id": None},
+            {**valid, "extra": "undeclared"},
+            {},
+            None,
+            [],
+        ]
+        for bad in invalid:
+            with self.subTest(bad=bad), self.assertRaises(ValidationError):
+                simulate_access(NoReadFixture(), [valid, bad])
+
     def test_policy_diagnostics_duplicates_and_approved_members_only(self):
         duplicate = self.store.add_policy("users", "infra", "tcp", [443, 22, 22])
         overlap = self.store.add_policy("users", "infra", "tcp", [22])
