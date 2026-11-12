@@ -93,9 +93,18 @@ class OfflinePolicyRevisionLedger:
         try:
             self.db = sqlite3.connect(str(db_path), timeout=5, isolation_level=None)
             self.db.execute("PRAGMA busy_timeout=5000")
-            self.db.execute("PRAGMA journal_mode=DELETE")
+            # A SQLite PRAGMA setter can silently return a different effective
+            # mode. This private ledger requires rollback journaling (no WAL
+            # sidecar), durable commits and untrusted-schema hardening. Reject
+            # a runtime that cannot actually honor those settings.
+            journal = self.db.execute("PRAGMA journal_mode=DELETE").fetchone()
             self.db.execute("PRAGMA synchronous=FULL")
             self.db.execute("PRAGMA trusted_schema=OFF")
+            synchronous = self.db.execute("PRAGMA synchronous").fetchone()
+            trusted = self.db.execute("PRAGMA trusted_schema").fetchone()
+            if (journal is None or journal[0].lower() != "delete"
+                    or synchronous != (2,) or trusted != (0,)):
+                raise ValidationError("unsafe policy revision ledger SQLite mode")
             with self.db:
                 self.db.execute(
                     "CREATE TABLE IF NOT EXISTS policy_revisions ("

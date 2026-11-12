@@ -8,6 +8,7 @@ import stat
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from goreecloud_vpn.core import ValidationError
 from goreecloud_vpn.policy_revision_ledger import OfflinePolicyRevisionLedger
@@ -46,6 +47,47 @@ class OfflineRevisionLedgerTests(unittest.TestCase):
             self.assertEqual(db.read(audience=AUDIENCE), 1)
         mode = self.db_file.stat().st_mode
         self.assertEqual(stat.S_IMODE(mode), 0o600)
+
+    def test_effective_sqlite_modes_are_verified_before_first_record(self):
+        with self.new() as db:
+            self.assertEqual(
+                db.db.execute("PRAGMA journal_mode").fetchone(), ("delete",)
+            )
+            self.assertEqual(
+                db.db.execute("PRAGMA synchronous").fetchone(), (2,)
+            )
+            self.assertEqual(
+                db.db.execute("PRAGMA trusted_schema").fetchone(), (0,)
+            )
+            self.assertEqual(db.read(audience=AUDIENCE), 0)
+
+    def test_silent_pragma_noncompliance_is_rejected_without_committing(self):
+        actual_connect = sqlite3.connect
+
+        for rejected, observed in (
+            ("PRAGMA journal_mode=DELETE", "wal"),
+            ("PRAGMA synchronous", 0),
+            ("PRAGMA trusted_schema", 1),
+        ):
+            with self.subTest(rejected=rejected):
+                class NoncompliantConnection(sqlite3.Connection):
+                    def execute(self, sql, *args, **kwargs):
+                        if sql == rejected:
+                            value = "'wal'" if isinstance(observed, str) else str(observed)
+                            return super().execute("SELECT " + value)
+                        return super().execute(sql, *args, **kwargs)
+
+                with patch("goreecloud_vpn.policy_revision_ledger.sqlite3.connect",
+                           side_effect=lambda *a, **kw: actual_connect(
+                               *a, factory=NoncompliantConnection, **kw
+                           )):
+                    with self.assertRaisesRegex(
+                        ValidationError, "unsafe policy revision ledger SQLite mode"
+                    ):
+                        self.new()
+                with self.new() as healthy:
+                    self.assertEqual(healthy.read(audience=AUDIENCE), 0)
+                self.db_file.unlink()
 
     def test_persists_revisions_after_reopening(self):
         with self.new() as db:
