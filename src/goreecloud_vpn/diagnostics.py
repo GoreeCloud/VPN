@@ -43,7 +43,15 @@ def evaluate_access(peers, policies, source_id, target_id, protocol, port=None):
 def simulate_access(store, checks):
     if not isinstance(checks, list) or not 1 <= len(checks) <= 100:
         raise ValidationError("checks must contain 1 to 100 access queries")
-    peers, policies = store.snapshot()
+    bounded_reader = getattr(store, "snapshot_bounded", None)
+    if callable(bounded_reader):
+        peers, policies = bounded_reader(max_peers=4096, max_policies=4096)
+    else:
+        peers, policies = store.snapshot()
+    if (type(peers) is not list or type(policies) is not list
+            or len(peers) > 4096 or len(policies) > 4096
+            or len(peers) * len(policies) > 1_000_000):
+        raise ValidationError("access simulation exceeds bounded input limits")
     results = []
     for check in checks:
         if not isinstance(check, dict) or set(check) - {"source_id", "target_id", "protocol", "port"}:
