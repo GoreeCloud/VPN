@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
 import logging
+import re
 import os
 import socket
 import sqlite3
@@ -24,6 +25,12 @@ MAX_MANAGEMENT_HEADER_FIELDS = 64
 MAX_MANAGEMENT_HEADER_BYTES = 8192
 MAX_MANAGEMENT_TARGET_CHARS = 2048
 MANAGEMENT_SOCKET_TIMEOUT_SECONDS = 5
+# Exact JSON media type; no conflicting charset/parameter interpretation.
+# The body is always decoded with strict UTF-8 below.
+JSON_CONTENT_TYPE = re.compile(
+    r'\Aapplication/json(?:\s*;\s*charset\s*=\s*(?:"utf-8"|utf-8))?\s*\Z',
+    re.IGNORECASE,
+)
 MAX_MANAGEMENT_CONCURRENT_CONNECTIONS = 16
 
 
@@ -185,8 +192,8 @@ class Handler(BaseHTTPRequestHandler):
         if length > 16384:
             raise ValidationError("body size limit exceeded")
         types = self.headers.get_all("Content-Type", [])
-        if len(types) != 1 or self.headers.get_content_type() != "application/json":
-            raise ValidationError("one application/json Content-Type required")
+        if len(types) != 1 or not JSON_CONTENT_TYPE.fullmatch(types[0]):
+            raise ValidationError("one UTF-8 application/json Content-Type required")
         try:
             raw = self.rfile.read(length)
             if len(raw) != length:
