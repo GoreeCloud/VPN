@@ -107,6 +107,45 @@ class ManagementHTTPTests(unittest.TestCase):
         self.assertFalse(answer["tamper_proof"])
         self.assertIn("peer_revoked", [row["kind"] for row in answer["events"]])
 
+    def test_delete_response_distinguishes_policy_removal_from_peer_revocation(self):
+        code, result = self.api("/api/v1/policies", "POST", {
+            "source": "deletecase-source", "target": "deletecase-target",
+            "protocol": "tcp", "ports": [1443],
+        })
+        self.assertEqual(code, 201)
+        policy_id = result["policy"]["id"]
+        policy_path = "/api/v1/policies/" + policy_id
+
+        code, result = self.api(policy_path, "DELETE")
+        self.assertEqual(code, 200)
+        self.assertEqual(result, {
+            "deleted": True, "metadata_retained": False,
+            "data_plane_enforced": False,
+        })
+        self.assertFalse(any(p["id"] == policy_id for p in
+                             self.api("/api/v1/policies")[1]["policies"]))
+        self.assertEqual(self.api(policy_path, "DELETE"), (404, {
+            "deleted": False, "metadata_retained": False,
+            "data_plane_enforced": False,
+        }))
+
+        key = base64.b64encode(bytes([119]) * 32).decode()
+        code, result = self.api("/api/v1/peers", "POST", {
+            "name": "deletecase-peer", "public_key": key, "groups": ["users"],
+        })
+        self.assertEqual(code, 201)
+        peer_id = result["peer"]["id"]
+        code, result = self.api("/api/v1/peers/" + peer_id, "DELETE")
+        self.assertEqual(code, 200)
+        self.assertEqual(result, {
+            "revoked": True, "metadata_retained": True,
+            "data_plane_enforced": False,
+        })
+        matching = [p for p in self.api("/api/v1/peers")[1]["peers"]
+                    if p["id"] == peer_id]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["status"], "revoked")
+
     def test_read_only_approved_peer_plan(self):
         akey = base64.b64encode(bytes([41]) * 32).decode()
         bkey = base64.b64encode(bytes([42]) * 32).decode()
