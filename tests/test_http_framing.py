@@ -96,6 +96,34 @@ class HTTPFramingRegressionTests(unittest.TestCase):
             ("Content-Length", str(len(body))),), body), 201)
         self.assertEqual(len(self.store.policies()), 1)
 
+    def test_json_content_type_rejects_conflicting_or_ambiguous_charset(self):
+        # The API parses raw request bodies as UTF-8 only. Intermediaries
+        # and clients must not be allowed to declare an incompatible encoding.
+        valid = b'{"source":"users","target":"services","protocol":"tcp","ports":[443]}'
+        base = (self.auth(), ("Content-Length", str(len(valid))))
+        for media in (
+            "application/json; charset=utf-16",
+            "application/json; charset=iso-8859-1",
+            "application/json; charset=utf-8; charset=iso-8859-1",
+            "application/json; unexpected=yes",
+            "application/json; charset=",
+        ):
+            with self.subTest(media=media):
+                fields = base + (("Content-Type", media),)
+                self.assertEqual(self.request("POST", "/api/v1/policies",
+                                              fields, valid), 400)
+                self.assertEqual(self.store.policies(), [])
+
+        for media in (
+            "application/json",
+            "application/json; charset=utf-8",
+            "APPLICATION/JSON; Charset=\"UTF-8\"",
+        ):
+            with self.subTest(media=media):
+                fields = base + (("Content-Type", media),)
+                self.assertEqual(self.request("POST", "/api/v1/policies",
+                                              fields, valid), 201)
+
     def test_peer_approval_rejects_ambiguous_zero_length_without_mutating(self):
         key = base64.b64encode(bytes([79]) * 32).decode("ascii")
         peer = self.store.add_peer("test-peer", key, ["users"])
