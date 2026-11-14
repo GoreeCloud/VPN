@@ -28,7 +28,7 @@ MANAGEMENT_SOCKET_TIMEOUT_SECONDS = 5
 # Exact JSON media type; no conflicting charset/parameter interpretation.
 # The body is always decoded with strict UTF-8 below.
 JSON_CONTENT_TYPE = re.compile(
-    r'\\Aapplication/json(?:\\s*;\\s*charset\\s*=\\s*(?:"utf-8"|utf-8))?\\s*\\Z',
+    r'\Aapplication/json(?:\s*;\s*charset\s*=\s*(?:"utf-8"|utf-8))?\s*\Z',
     re.IGNORECASE,
 )
 MAX_MANAGEMENT_CONCURRENT_CONNECTIONS = 16
