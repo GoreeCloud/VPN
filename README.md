@@ -95,7 +95,9 @@ To create a directional management policy allowing TCP/22 from group `users` to 
 | POST | /api/v1/access/explain | Decision reason and matching policy IDs; no enforcement |
 | POST | /api/v1/access/simulate | Evaluate 1–100 access queries against current management state |
 
-All endpoints except /healthz require `Authorization: Bearer <admin-token>`. Request bodies are JSON with a 16 KiB limit.
+All endpoints except /healthz require `Authorization: Bearer <admin-token>`. Request bodies are JSON with a 16 KiB limit. JSON bodies are **strictly UTF-8**: use `Content-Type: application/json` (optionally `charset=utf-8`), exactly one Content-Length, and no conflicting encoding parameters or duplicate framing/authentication headers.
+
+Peer deletion is **terminal revocation**, not physical removal: `DELETE /api/v1/peers/{id}` returns `revoked`, `metadata_retained: true`, and `data_plane_enforced: false`. Policy deletion physically removes the stored management rule: `DELETE /api/v1/policies/{id}` returns `deleted`, `metadata_retained: false`, and `data_plane_enforced: false`. These management responses never assert that packet-level rules changed, and a deleted policy cannot be assumed to have affected any real firewall.
 
 Inspect management state from a second terminal using the same administrator token:
 
