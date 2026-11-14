@@ -340,15 +340,24 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path.startswith("/api/v1/peers/"):
+            # Peer removal is a revocation; its public-key tombstone remains.
             found = self.server.store.delete_peer(path[len("/api/v1/peers/"):])
+            result = {
+                "revoked": found, "metadata_retained": True,
+                "data_plane_enforced": False,
+            }
         elif path.startswith("/api/v1/policies/"):
+            # Policy deletion physically removes the SQLite rule. Never claim
+            # retention or describe a policy delete as peer revocation.
             found = self.server.store.delete_policy(path[len("/api/v1/policies/"):])
+            result = {
+                "deleted": found, "metadata_retained": False,
+                "data_plane_enforced": False,
+            }
         else:
             self.reply(404, {"error": "not found"})
             return
-        self.reply(200 if found else 404, {
-            "revoked": found, "metadata_retained": True, "data_plane_enforced": False
-        })
+        self.reply(200 if found else 404, result)
 
     def log_message(self, fmt, *args):
         # BaseHTTPRequestHandler logs the entire request target by default,
