@@ -1,0 +1,39 @@
+# Secrets, WireGuard configs and private state
+.env
+.env.*
+!.env.example
+*.key
+*.conf
+*.pem
+*.keystore
+*.p12
+*.jks
+*.sqlite3
+*.sqlite3-*
+secrets/
+private/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+# Web
+node_modules/
+.next/
+*.tsbuildinfo
+npm-debug.log*
+# Android
+.gradle/
+**/build/
+android/local.properties
+*.apk
+*.aab
+# Qt/CMake
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/

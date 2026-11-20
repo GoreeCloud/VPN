@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goreecloud-vpn"
+version = "0.1.0a0"
+description = "Local-first WireGuard peer inventory and offline configuration renderer"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+goreevpn = "goreevpn.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["goreevpn*"]
