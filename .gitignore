@@ -27,6 +27,7 @@ npm-debug.log*
 .gradle/
 **/build/
 android/local.properties
+android/.kotlin/
 *.apk
 *.aab
 # Qt/CMake
