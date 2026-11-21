@@ -87,3 +87,8 @@ Original GoreeCloud-controlled source in this repository is available under the 
 Build the React application into web/dist before starting vpnd with that directory as web-root. The Go handler serves only the compiled entrypoint and assets, not source files. Native Qt Quick 6.12 is checked by a separate hosted compilation job; Android GoBackend compilation and physical-device consent tests are independent acceptance gates. No live VPS or NetBird systems are modified by these source builds.
 
 The Android debug build uses a separate application ID suffix (.dev) so that temporary physical-device QA does not replace an installed GoreeCloud VPN application. Hosted CI stores an unsigned-for-production, debug-signed development APK only as a short-lived Actions testing artifact; it is not a release or distribution channel.
+
+
+## Isolated WireGuard integration test
+
+The optional GitHub-hosted kernel namespace workflow builds vpnd/vpnctl and exercises a complete development-only chain: register peer public key, export active gateway policy, generate client/gateway configs, establish an encrypted WireGuard handshake between disposable network namespaces, then revoke the record, apply the new gateway config and verify packets are denied. It runs only on an explicitly gated root-capable GoreeCloud GitHub Actions ephemeral Linux runner, never on the live VPS or laptop host namespace. A successful result is a synthetic two-namespace tunnel, not actual Android/Linux client device acceptance, NAT traversal, relay, Identity, DNS/IPv6 or production policy verification.

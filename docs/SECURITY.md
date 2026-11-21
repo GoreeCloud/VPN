@@ -15,3 +15,6 @@ This source represents a **first-party control-plane preview**, not an operation
 Security responsibilities: Wardveil handles cybersecurity and threat defense; GoreeShield governs consent/data minimization; GoreeCloud Identity must eventually enforce role-aware permissions. Mesh cannot expand authority by discovering an API.
 
 **Native release gates:** The revised Android tunnel source must pass independent hosted compilation, and then actual consent-grant, consent-denial, live handshake, device-background and DNS/IPv6 negative tests. The Linux Qt source has a dedicated Qt 6.12 hosted compile gate and still requires hardware testing. The compiled React/Vite preview uses no browser token persistence; no public ingress is authorized until Identity, session and rate-limit controls are accepted.
+
+
+**Network-namespace CI test guard:** The optional kernel WireGuard handshake test runs as root only in a disposable Linux GitHub Actions runner with an exact GoreeCloud repository check and cleans up its two private namespaces and temporary keys. It explicitly does not run on the laptop, live VPS, production NetBird or external hosts. Positive and negative packet checks are limited to generated synthetic 198.18.0.0/30 and 10.77.0.0/24 namespace addresses; the test must not be presented as live policy enforcement or recovery acceptance.

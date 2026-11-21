@@ -59,3 +59,8 @@ The web React app compiles with Vite into web/dist; vpnd serves only the compile
 ## Registry-to-gateway snapshot (offline and revocation-sensitive)
 
 vpnctl export-peers authenticates to the first-party control-plane API, verifies the bounded complete response and fails on duplicate IDs, addresses, keys or invalid /32s. It writes a new private mode-0600 JSON snapshot containing only **non-revoked** public keys and assigned peer addresses, for subsequent reviewed config-gateway rendering. Neither action changes active kernel WireGuard or firewall state. Revocation becomes packet-enforced only after an independent, authorized gateway apply and real traffic-denial test. Manually crafted --peers-file exports remain supported but must not be confused with the current registry.
+
+
+## Disposable kernel namespace lab (CI-only)
+
+The optional scripts/wireguard-netns-smoke.sh refuses non-GoreeCloud hosted GitHub Actions Linux execution and requires root only inside an ephemeral runner. It uses two isolated network namespaces and a synthetic veth underlay. GoreeCloud's actual compiled vpnd/vpnctl generates and exports reviewed development peer configs, upstream wg-quick provides the kernel encrypted transport, and wg syncconf explicitly applies the post-revoke gateway state. It asserts both a successful cryptographic handshake and negative peer traffic after applied revocation. Host routes, DNS, firewall and actual devices are not touched. A passing synthetic lab does not certify an authorized real remote-access overlay or physical Android/Linux clients.
