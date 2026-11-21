@@ -45,3 +45,7 @@ GoreeCloud UI's verified central source is [GoreeCloud/gc-ui](https://github.com
 ## Deployment boundary
 
 Do not deploy this control-plane preview onto the live NetBird VPS host, repoint `netbird.goreecloud.com`, or modify the existing Caddy/AdGuard configuration without a separate migration plan and verified rollback. The current preview runs on isolated developer loopback and **is not deployed**.
+
+## Development gateway renderer (source-only)
+
+The first-party `internal/wireguard/gateway.go` renderer and `vpnctl config-gateway` command produce local mode-0600 WireGuard gateway configuration from a private gateway key and explicit verified peer public keys with unique `/32` assignments. The gateway address is fixed to 10.77.0.1/24, and individual peers receive only their exact /32 AllowedIPs. Duplicate peers, oversized lists, out-of-subnet addresses and overbroad defaults are rejected. This is not a configured or deployed gateway: IP forwarding, firewall, NAT, host interface setup, and an actual handshake all require independent acceptance.
