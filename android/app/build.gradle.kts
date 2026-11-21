@@ -5,7 +5,7 @@ plugins {
 }
 android {
     namespace = "com.goreecloud.vpn"
-    compileSdk = 37
+    compileSdk { version = release(37) { minorApiLevel = 1 } }
     defaultConfig {
         applicationId = "com.goreecloud.vpn"
         minSdk = 26
@@ -23,5 +23,5 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.activity:activity-compose:1.12.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
 }
