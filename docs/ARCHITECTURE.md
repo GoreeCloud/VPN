@@ -15,6 +15,14 @@ GoreeCloud VPN is an original native VPN product, **not NetBird**, not a NetBird
 
 These components are **not** sufficient to create a VPN tunnel. Registration of a public key does not push a WireGuard peer, exchange keys with a gateway, apply routes, or establish encrypted connectivity. The API `/v1/info` explicitly returns `tunnel_operational:false`.
 
+## Linux kernel agent — gated development source, not deployed
+
+An optional **Linux-only** `cmd/vpnagent` now models and can explicitly reconcile a fixed `gcvpn0` WireGuard kernel interface for the private development `10.77.0.0/24` split route. It invokes the verified `ip` and `wg` tools as discrete subprocesses, **never a shell or wg-quick PostUp/PostDown hook**. Private keys are supplied to `wg set` via an absolute 0600 key-file path rather than command arguments. The planning operation prints only public endpoint, route and key-path metadata.
+
+The apply path requires Linux root/CAP_NET_ADMIN context **and** two independent flags (`--confirm-apply`, `--acknowledge-network-impact`); it refuses an existing `gcvpn0` interface or overlapping route. On partial failure it removes only the newly created interface. Success writes a private ownership marker; stopping requires separate confirmation and a verified WireGuard interface. The agent is **not deployed** and **must only be run on an authorized isolated test network** after verifying the actual gateway, key materials, host routing, firewall controls and rollback; it does **not** configure a gateway or prove successful transport.
+
+Official command API syntax was cross-checked with [WireGuard quick start](https://www.wireguard.com/quickstart/) and [wg(8)](https://www.man7.org/linux/man-pages/man8/wg.8.html). The agent requires external `iproute2`, `wireguard-tools` and Linux kernel WireGuard support. Pure plan and rollback tests run in CI without root or any live host network action. A real isolated multi-peer handshake remains an unsatisfied release gate.
+
 ## Proposed: functioning data plane (not implemented)
 
 A production WireGuard-based tunnel design will require a separately authorized VPN gateway and agent that verify peer identity, securely reconcile public-key changes, install/enforce WireGuard configuration, manage endpoints and rekey/expiry, transport NAT traversal or relay, handle IPv4/IPv6 routes, provide split and full tunnel semantics with DNS leak protection and a kill switch, and protect policy/failure modes. Linux should use kernel WireGuard with a tightly scoped privileged agent, not run the entire web server as root. Android requires an explicit VpnService permission flow and an audited userspace WireGuard implementation with privacy-safe lifecycle; no VpnService has been added to this app.
