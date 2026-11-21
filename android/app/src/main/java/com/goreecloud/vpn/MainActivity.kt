@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private var state by mutableStateOf("Disconnected")
     private var peers by mutableStateOf(emptyList<String>())
     private var loading by mutableStateOf(false)
+    private var sessionGeneration = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun disconnect() {
+        sessionGeneration += 1
         sessionToken = ""
         enteredToken = ""
         peers = emptyList()
@@ -78,9 +80,9 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { false }
     }
 
-    private fun readApi(path: String, token: String): JSONObject {
-        if (!validOrigin(endpoint)) error("HTTPS required")
-        val connection = (URL(endpoint + path).openConnection() as HttpURLConnection)
+    private fun readApi(path: String, token: String, origin: String): JSONObject {
+        if (!validOrigin(origin)) error("HTTPS required")
+        val connection = (URL(origin + path).openConnection() as HttpURLConnection)
         connection.connectTimeout = 7000
         connection.readTimeout = 7000
         connection.instanceFollowRedirects = false
@@ -112,14 +114,17 @@ class MainActivity : ComponentActivity() {
             return
         }
         val candidate = enteredToken
+        val origin = endpoint
+        val generation = ++sessionGeneration
         enteredToken = ""
         loading = true
         Thread {
             try {
-                val info = readApi("/v1/info", candidate)
+                val info = readApi("/v1/info", candidate, origin)
                 if (info.optBoolean("tunnel_operational", true)) error("Unexpected API")
-                val result = parsePeers(readApi("/v1/peers", candidate))
+                val result = parsePeers(readApi("/v1/peers", candidate, origin))
                 runOnUiThread {
+                    if (sessionGeneration != generation) return@runOnUiThread
                     sessionToken = candidate
                     peers = result
                     loading = false
@@ -127,6 +132,7 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (_: Exception) {
                 runOnUiThread {
+                    if (sessionGeneration != generation) return@runOnUiThread
                     sessionToken = ""
                     loading = false
                     state = "Authentication or TLS connection failed"
@@ -137,13 +143,15 @@ class MainActivity : ComponentActivity() {
 
     private fun refresh() {
         val token = sessionToken
+        val origin = endpoint
+        val generation = sessionGeneration
         if (token.isEmpty()) return
         loading = true
         Thread {
             try {
-                val result = parsePeers(readApi("/v1/peers", token))
+                val result = parsePeers(readApi("/v1/peers", token, origin))
                 runOnUiThread {
-                    if (sessionToken == token) {
+                    if (sessionGeneration == generation && sessionToken == token) {
                         peers = result
                         state = "Loaded " + result.size + " registered identities"
                     }
@@ -151,6 +159,7 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (_: Exception) {
                 runOnUiThread {
+                    if (sessionGeneration != generation) return@runOnUiThread
                     loading = false
                     state = "Unable to refresh peer identities"
                 }
