@@ -27,8 +27,8 @@ UNAUTH="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:
 [[ "$UNAUTH" == "401" ]] || { echo "Unauthenticated peer read was not denied"; exit 1; }
 curl -sSf --max-time 3 http://127.0.0.1:18788/ | grep -q 'GoreeCloud VPN'
 curl -sSf --max-time 3 http://127.0.0.1:18788/app.js | grep -q 'localStorage'
-"$TMP/vpnctl" info --token-file "$TMP/admin/token" >/dev/null
-"$TMP/vpnctl" register --name "isolated-test" --public-key-file "$TMP/client/wg-public.key" \
+"$TMP/vpnctl" info --api http://127.0.0.1:18788 --token-file "$TMP/admin/token" >/dev/null
+"$TMP/vpnctl" register --api http://127.0.0.1:18788 --name "isolated-test" --public-key-file "$TMP/client/wg-public.key" \
   --token-file "$TMP/admin/token" --confirm >"$TMP/registered.json"
 ID="$(python3 - "$TMP/registered.json" <<'PY'
 import json,sys
@@ -38,7 +38,7 @@ print(p["id"])
 PY
 )"
 [[ "$ID" =~ ^[0-9a-f]{32}$ ]]
-"$TMP/vpnctl" revoke --id "$ID" --token-file "$TMP/admin/token" --confirm >/dev/null
+"$TMP/vpnctl" revoke --api http://127.0.0.1:18788 --id "$ID" --token-file "$TMP/admin/token" --confirm >/dev/null
 kill "$PID"; wait "$PID" 2>/dev/null || true; PID=""
 "$TMP/vpnd" --listen 127.0.0.1:18788 --state-dir "$TMP/state" \
   --token-file "$TMP/admin/token" >"$TMP/server-restart.log" 2>&1 &
@@ -47,7 +47,7 @@ for _ in {1..30}; do
   if curl -sSf --max-time 1 http://127.0.0.1:18788/healthz > /dev/null; then break; fi
   sleep 0.1
 done
-"$TMP/vpnctl" list --token-file "$TMP/admin/token" >"$TMP/peers.json"
+"$TMP/vpnctl" list --api http://127.0.0.1:18788 --token-file "$TMP/admin/token" >"$TMP/peers.json"
 python3 - "$TMP/peers.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))["peers"]
