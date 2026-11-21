@@ -1,0 +1,7 @@
+GoreeCloud VPN
+Copyright 2026 GoreeCloud contributors
+
+GoreeCloud VPN is first-party source independent from NetBird.
+This project uses Go standard library and upstream Android/Qt framework APIs;
+third-party components, when later adopted, retain their respective licenses.
+See LICENSE for Apache-2.0 terms. No NetBird source has been copied or bundled.
