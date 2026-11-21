@@ -1,0 +1,6 @@
+{
+  "name": "adguard.goreecloud.com",
+  "type": "A",
+  "content": "REPLACE_VERIFIED_VPS_NETBIRD_IP",
+  "ttl": 300
+}
