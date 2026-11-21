@@ -112,7 +112,7 @@ The authorized laptop and VPS were both enrolled into the **new** NetBird accoun
 
 **Private DNS was subsequently configured and independently verified from the laptop.** The `gc-netbird` management CLI now has an owner-privately enrolled and verified NetBird PAT; authenticated API reads and scoped additive writes have been validated. Three private, owner-only proposal JSON files on VPS Mesh have passed offline dry-runs: a new admin-device group with the authorized laptop peer, a custom zone `adguard.goreecloud.com` restricted to that group, and its apex A record pointing at the freshly verified VPS overlay IP. Their current identifiers are private runtime details; an administrator-device group, scoped private DNS zone, A record and additive TCP/443 policy were created successfully, with authenticated API readback. No existing group/policy was deleted or replaced. The approved process created the administrator-device group, used its verified ID in a new private DNS zone, then created the A record for the newly verified VPS overlay IP. The laptop resolved `adguard.goreecloud.com` using NetBird's managed DNS resolver; the public DNS provider was not modified. Verify hostname resolution and browser certificate trust on the laptop before declaring full user acceptance. Do not add a public Porkbun A record for AdGuard.
 
-The fresh `Default` NetBird policy currently allows the `All` group to communicate with itself across protocols. **A unidirectional administrator-to-VPS TCP/443 policy has now been created and tested additively, but the broad Default policy remains enabled pending a separately controlled cutover.** Restrict the final access policy to approved administrator peers; the Caddy `100.64.0.0/10` source matcher alone is not an admin-only authorization policy.
+The fresh `Default` All-to-All policy has now been **disabled by explicit operator authorization**. Only the unidirectional administrator-to-VPS TCP/443 policy remains enabled. Post-change tests confirmed private AdGuard HTTPS still works, while ICMP no longer succeeds between peers. Restrict the final access policy to approved administrator peers; the Caddy `100.64.0.0/10` source matcher alone is not an admin-only authorization policy.
 
 The peer's persistent identity survived recreation without the setup key environment or mount. The local one-time setup key file was deleted after validation, and `docker-compose.peer.enrolled.yml` in the repository is the correct subsequent-runtime template. The owner still must revoke the one-off setup key in the NetBird dashboard. Preserve the client-state directory during future upgrades.
 
@@ -123,11 +123,31 @@ The peer's persistent identity survived recreation without the setup key environ
 
 With an owner-generated NetBird PAT stored exclusively in the authorized VPS user's private CLI credential store, `gc-netbird auth-check` passed. The CLI then created a narrowly scoped admin-device group containing only the authorized laptop peer, a custom private DNS zone `adguard.goreecloud.com` distributed **only** to that group, and a matching A record for the verified new VPS NetBird address. All were read back through the authenticated NetBird API, with no setup keys or secrets displayed.
 
-An additional **enabled**, **unidirectional**, TCP/443-only allow policy from the new admin-device group to the existing VPS server group was created and read back. The current default `All → All` allow policy remains **enabled**, so the effective access graph is not yet restricted to administrator peers; the new rule is a safe additive prerequisite, not a completed zero-trust cutover.
+An additional **enabled**, **unidirectional**, TCP/443-only allow policy from the new admin-device group to the existing VPS server group was created and read back. The former default `All → All` allow policy was subsequently **disabled by PUT**, preserving the policy for rollback. Only the approved administrator-device → VPS TCP/443 rule remains enabled. Tested successful HTTPS and restricted ICMP after the cutover.
 
 After the DNS change, the authorized laptop's `resolvectl query` returned the VPS overlay address on `wt0`, and `getent ahostsv4` agreed. An ordinary `curl` to `https://adguard.goreecloud.com/login.html` **without `--resolve`** returned HTTP 200, TLS result 0 using the locally held public Caddy CA certificate, with a remote connection to the private VPN IP. The public destination's forced-host probe returned HTTP 404. Both VPN peers remained `1/1 Connected` over direct P2P, and existing Vikunja, Plane, NetBird and Stirling public health checks were unaffected.
 
 **Remaining independent acceptance gates:** disable/replace the broad Default policy only with separately authorized, rehearsed rollback and a tested least-privilege replacement; revoke the one-time NetBird setup key server-side; decide how Firefox should validate Caddy's internal certificate authority (no global browser trust was granted); complete an actual AdGuard account login; and monitor intermittent Caddy NetBird gRPC streaming disconnects. These items are not implied by successful DNS and TLS command-line verification.
+
+
+## Enforced access-policy cutover — verified November 20, 2026
+
+**User-authorized network change:** NetBird's `Default` policy (All → All; bidirectional; every protocol) was **disabled** via the authenticated `gc-netbird update policies` PUT endpoint. The policy was **not deleted**. The previously created unidirectional `GoreeCloud AdGuard HTTPS - administrator devices to VPS` TCP/443 policy remains enabled, and it is now the **only enabled NetBird access policy**. This does not restrict separately public Caddy domains, NetBird control-plane traffic, or any service outside this VPN peer policy boundary.
+
+**Preparation:** before changing anything, the original Default policy was fetched via authenticated REST into an owner-private JSON snapshot (mode 0600). Exact disabled and re-enable JSON payloads were constructed from the live policy and dry-run validated with `gc-netbird`; narrow-policy source group, target group, protocol, port 443 and unidirectionality were verified against the live API. Rollback was **prepared and dry-run tested, not executed**.
+
+**Live API evidence:** the Default update returned HTTP 200; authenticated GET and LIST both showed `Default.enabled=false` and the scoped policy `enabled=true`. On the laptop, NetBird remained connected (1/1 P2P) and ordinary private-DNS HTTPS to AdGuard returned HTTP 200, TLS verification 0, and the intended private VPN destination. ICMP to the VPS, which succeeded before the change, returned 0/2 replies afterward. VPS → laptop ICMP also returned 0/2. Laptop TCP/22 was unreachable (which also depends on whether an SSH listener exists). NetBird public HTTPS, Vikunja and Plane returned HTTP 200 after the cutover. The control plane and existing Caddy configuration were not changed.
+
+**Emergency rollback, only if explicitly authorized and necessary:** on VPS Mesh, the retained `~/.local/share/goreecloud/netbird-cli/rollback/20261120-default-policy-disable-reenable.json` is an owner-only mode-0600 PUT payload. Use a private terminal / Remote Desktop Commander, verify the original account/policy ID and API health, and run:
+
+```sh
+f="$HOME/.local/share/goreecloud/netbird-cli/rollback/20261120-default-policy-disable-reenable.json"
+gc-netbird update policies VERIFIED_DEFAULT_POLICY_ID --data-file "$f" --dry-run
+# Emergency restore only if explicitly approved, because this re-enables ALL-TO-ALL:
+gc-netbird update policies VERIFIED_DEFAULT_POLICY_ID --data-file "$f" --confirm-write --confirm-network-impact
+```
+
+The raw GET snapshot and disable payload are stored privately in the same directory; do not commit any private config, PAT, group memberships or unredacted network inventories. Do not substitute this policy change for service-side authentication, host firewall protections, or explicit Firefox certificate validation.
 
 ## Security and authority
 
