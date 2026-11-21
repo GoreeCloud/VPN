@@ -26,7 +26,7 @@ def main() -> int:
     )
     parser.add_argument("--directory", required=True, type=Path)
     parser.add_argument("--domain", default="netbird.goreecloud.com")
-    parser.add_argument("--owner-email", default="admin@goreecloud.com")
+    parser.add_argument("--owner-email", required=True, help="New administrator email; not saved to public source")
     parser.add_argument("--trusted-proxy-ip", required=True,
                         help="Verified Caddy container IPv4, not a public wildcard")
     args = parser.parse_args()
