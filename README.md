@@ -6,19 +6,22 @@
 
 **0.1.0 control-plane preview; not a working VPN or a production release.**
 
-This branch contains a functional, authenticated **peer registry and administrator CLI**, including a non-activating WireGuard client-configuration generator written in Go, plus development-stage **web**, **native Linux Qt Quick 6.12**, and **native Android Compose Material 3** client surfaces. The API does **not** configure WireGuard, create encrypted tunnels, alter routes or host firewalls, relay traffic, control VPN DNS, or request Android VpnService permission. A registered peer is only an identity record. The authenticated `GET /v1/info` response explicitly returns `"tunnel_operational":false`.
+This branch contains a functional, authenticated **peer registry and administrator CLI**, including non-activating WireGuard client and gateway configuration generators written in Go, plus development-stage **web**, **native Linux Qt Quick 6.12**, and **native Android Compose Material 3** client surfaces. The API does **not** configure WireGuard, create encrypted tunnels, alter routes or host firewalls, relay traffic, control VPN DNS, or request Android VpnService permission. A registered peer is only an identity record. The authenticated `GET /v1/info` response explicitly returns `"tunnel_operational":false`.
 
 | Component | Implemented source | Verified acceptance |
 | --- | --- | --- |
 | Backend `cmd/vpnd` | Go standard-library REST control plane, localhost default, TLS mandatory on non-loopback, bounded auth/JSON, private atomic state | Go race tests, vet, local build, isolated local API lifecycle and restart |
-| `cmd/vpnctl` | CSPRNG admin token creation, local X25519/WireGuard-compatible keys, mode-0600 split-tunnel config export, admin peer registry and revocation commands | Go tests and disposable localhost E2E |
+| `cmd/vpnctl` | CSPRNG admin token creation, local X25519/WireGuard-compatible keys, mode-0600 split-tunnel config export, admin peer registry and revocation commands | Go tests and disposable localhost E2E (including private client + gateway config exports) |
 | Web `web/` | Accessible HTML/CSS/JS same-origin identity console, in-memory token | Static code, JavaScript syntax and localhost HTML/JS HTTP acceptance; browser UX not yet exercised |
 | Linux `desktop/linux/` | Native Qt Quick 6.12 graphical registry client | Source contracts; native Qt 6.12 build/hardware QA pending |
-| Android `android/` | Native Jetpack Compose Material 3 control-plane viewer with HTTPS and non-persistent token | Source contracts; APK/emulator/physical device QA tracked separately |
+| Android `android/` | Native Jetpack Compose Material 3 control-plane viewer with HTTPS and non-persistent token | [Hosted CI debug APK compile passed](https://github.com/GoreeCloud/VPN/actions/runs/44875185791); no emulator/phone runtime acceptance |
 | Linux WireGuard agent | Separate root-gated `cmd/vpnagent` with fixed `gcvpn0`, split-only route, and rollback | Go unit/plan tests only; no privileged execution or real handshake |
 | Actual encrypted tunnel | **Not running or accepted** | Gateway setup, agent installation and real two-peer handshake pending |
 
 The first-party client apps are independent of NetBird; do not confuse source readiness with a VPN that carries traffic.
+
+
+**Verified CI checkpoint (November 20, 2026):** [First-party control-plane source safety](https://github.com/GoreeCloud/VPN/actions/runs/44875185778) and [Android native Compose APK build](https://github.com/GoreeCloud/VPN/actions/runs/44875185791) both passed on the reviewed first-party feature branch. The Android workflow verifies a compiled debug APK exists on its temporary runner; it does not publish an installable user release. The authorized laptop's earlier offline Android packaging attempts timed out due to resource pressure; only the hosted compile is accepted. No physical phone/emulator or Qt6.12 Linux executable was exercised.
 
 ## Build and test the control plane
 
