@@ -1,0 +1,21 @@
+# Generated build output and local secrets
+/android/.gradle/
+/android/build/
+/android/app/build/
+/desktop/linux/build/
+/build/
+/dist/
+/.idea/
+/.vscode/
+*.iml
+*.keystore
+*.jks
+*.pem
+*.key
+admin-token
+state.json
+.env
+.env.*
+/private/
+/secrets/
+.DS_Store
