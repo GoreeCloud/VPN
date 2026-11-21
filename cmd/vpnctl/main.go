@@ -19,6 +19,7 @@ import (
  "strings"
  "time"
  "github.com/GoreeCloud/VPN/internal/credentials"
+ "github.com/GoreeCloud/VPN/internal/wireguard"
 )
 
 func defaultTokenPath()string{
@@ -81,8 +82,35 @@ func localKeygen(dir string)error{
  return nil
 }
 
+func writeClientConfiguration(dir,gatewayFile,address,endpoint,output string)error{
+ if dir=="" || gatewayFile=="" || address=="" || endpoint=="" || output=="" {
+  return errors.New("config-client requires --dir, --gateway-public-key-file, --address, --endpoint and --output")
+ }
+ privatePath:=filepath.Join(dir,"wg-private.key")
+ info,err:=os.Lstat(privatePath);if err!=nil{return err}
+ if !info.Mode().IsRegular() || info.Mode().Perm()!=0600{return errors.New("private key input must be regular mode 0600")}
+ raw,err:=os.ReadFile(privatePath);if err!=nil{return err}
+ gateway,err:=os.ReadFile(gatewayFile);if err!=nil{return err}
+ body,err:=wireguard.RenderClientConfig(wireguard.ClientOptions{
+  PrivateKey:strings.TrimSpace(string(raw)),Address:address,
+  GatewayPublicKey:strings.TrimSpace(string(gateway)),Endpoint:endpoint,
+ })
+ if err!=nil{return err}
+ parent,err:=os.Lstat(filepath.Dir(output));if err!=nil{return err}
+ if !parent.IsDir()||parent.Mode()&os.ModeSymlink!=0||parent.Mode().Perm()&0077!=0{
+  return errors.New("configuration output parent directory must be private (0700)")
+ }
+ f,err:=os.OpenFile(output,os.O_WRONLY|os.O_CREATE|os.O_EXCL,0600)
+ if err!=nil{return err}
+ if _,err=f.Write(body);err!=nil{f.Close();os.Remove(output);return err}
+ if err:=f.Sync();err!=nil{f.Close();os.Remove(output);return err}
+ if err:=f.Close();err!=nil{os.Remove(output);return err}
+ fmt.Println("Private split-tunnel WireGuard client configuration created (0600). Not installed or activated.")
+ return nil
+}
+
 func main(){
- if len(os.Args)<2{fmt.Fprintln(os.Stderr,"Usage: vpnctl init-admin | keygen | list | register | revoke | info");os.Exit(2)}
+ if len(os.Args)<2{fmt.Fprintln(os.Stderr,"Usage: vpnctl init-admin | keygen | config-client | list | register | revoke | info");os.Exit(2)}
  command:=os.Args[1]
  flags:=flag.NewFlagSet(command,flag.ContinueOnError)
  tokenFile:=flags.String("token-file",defaultTokenPath(),"owner-private administrator token file")
@@ -91,7 +119,11 @@ func main(){
  name:=flags.String("name","","peer display name")
  pubFile:=flags.String("public-key-file","","local public key file")
  id:=flags.String("id","","peer ID")
- confirm:=flags.Bool("confirm",false,"confirm a peer registration or revocation")
+ confirm:=flags.Bool("confirm",false,"confirm a peer registration, revocation or secret configuration export")
+ gatewayKeyFile:=flags.String("gateway-public-key-file","","local gateway public key file")
+ address:=flags.String("address","","assigned private peer IPv4 /32")
+ endpoint:=flags.String("endpoint","","reviewed gateway host:port")
+ output:=flags.String("output","","new mode-0600 client configuration path")
  if err:=flags.Parse(os.Args[2:]);err!=nil{os.Exit(2)}
  var err error
  switch command{
@@ -100,6 +132,9 @@ func main(){
   if err==nil{fmt.Println("Private administrator token created (0600). Token contents not displayed.")}
  case "keygen":
   err=localKeygen(*dir)
+ case "config-client":
+  if !*confirm {err=errors.New("client configuration export requires --confirm");break}
+  err=writeClientConfiguration(*dir,*gatewayKeyFile,*address,*endpoint,*output)
  case "list","register","revoke","info":
   var token string
   token,err=credentials.Read(*tokenFile);if err!=nil{break}
