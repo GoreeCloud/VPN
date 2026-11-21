@@ -30,3 +30,5 @@ jobs:
         run: node --check web/app.js
       - name: Isolated peer identity lifecycle
         run: bash scripts/e2e-loopback.sh
+      - name: WireGuard kernel operation plan (dry run, no privileges)
+        run: bash scripts/test_linux_agent_plan.sh
