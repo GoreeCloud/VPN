@@ -55,7 +55,7 @@ PATH_RE = re.compile(
     + r"|networks"
     + rf"(?:/{ID}(?:/(?:resources|routers)(?:/{ID})?)?)?"
     + r"|dns/(?:zones"
-    + rf"(?:/{ID}(?:/records(?:/{ID})?)?"
+    + rf"(?:/{ID}(?:/records(?:/{ID})?)?)?"
     + rf"|nameservers(?:/{ID})?"
     + r"|settings)"
     + r"|events/(?:audit|network-traffic)"
