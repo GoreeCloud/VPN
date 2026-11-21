@@ -363,7 +363,7 @@ def command_logout(args):
 def local_list(name):
     """Emergency read-only count/list from *fresh* VPS SQLite. API stays authoritative."""
     fields = {
-        "peers": ("peers", "id,name,ip,peer_status_connected"),
+        "peers": ("peers", "id,name,ip,meta_hostname"),
         "groups": ("groups", "id,name"),
         "policies": ("policies", "id,name,enabled"),
     }
