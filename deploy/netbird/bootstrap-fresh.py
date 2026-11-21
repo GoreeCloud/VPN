@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Create a brand-new NetBird control plane; never import or reuse old state.
 
-Python 3.10+, stdlib only. Run in a *new*, absent directory. The generated
+Python 3.10+ and pinned bcrypt dependency. Run in a *new*, absent directory. The generated
 password is owner-only and must be rotated and removed after first sign-in.
 """
 import argparse
 import base64
+import bcrypt
 import ipaddress
 import os
 from pathlib import Path
@@ -52,6 +53,7 @@ def main() -> int:
     for name in ("data", "client-state", "credentials"):
         (base / name).mkdir(mode=0o700)
     password = secrets.token_urlsafe(36)
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('ascii')
     relay_key = secrets.token_urlsafe(48)
     store_key = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
     cidr = f"{proxy}/32"
@@ -77,7 +79,7 @@ def main() -> int:
       - "http://localhost:53000/"
     owner:
       email: "{args.owner_email}"
-      password: "{password}"
+      password: "{password_hash}"
   reverseProxy:
     trustedHTTPProxies:
       - "{cidr}"
@@ -105,6 +107,7 @@ LETSENCRYPT_DOMAIN=none
     secure_file(base / "credentials" / "initial-admin-password", password + "\n")
     print("Brand-new NetBird config and empty state created (directories 0700, files 0600).")
     print("Initial administrator password stored privately in credentials/initial-admin-password.")
+    print("NetBird owner.password configuration contains only a validated bcrypt password hash.")
     print("No prior accounts, peers, policies, keys, databases, or backup data were imported.")
     return 0
 
