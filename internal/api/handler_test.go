@@ -106,4 +106,5 @@ func TestTokenSafety(t *testing.T){
     w:=httptest.NewRecorder();h.ServeHTTP(w,r)
     if w.Code!=401{t.Fatalf("duplicated auth accepted: %d",w.Code)}
     if w.Header().Get("Cache-Control")!="no-store"{t.Fatal("sensitive response cacheable")}
+    if !strings.Contains(w.Header().Get("Content-Security-Policy"),"script-src 'self'"){t.Fatal("missing CSP protection")}
 }
