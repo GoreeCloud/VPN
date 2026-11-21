@@ -18,8 +18,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install pinned bootstrap hashing dependency
+        run: python3 -m pip install --requirement deploy/netbird/requirements-bootstrap.txt
       - name: Compile test source
-        run: python3 -m py_compile deploy/netbird/test_deployment_contracts.py
+        run: python3 -m py_compile deploy/netbird/bootstrap-fresh.py deploy/netbird/test_*.py
       - name: Test non-secret deployment contracts
         run: python3 -m unittest discover -v -s deploy/netbird -p 'test_*.py'
       - name: Shell syntax
