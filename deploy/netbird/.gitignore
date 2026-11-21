@@ -1,0 +1,14 @@
+# Secrets, live state, recovery snapshots and private keys must never enter public Git.
+config.yaml
+dashboard.env
+client-setup.key
+data/
+client-state/
+client-ca/
+Caddyfile.*-candidate
+Caddyfile.before-*
+*.db
+*.gcenc
+*.pem
+*.key
+*.log
