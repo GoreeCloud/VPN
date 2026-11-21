@@ -218,6 +218,30 @@ class ContractTests(unittest.TestCase):
                 self.assertEqual(cli.main(["delete", "groups", "some-group",
                     "--confirm-write", "--confirm-network-impact"]), 2)
 
+    def test_live_group_or_dns_placeholder_blocked_before_auth(self):
+        with tempfile.TemporaryDirectory() as t:
+            payload = Path(t) / "zone.json"
+            payload.write_text(json.dumps({
+                "name": "adguard", "domain": "adguard.example.test",
+                "enabled": True, "enable_search_domain": False,
+                "distribution_groups": ["REPLACE_ADMIN_GROUP_ID"]
+            }))
+            os.chmod(payload, 0o600)
+            with mock.patch.object(cli, "read_pat", side_effect=AssertionError("Must not read token")):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(cli.main(["create", "dns-zones",
+                        "--data-file", str(payload),
+                        "--confirm-write", "--confirm-network-impact"]), 2)
+            payload.write_text(json.dumps({
+                "name": "adguard.example.test", "type": "A",
+                "content": "100.64.0.10", "ttl": 300
+            }))
+            with mock.patch.object(cli, "read_pat", side_effect=AssertionError("Must not read token")):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(cli.main(["api", "POST", "/api/dns/zones/REPLACE_ZONE_ID/records",
+                        "--data-file", str(payload),
+                        "--confirm-write", "--confirm-network-impact"]), 2)
+
     def test_setup_key_creation_requires_private_capture(self):
         with tempfile.TemporaryDirectory() as t:
             file = Path(t) / "key.json"
