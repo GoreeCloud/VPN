@@ -1,0 +1,24 @@
+{
+  "name": "AdGuard management - admin devices only",
+  "description": "Permit authorized admin-device group to reach only the VPN server's HTTPS port",
+  "enabled": true,
+  "rules": [
+    {
+      "name": "Admin clients to private AdGuard",
+      "description": "NetBird overlay TCP/443 only",
+      "enabled": true,
+      "action": "accept",
+      "bidirectional": false,
+      "protocol": "tcp",
+      "ports": [
+        "443"
+      ],
+      "sources": [
+        "REPLACE_ADMIN_GROUP_ID"
+      ],
+      "destinations": [
+        "REPLACE_VPS_SERVER_GROUP_ID"
+      ]
+    }
+  ]
+}
