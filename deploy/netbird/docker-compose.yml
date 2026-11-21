@@ -1,0 +1,42 @@
+name: goreecloud-netbird-fresh
+services:
+  netbird-server:
+    image: netbirdio/netbird-server@sha256:47e43b1b9e6343eb99d99a612513579111439dd016805912b0fae95ce802b908
+    container_name: goreecloud-netbird-server
+    restart: unless-stopped
+    command: ["--config", "/etc/netbird/config.yaml"]
+    ports:
+      - "127.0.0.1:18081:80"
+      - "3478:3478/udp"
+    volumes:
+      - ./config.yaml:/etc/netbird/config.yaml:ro
+      - ./data:/var/lib/netbird
+    networks:
+      shared:
+        aliases: [netbird-server]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  dashboard:
+    image: netbirdio/dashboard@sha256:3e8a714e2966f96201b817657cf5b6e4304b947b88341fe99639214fb440ea9c
+    container_name: goreecloud-netbird-dashboard
+    restart: unless-stopped
+    env_file: [dashboard.env]
+    ports:
+      - "127.0.0.1:18080:80"
+    networks:
+      shared:
+        aliases: [netbird-dashboard]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+networks:
+  shared:
+    external: true
+    name: goreecloud-temp_default
