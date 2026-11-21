@@ -1,0 +1,2 @@
+# Pinned password-hashing dependency for the isolated initial NetBird owner bootstrap.
+bcrypt==4.2.0
