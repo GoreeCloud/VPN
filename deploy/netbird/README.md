@@ -4,6 +4,20 @@
 
 **Source owner:** GoreeCloud/VPN. **Runtime owner:** authorized VPS Mesh operator. This directory contains only reproducible non-secret source and documentation; do not commit real deployment configs, databases, certificates, recovery data or passwords.
 
+## Fresh-install authentication compatibility
+
+**Fixed November 20, 2026:** NetBird's combined server requires `server.auth.owner.password` to be a **bcrypt hash**. Supplying a plaintext password causes an OAuth login HTTP 500 with the upstream error "hashedSecret too short to be a bcrypted password", even while the public dashboard and OIDC metadata return HTTP 200. The source bootstrap now hashes a freshly generated owner password using pinned `bcrypt==4.2.0`, stores only the bcrypt hash in `config.yaml`, and writes the human-entered plaintext password **solely** to an owner-only `credentials/initial-admin-password` file. A test exercises the generated hash, compares it to the private password, and ensures neither application config nor logs expose plaintext. The deployed fresh server's bcrypt hash was corrected with NetBird's own `admin user change-password --password-file -` command; fresh management store remains empty (0 accounts/peers) until first login. OIDC and instance API health returned HTTP 200 after a server restart. Interactive login success is not yet established without a user sign-in.
+
+To reproduce a fresh bootstrap in a private Python virtual environment, install the pinned dependency first:
+
+```sh
+python3 -m venv .venv-netbird-bootstrap
+. .venv-netbird-bootstrap/bin/activate
+python3 -m pip install -r /path/to/repo/deploy/netbird/requirements-bootstrap.txt
+```
+
+Do not embed a plaintext password in config, invoke a password-changing CLI with `--password` on argv, or upload a password-bearing file to GitHub. The existing private password-file repair method is for an operator explicitly recovering an incorrectly seeded **fresh** local IdP; do not recreate or restore historic databases.
+
 ## Live state — 2026-11-20 (America/Chicago)
 
 | Area | Actual observation |
@@ -11,7 +25,7 @@
 | NetBird combined server / dashboard | Running in Docker from immutable image digests, using an independently generated fresh config/data directory |
 | Previous restored runtime | Containers stopped and removed; restored **deployment directory deleted** after validating mounts of the fresh deployment |
 | Management store | New SQLite store passed integrity check; **0 management accounts, 0 management users, 0 peers, 0 groups, 0 policies, 0 setup keys** at pre-login checkpoint |
-| Embedded local identity | A newly generated private bootstrap owner password was seeded into the new embedded IdP; this is **not** an old recovered account |
+| Embedded local identity | A newly generated private bootstrap owner password was initially seeded as plaintext (triggering HTTP 500 login); corrected to validated bcrypt via NetBird's supported CLI and fixed in bootstrap source. **First authenticated sign-in remains unverified.** |
 | NetBird dashboard, public TLS / OAuth2 discovery | HTTP 200 at `https://netbird.goreecloud.com`; existing Caddy TLS and upstream routes reused |
 | STUN UDP/3478 | Verified responding during earlier control-plane tests; **repeat after fresh replacement before accepting final peer connections** |
 | Existing application sites | Vikunja, Plane, Stirling PDF HTTP 200 after NetBird cutover |
@@ -40,7 +54,7 @@ docker compose config --quiet
 docker compose up -d --no-build
 ```
 
-The helper generates **new** 256-bit database encryption material, relay authentication material, and a strong owner password with Python's cryptographic random generator. It creates an empty `data/` directory. Secret files are mode `0600`, directories `0700`. It prints no passwords/tokens. This script is **not** needed to replay the already-running deployment. Docker Compose is pinned by immutable digest. Restart with the existing preserved *new* store; do not regenerate keys after adoption or accidentally start a second concurrent SQLite server.
+The helper generates **new** 256-bit database encryption material, relay authentication material, and a strong owner password with Python's cryptographic random generator, then bcrypt-hashes that password before writing it to the server configuration. It creates an empty `data/` directory. Secret files are mode `0600`, directories `0700`. It prints no passwords/tokens. This script is **not** needed to replay the already-running deployment. Docker Compose is pinned by immutable digest. Restart with the existing preserved *new* store; do not regenerate keys after adoption or accidentally start a second concurrent SQLite server.
 
 ### First login without restored credentials
 
