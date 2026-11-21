@@ -4,7 +4,7 @@ This source represents a **first-party control-plane preview**, not an operation
 
 **Identity:** All peer registry APIs require one high-entropy bearer administrator token saved in an owner-only 0600 file. Only the /healthz and optionally enabled static UI assets are unauthenticated. There are no per-user roles, MFA, SSO or token rotation API. Use it on loopback, not the public Internet. Remote listeners require TLS and separate network/firewall access controls.
 
-**Network:** A peer record is a registration record, not an allowed WireGuard session or firewall permission. Never conflate the registry's 10.77.0.0/24 development allocation with a production routed subnet. No routing, peer ACL, DNS, relay or kill switch is implemented. Do not automatically open gateways or assign public DNS based on this registry.
+**Network:** A peer record is a registration record, not an allowed WireGuard session or firewall permission. An additional private config exporter can emit conservative `AllowedIPs = 10.77.0.0/24` WireGuard client files with a locally held private key, written exclusively to new 0600 files; it never activates interfaces. Never conflate the registry's 10.77.0.0/24 development allocation with a production routed subnet. No routing, peer ACL, DNS, relay or kill switch is implemented. Do not automatically open gateways or assign public DNS based on this registry.
 
 **Privacy:** The server stores device names, public keys and reserved addresses in a local owner-private directory; no analytics or telemetry are emitted. Browser/Android credentials remain in memory. Sensitive data must be excluded from logs and public source. Android backups and cleartext traffic are disabled.
 
