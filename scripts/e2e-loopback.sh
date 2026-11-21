@@ -33,7 +33,7 @@ grep -q 'AllowedIPs = 10.77.0.2/32' "$TMP/gateway/gateway.conf"
 [[ "$(stat -c %a "$TMP/client/gc-vpn.conf")" == "600" ]]
 grep -q 'AllowedIPs = 10.77.0.0/24' "$TMP/client/gc-vpn.conf"
 "$TMP/vpnd" --listen 127.0.0.1:18788 --state-dir "$TMP/state" \
-  --token-file "$TMP/admin/token" --web-root "$ROOT/web" >"$TMP/server.log" 2>&1 &
+  --token-file "$TMP/admin/token" --web-root "$ROOT/web/dist" >"$TMP/server.log" 2>&1 &
 PID="$!"
 for _ in {1..30}; do
   if curl -sSf --max-time 1 http://127.0.0.1:18788/healthz > /dev/null; then break; fi
@@ -43,7 +43,11 @@ curl -sSf --max-time 3 http://127.0.0.1:18788/healthz | grep -q '"status":"ok"'
 UNAUTH="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:18788/v1/peers)"
 [[ "$UNAUTH" == "401" ]] || { echo "Unauthenticated peer read was not denied"; exit 1; }
 curl -sSf --max-time 3 http://127.0.0.1:18788/ | grep -q 'GoreeCloud VPN'
-curl -sSf --max-time 3 http://127.0.0.1:18788/app.js | grep -q 'localStorage'
+ASSET="$(curl -sSf --max-time 3 http://127.0.0.1:18788/ | grep -oE '/assets/[^"]+\.js' | head -n1)"
+[[ "$ASSET" == /assets/* ]] || { echo "Missing compiled React entrypoint"; exit 1; }
+curl -sSf --max-time 3 "http://127.0.0.1:18788$ASSET" | grep -q 'GoreeCloud'
+# Assets outside the approved bundle must not be exposed.
+[[ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18788/go.mod)" == "401" ]]
 "$TMP/vpnctl" info --api http://127.0.0.1:18788 --token-file "$TMP/admin/token" >/dev/null
 "$TMP/vpnctl" register --api http://127.0.0.1:18788 --name "isolated-test" --public-key-file "$TMP/client/wg-public.key" \
   --token-file "$TMP/admin/token" --confirm >"$TMP/registered.json"

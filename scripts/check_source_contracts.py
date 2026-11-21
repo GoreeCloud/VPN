@@ -20,14 +20,16 @@ assert "RenderClientConfig" in wg
 assert "config-client" in read("cmd/vpnctl/main.go")
 
 go = read("internal/api/handler.go")
-assert '"tunnel_operational":false' in go, "Source must explicitly deny tunnel activation"
+assert '"tunnel_operational"' in go and "false" in go, "Source must explicitly deny automatic tunnel activation"
 assert "ConstantTimeCompare" in go and "MaxBytesReader" in go
 assert "Cache-Control" in go
 daemon = read("cmd/vpnd/main.go")
 assert "non-loopback listener requires TLS" in daemon
 assert "127.0.0.1:8788" in daemon
 
-web = read("web/app.js")
+web = read("web/src/main.tsx")
+assert '"react": "19.2.0"' in read("web/package.json")
+assert 'vite build' in read("web/package.json")
 assert 'localStorage.setItem' not in web and 'sessionStorage.setItem' not in web
 assert 'credentials: "omit"' in web
 assert 'redirect: "error"' in web
@@ -46,7 +48,10 @@ assert "MaterialTheme" in android and "OutlinedTextField" in android
 assert "material3" in gradle and "compose-bom" in gradle
 assert 'android:usesCleartextTraffic="false"' in manifest
 assert 'android:allowBackup="false"' in manifest
-assert "VpnService" not in manifest, "No untested tunnel claim is allowed"
+assert "GoBackend$VpnService" in manifest, "Android WireGuard VpnService must be declared"
+assert "VpnService.prepare(this)" in android
+assert "Tunnel.State.UP" in android and "Tunnel.State.DOWN" in android
+assert "com.wireguard.android:tunnel" in gradle
 
 read("LICENSE")
 read("docs/SECURITY.md")

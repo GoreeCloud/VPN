@@ -9,11 +9,11 @@ GoreeCloud VPN is an original native VPN product, **not NetBird**, not a NetBird
 - `internal/credentials`: CSPRNG administrator-token creation and strict private-file read; no default credentials, no token in URL, no secrets in public source.
 - `internal/api`: constant-time hash comparison for bearer token, bounded strict JSON input, secure response headers, fail-closed unknown routes, immutable public-health check, protected peer CRUD.
 - `cmd/vpnctl`: private local WireGuard-compatible X25519 key generation and strict 0600 split-tunnel client config export; no server-side private key creation; administrative CLI for local HTTPS/loopback peer registry and revocation. The configuration exporter does not activate tunnels.
-- `web/`: responsive same-origin console, in-memory token, registered identities, explicit confirmation for revoke; no token storage.
+- `web/`: React 19/Vite same-origin compiled console, in-memory token, registered identities, explicit confirmation for revoke; no token storage.
 - `desktop/linux/`: native Qt Quick 6.12.0 client surface for local/HTTPS control-plane viewing, not Electron.
-- `android/`: native Kotlin Compose Material 3 (Expressive-compatible Android foundation), HTTPS-only control-plane peer list; token only in Activity memory, cleared on backgrounding. It is not a VpnService implementation.
+- `android/`: native Kotlin Compose Material 3 (Expressive-compatible Android foundation), HTTPS-only control-plane inventory viewer and separate opt-in local WireGuard GoBackend tunnel with Android VpnService consent. Admin token is cleared on backgrounding; the imported tunnel configuration remains in process memory. Runtime acceptance is pending.
 
-These components are **not** sufficient to create a VPN tunnel. Registration of a public key does not push a WireGuard peer, exchange keys with a gateway, apply routes, or establish encrypted connectivity. The API `/v1/info` explicitly returns `tunnel_operational:false`.
+The control plane alone is **not** sufficient to create a VPN tunnel. Registration of a public key does not push a WireGuard peer, exchange keys with a gateway, apply routes, or establish encrypted connectivity. The API `/v1/info` explicitly returns `tunnel_operational:false`.
 
 ## Linux kernel agent — gated development source, not deployed
 
@@ -25,13 +25,13 @@ Official command API syntax was cross-checked with [WireGuard quick start](https
 
 ## Proposed: functioning data plane (not implemented)
 
-A production WireGuard-based tunnel design will require a separately authorized VPN gateway and agent that verify peer identity, securely reconcile public-key changes, install/enforce WireGuard configuration, manage endpoints and rekey/expiry, transport NAT traversal or relay, handle IPv4/IPv6 routes, provide split and full tunnel semantics with DNS leak protection and a kill switch, and protect policy/failure modes. Linux should use kernel WireGuard with a tightly scoped privileged agent, not run the entire web server as root. Android requires an explicit VpnService permission flow and an audited userspace WireGuard implementation with privacy-safe lifecycle; no VpnService has been added to this app.
+A production WireGuard-based tunnel design will require a separately authorized VPN gateway and agent that verify peer identity, securely reconcile public-key changes, install/enforce WireGuard configuration, manage endpoints and rekey/expiry, transport NAT traversal or relay, handle IPv4/IPv6 routes, provide split and full tunnel semantics with DNS leak protection and a kill switch, and protect policy/failure modes. Linux should use kernel WireGuard with a tightly scoped privileged agent, not run the entire web server as root. Android now includes an explicit VpnService permission flow and upstream WireGuard GoBackend. Native build, consent, live handshake and privacy-safe lifecycle require independent validation.
 
 Do **not** construct all-to-all access automatically from registered peers; the eventual authorization model needs GoreeCloud Identity scopes and Wardveil-enforced least privilege. GoreeShield controls telemetry, logs and peer metadata consent; Mesh integration remains opt-in and distinct. Avoid reuse of the currently running NetBird peer keys, setup keys or PAT.
 
 ## UI authority and status
 
-GoreeCloud UI's verified central source is [GoreeCloud/gc-ui](https://github.com/GoreeCloud/gc-ui), with a provisional alpha Compose Material 3 Expressive adapter and Compose Multiplatform module. This repository uses platform-native default controls **without inventing brand colors** until the source-based central adapter and verified design tokens are integrated and compiled as a first-party consumer. No stable GoreeCloud UI package or user-accepted visual release is presumed. Linux desktop primary UI is Qt Quick 6.12, not Compose Multiplatform (which may later share non-visual state). A web foundation migration to canonical GC UI React/Next components requires a separate verified build and test.
+GoreeCloud UI's verified central source is [GoreeCloud/gc-ui](https://github.com/GoreeCloud/gc-ui), with a provisional alpha Compose Material 3 Expressive adapter and Compose Multiplatform module. The React web and Android preview use GoreeCloud UI Lagoon alpha values from the canonical design token source. The separate source adapters are not yet consumed, and this is not founder visual acceptance. No stable GoreeCloud UI package or user-accepted visual release is presumed. Linux desktop primary UI is Qt Quick 6.12, not Compose Multiplatform (which may later share non-visual state). An original React/Vite conversion now passes local TypeScript, build and localhost asset/JSON tests; independent browser and accessibility acceptance remain open.
 
 ## Security and release gates
 
@@ -49,3 +49,8 @@ Do not deploy this control-plane preview onto the live NetBird VPS host, repoint
 ## Development gateway renderer (source-only)
 
 The first-party `internal/wireguard/gateway.go` renderer and `vpnctl config-gateway` command produce local mode-0600 WireGuard gateway configuration from a private gateway key and explicit verified peer public keys with unique `/32` assignments. The gateway address is fixed to 10.77.0.1/24, and individual peers receive only their exact /32 AllowedIPs. Duplicate peers, oversized lists, out-of-subnet addresses and overbroad defaults are rejected. This is not a configured or deployed gateway: IP forwarding, firewall, NAT, host interface setup, and an actual handshake all require independent acceptance.
+
+
+## Static React build and Android data-plane ownership
+
+The web React app compiles with Vite into web/dist; vpnd serves only the compiled index and /assets/ directory, with management requests protected by explicit bearer authorization. No token is persisted to web storage. Android imports a user-reviewed WireGuard config via the Android system picker and requests OS VPN permission only on user-initiated Connect. Android GoBackend provides encrypted transport; the management API never receives a private key or reports an active tunnel. No real two-device handshake was demonstrated in this source change.

@@ -1,0 +1,39 @@
+name: GoreeCloud VPN native Qt Quick Linux build
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-qt-quick:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install system libraries for Qt Quick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build cmake libgl1-mesa-dev libxkbcommon-dev libfontconfig1-dev libdbus-1-dev libxcb-cursor0
+      - uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4
+        with:
+          version: '6.12.0'
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          cache: false
+      - name: Verify exact Qt toolchain
+        run: |
+          test -n "$QT_ROOT_DIR"
+          qtpaths6 --query QT_VERSION | grep -Fx '6.12.0'
+      - name: Compile native Linux Qt Quick application
+        run: |
+          cmake -S desktop/linux -B "$RUNNER_TEMP/gcvpn-qt" -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/gcvpn-qt" --parallel 2
+      - name: Verify executable artifacts exist
+        run: |
+          test -s "$RUNNER_TEMP/gcvpn-qt/goreecloud-vpn-linux"
+          echo "Native Qt 6.12 compile succeeded; a physical Linux desktop runtime and system WireGuard handshake still require separate acceptance."

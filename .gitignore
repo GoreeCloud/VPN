@@ -19,3 +19,8 @@ state.json
 /private/
 /secrets/
 .DS_Store
+
+# React/Vite compiled preview
+/web/dist/
+/web/node_modules/
+/web/*.tsbuildinfo

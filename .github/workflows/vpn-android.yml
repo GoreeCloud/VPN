@@ -30,10 +30,10 @@ jobs:
       - name: Provision Android SDK 37.1
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.1" "build-tools;36.0.0"
-      - name: Compile native Android control-plane preview
+      - name: Compile Android control plane and WireGuard GoBackend
         run: gradle -p android :app:assembleDebug --no-daemon --max-workers=2 --console=plain
       - name: Verify debug APK exists and is not production signed
         run: |
           test -s android/app/build/outputs/apk/debug/app-debug.apk
           sha256sum android/app/build/outputs/apk/debug/app-debug.apk
-          echo "Android source compiled only: no real device, VPN service, production signing or tunnel acceptance"
+          echo "Android source compiled only: no real device, VPN-consent verification, production signing or tunnel handshake acceptance"

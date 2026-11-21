@@ -4,17 +4,17 @@
 
 ## Development checkpoint
 
-**0.1.0 control-plane preview; not a working VPN or a production release.**
+**0.2.0 development source preview; Android tunnel source exists, but end-to-end VPN connectivity and production readiness are unverified.**
 
-This branch contains a functional, authenticated **peer registry and administrator CLI**, including non-activating WireGuard client and gateway configuration generators written in Go, plus development-stage **web**, **native Linux Qt Quick 6.12**, and **native Android Compose Material 3** client surfaces. The API does **not** configure WireGuard, create encrypted tunnels, alter routes or host firewalls, relay traffic, control VPN DNS, or request Android VpnService permission. A registered peer is only an identity record. The authenticated `GET /v1/info` response explicitly returns `"tunnel_operational":false`.
+This branch contains a functional, authenticated **peer registry and administrator CLI**, including non-activating WireGuard client and gateway configuration generators written in Go, plus development-stage **web**, **native Linux Qt Quick 6.12**, and **native Android Compose Material 3** client surfaces. The API does **not** configure WireGuard, create encrypted tunnels, alter routes or host firewalls, relay traffic, control VPN DNS, or remotely provision Android VPN permission. Android separately requests OS VPN consent on demand. A registered peer is only an identity record. The authenticated `GET /v1/info` response explicitly returns `"tunnel_operational":false`.
 
 | Component | Implemented source | Verified acceptance |
 | --- | --- | --- |
 | Backend `cmd/vpnd` | Go standard-library REST control plane, localhost default, TLS mandatory on non-loopback, bounded auth/JSON, private atomic state | Go race tests, vet, local build, isolated local API lifecycle and restart |
 | `cmd/vpnctl` | CSPRNG admin token creation, local X25519/WireGuard-compatible keys, mode-0600 split-tunnel config export, admin peer registry and revocation commands | Go tests and disposable localhost E2E (including private client + gateway config exports) |
-| Web `web/` | Accessible HTML/CSS/JS same-origin identity console, in-memory token | Static code, JavaScript syntax and localhost HTML/JS HTTP acceptance; browser UX not yet exercised |
+| Web `web/` | React 19/Vite compiled same-origin identity console, in-memory token and verified GoreeCloud UI Lagoon alpha colors | Local TypeScript/build and localhost compiled asset/JSON E2E passed; browser UX still unverified |
 | Linux `desktop/linux/` | Native Qt Quick 6.12 graphical registry client | Source contracts; native Qt 6.12 build/hardware QA pending |
-| Android `android/` | Native Jetpack Compose Material 3 control-plane viewer with HTTPS and non-persistent token | [Hosted CI debug APK compile passed](https://github.com/GoreeCloud/VPN/actions/runs/44875185791); no emulator/phone runtime acceptance |
+| Android `android/` | Native Compose Material 3 admin viewer and opt-in WireGuard GoBackend with local config import and Android VpnService consent | [Earlier viewer APK CI passed](https://github.com/GoreeCloud/VPN/actions/runs/44875185791); no emulator/phone runtime acceptance |
 | Linux WireGuard agent | Separate root-gated `cmd/vpnagent` with fixed `gcvpn0`, split-only route, and rollback | Go unit/plan tests only; no privileged execution or real handshake |
 | Actual encrypted tunnel | **Not running or accepted** | Gateway setup, agent installation and real two-peer handshake pending |
 
@@ -25,13 +25,13 @@ The first-party client apps are independent of NetBird; do not confuse source re
 
 ## Build and test the control plane
 
-Requires Go 1.24+, Python 3 for source contract tests, and Node.js for the JavaScript check. Build without root and use local private directories:
+Requires Go 1.24+, Python 3 for source contract tests, and Node.js 22+ with npm for the React build. Build without root and use local private directories:
 
 ```bash
 go test -race ./...
 go vet ./...
 python3 scripts/check_source_contracts.py
-node --check web/app.js
+cd web && npm ci && npm run typecheck && npm run build && cd ..
 bash scripts/e2e-loopback.sh
 go build -o ./build/vpnd ./cmd/vpnd
 go build -o ./build/vpnctl ./cmd/vpnctl
@@ -42,7 +42,7 @@ For a **separate developer-only localhost instance** (not NetBird), create priva
 ```bash
 ./build/vpnctl init-admin --token-file "$HOME/.config/goreecloud/vpn/admin-token"
 ./build/vpnctl keygen --dir "$HOME/.local/share/goreecloud/vpn/my-device"
-./build/vpnd --listen 127.0.0.1:8788 --web-root ./web \
+./build/vpnd --listen 127.0.0.1:8788 --web-root ./web/dist \
   --state-dir "$HOME/.local/share/goreecloud/vpn/control" \
   --token-file "$HOME/.config/goreecloud/vpn/admin-token"
 ```
@@ -62,7 +62,7 @@ Open `http://127.0.0.1:8788/` from the development device to try the same-origin
 
 **Linux:** open `desktop/linux/` with CMake and **Qt 6.12.0 Qt Quick** installed, then build and run the `goreecloud-vpn-linux` target. No Electron/web wrapper. Qt version/hardware acceptance remain separate from Go testing.
 
-**Android:** open `android/` in Android Studio with the declared AGP 9/Kotlin Compose compiler and Android SDK 37.1; build `:app:assembleDebug`. This is a **control-plane client, not an Android VpnService**. Material 3 is the mandatory expressive foundation. [GoreeCloud UI](https://github.com/GoreeCloud/gc-ui) holds the authoritative central alpha design tokens and Android Compose adapter; direct source-based adapter consumption and runtime visual acceptance are pending, and no brand palette is invented locally.
+**Android:** open `android/` in Android Studio with the declared AGP 9/Kotlin Compose compiler and Android SDK 37.1; build `:app:assembleDebug`. The native app now contains an opt-in local WireGuard tunnel through official Android GoBackend and user-initiated VpnService consent. Live handshake and device acceptance remain unverified. Material 3 is the mandatory expressive foundation. [GoreeCloud UI](https://github.com/GoreeCloud/gc-ui) holds the authoritative central alpha design tokens and Android Compose adapter; direct source-based adapter consumption and runtime visual acceptance are pending, and no brand palette is invented locally.
 
 ## Source architecture, security, governance
 
@@ -75,8 +75,13 @@ GoreeCloud Identity, GoreeShield, Wardveil, GoreeCloud Mesh, and GoreeCloud UI r
 
 ## Remaining product work
 
-Implement and independently test a genuine WireGuard data plane with a narrowly privileged Linux agent, Android VpnService plus secure tunnel engine, identity-scoped access policies, split/full tunnel configuration, NAT traversal and relays, IPv6, DNS-leak protection, device revocation propagation, key rotation, fail-safe disconnect, platform-native UX, signed releases and live two-peer connection acceptance. The project must never reuse or alter the existing third-party NetBird credentials, API tokens, tunnel keys, Docker containers, or production DNS.
+Independently validate the Linux agent and Android VpnService/GoBackend with a genuine encrypted two-peer tunnel, identity-scoped access policies, split/full tunnel configuration, NAT traversal and relays, IPv6, DNS-leak protection, device revocation propagation, key rotation, fail-safe disconnect, platform-native UX, signed releases and live two-peer connection acceptance. The project must never reuse or alter the existing third-party NetBird credentials, API tokens, tunnel keys, Docker containers, or production DNS.
 
 ## License
 
 Original GoreeCloud-controlled source in this repository is available under the [Apache License 2.0](LICENSE); third-party SDKs and protocols retain their own licensing and trademark rights. No NetBird source has been included.
+
+
+## Source-build acceptance boundaries
+
+Build the React application into web/dist before starting vpnd with that directory as web-root. The Go handler serves only the compiled entrypoint and assets, not source files. Native Qt Quick 6.12 is checked by a separate hosted compilation job; Android GoBackend compilation and physical-device consent tests are independent acceptance gates. No live VPS or NetBird systems are modified by these source builds.

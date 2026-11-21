@@ -1,6 +1,22 @@
 package com.goreecloud.vpn
 
 import android.os.Bundle
+import android.app.Activity
+import android.content.Intent
+import android.net.VpnService
+import android.view.WindowManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.graphics.Color
+import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
+import com.wireguard.config.Config
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -31,10 +47,54 @@ import java.net.URI
 import java.net.URL
 
 /**
- * Native Compose control-plane preview, not an Android VPN tunnel.
- * No VpnService, keys, or bearer tokens persist to device storage.
+ * GoreeCloud VPN Android: management inventory and opt-in WireGuard tunnel.
+ * Imported private configuration and admin token remain in process memory only.
  */
 class MainActivity : ComponentActivity() {
+    private val tunnelBackend by lazy { GoBackend(applicationContext) }
+    private var localTunnelConfig: Config? = null
+    private var tunnelBusy by mutableStateOf(false)
+    private var tunnelActive by mutableStateOf(false)
+    private var tunnelMessage by mutableStateOf("No WireGuard configuration imported")
+    private val nativeTunnel = object : Tunnel {
+        override fun getName(): String = "gcvpn"
+        override fun onStateChange(newState: Tunnel.State) {
+            runOnUiThread { tunnelActive = newState == Tunnel.State.UP }
+        }
+    }
+    private val importTunnel = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        if (tunnelActive || tunnelBusy) {
+            tunnelMessage = "Disconnect the active VPN before importing another config"
+            return@registerForActivityResult
+        }
+        var bytes: ByteArray? = null
+        try {
+            bytes = contentResolver.openInputStream(uri)?.use { stream ->
+                val output = ByteArrayOutputStream()
+                val chunk = ByteArray(4096)
+                while (true) {
+                    val n = stream.read(chunk)
+                    if (n <= 0) break
+                    if (output.size() + n > 65536) throw IOException("Config exceeds 64 KiB")
+                    output.write(chunk, 0, n)
+                }
+                chunk.fill(0)
+                output.toByteArray()
+            } ?: throw IOException("File unavailable")
+            localTunnelConfig = Config.parse(ByteArrayInputStream(bytes))
+            tunnelMessage = "Configuration loaded locally. Connect only to a trusted gateway."
+        } catch (_: Exception) {
+            localTunnelConfig = null
+            tunnelMessage = "Invalid or unsupported WireGuard configuration"
+        } finally {
+            bytes?.fill(0)
+        }
+    }
+    private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) startTunnel()
+        else tunnelMessage = "Android VPN consent was denied. No tunnel was started."
+    }
     private var sessionToken by mutableStateOf("")
     private var endpoint by mutableStateOf("")
     private var enteredToken by mutableStateOf("")
@@ -45,13 +105,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
-            MaterialTheme {
+            // Color values from GoreeCloud UI canonical Lagoon alpha palette.
+            val palette = darkColorScheme(
+                primary = Color(0xFF8BE7F1), onPrimary = Color(0xFF003A42),
+                background = Color(0xFF0D121D), onBackground = Color(0xFFF2F4FB),
+                surface = Color(0xFF171D2A), onSurface = Color(0xFFF2F4FB),
+                surfaceVariant = Color(0xFF252D3D), onSurfaceVariant = Color(0xFFCED5E5)
+            )
+            MaterialTheme(colorScheme = palette) {
                 VpnScreen(
                     endpoint, { endpoint = it },
                     enteredToken, { enteredToken = it },
                     state, peers, loading, sessionToken.isNotEmpty(),
-                    ::connect, ::refresh, ::disconnect
+                    ::connect, ::refresh, ::disconnect,
+                    tunnelActive, tunnelBusy, localTunnelConfig != null, tunnelMessage,
+                    { importTunnel.launch("*/*") }, ::requestTunnel, ::stopTunnel
                 )
             }
         }
@@ -60,6 +130,58 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         disconnect()
+    }
+
+
+    private fun requestTunnel() {
+        if (tunnelActive || tunnelBusy) return
+        if (localTunnelConfig == null) {
+            tunnelMessage = "Import a trusted WireGuard configuration before connecting"
+            return
+        }
+        try {
+            val consent: Intent? = VpnService.prepare(this)
+            if (consent == null) startTunnel() else vpnPermission.launch(consent)
+        } catch (_: Exception) {
+            tunnelMessage = "Android VPN permission could not be requested"
+        }
+    }
+
+    private fun startTunnel() {
+        val config = localTunnelConfig ?: return
+        if (tunnelBusy || tunnelActive) return
+        tunnelBusy = true
+        tunnelMessage = "Starting the WireGuard tunnel…"
+        Thread {
+            try {
+                tunnelBackend.setState(nativeTunnel, Tunnel.State.UP, config)
+                runOnUiThread {
+                    tunnelActive = true
+                    tunnelMessage = "WireGuard is active locally; remote reachability is unverified"
+                }
+            } catch (_: Exception) {
+                runOnUiThread {
+                    tunnelActive = false
+                    tunnelMessage = "Connection failed. Inspect configuration and VPN permission."
+                }
+            } finally { runOnUiThread { tunnelBusy = false } }
+        }.start()
+    }
+
+    private fun stopTunnel() {
+        if (tunnelBusy || !tunnelActive) return
+        tunnelBusy = true
+        Thread {
+            try {
+                tunnelBackend.setState(nativeTunnel, Tunnel.State.DOWN, null)
+                runOnUiThread {
+                    tunnelActive = false
+                    tunnelMessage = "WireGuard tunnel disconnected"
+                }
+            } catch (_: Exception) {
+                runOnUiThread { tunnelMessage = "Unable to disconnect. Check Android VPN settings." }
+            } finally { runOnUiThread { tunnelBusy = false } }
+        }.start()
     }
 
     private fun disconnect() {
@@ -173,7 +295,10 @@ private fun VpnScreen(
     endpoint: String, onEndpoint: (String) -> Unit,
     enteredToken: String, onToken: (String) -> Unit,
     state: String, peers: List<String>, loading: Boolean, connected: Boolean,
-    onConnect: () -> Unit, onRefresh: () -> Unit, onDisconnect: () -> Unit
+    onConnect: () -> Unit, onRefresh: () -> Unit, onDisconnect: () -> Unit,
+    tunnelActive: Boolean, tunnelBusy: Boolean, hasTunnelConfig: Boolean,
+    tunnelMessage: String, onImport: () -> Unit, onTunnelConnect: () -> Unit,
+    onTunnelDisconnect: () -> Unit
 ) {
     Scaffold { insets ->
         Column(
@@ -181,7 +306,28 @@ private fun VpnScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("GoreeCloud VPN", style = MaterialTheme.typography.headlineMedium)
-            Text("First-party control-plane preview. No encrypted tunnel is active.")
+            Text("Self-hosted private networking with explicit Android VPN consent.")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Local WireGuard tunnel", style = MaterialTheme.typography.titleLarge)
+                    Text(if (tunnelActive) "Active" else "Disconnected")
+                    Text(tunnelMessage)
+                    OutlinedButton(onClick = onImport, enabled = !tunnelActive && !tunnelBusy) {
+                        Text("Import WireGuard .conf")
+                    }
+                    Button(
+                        onClick = if (tunnelActive) onTunnelDisconnect else onTunnelConnect,
+                        enabled = !tunnelBusy && (tunnelActive || hasTunnelConfig)
+                    ) {
+                        Text(if (tunnelBusy) "Working…" else if (tunnelActive) "Disconnect VPN" else "Connect VPN")
+                    }
+                    Text("VPN tunnel state is separate from the control-plane session.")
+                }
+            }
+            Text("Private control-plane inventory", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = endpoint, onValueChange = onEndpoint,
                 label = { Text("HTTPS control-plane origin") },

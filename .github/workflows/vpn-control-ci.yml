@@ -26,8 +26,13 @@ jobs:
           go build -o /tmp/goreecloud-vpnctl ./cmd/vpnctl
       - name: Check native app and product-ownership contracts
         run: python3 scripts/check_source_contracts.py
-      - name: Web JavaScript syntax
-        run: node --check web/app.js
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build and typecheck first-party React web console
+        run: cd web && npm ci --no-audit --no-fund && npm run typecheck && npm run build
       - name: Isolated peer identity lifecycle
         run: bash scripts/e2e-loopback.sh
       - name: WireGuard kernel operation plan (dry run, no privileges)
