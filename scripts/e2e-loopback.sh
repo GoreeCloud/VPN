@@ -118,9 +118,17 @@ for _ in {1..30}; do
   sleep 0.1
 done
 "$TMP/vpnctl" list --api http://127.0.0.1:18788 --token-file "$TMP/admin/token" >"$TMP/peers.json"
+"$TMP/vpnctl" backup-keygen --backup-key-file "$TMP/admin/backup-key" >/dev/null
+"$TMP/vpnctl" backup-registry --state-dir "$TMP/state" --backup-key-file "$TMP/admin/backup-key"   --output "$TMP/admin/peer-registry.gcvpnbak" --confirm >/dev/null
+"$TMP/vpnctl" restore-registry --backup-file "$TMP/admin/peer-registry.gcvpnbak"   --backup-key-file "$TMP/admin/backup-key" --state-dir "$TMP/staged-recovery" --confirm >/dev/null
+cmp "$TMP/state/state.json" "$TMP/staged-recovery/state.json" >/dev/null
+if "$TMP/vpnctl" restore-registry --backup-file "$TMP/admin/peer-registry.gcvpnbak"   --backup-key-file "$TMP/admin/backup-key" --state-dir "$TMP/state" --confirm >/dev/null 2>&1; then
+  echo "Restore unexpectedly overwrote the currently active registry" >&2; exit 1
+fi
+
 python3 - "$TMP/peers.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))["peers"]
 assert len(p)==1 and p[0]["name"]=="isolated-test" and p[0]["revoked_at"]
-print("PASS: localhost auth, React web, private split-tunnel configs, default-deny ACL export, approval, revoke exclusion and restart persistence")
+print("PASS: localhost auth, React web, private split-tunnel configs, default-deny ACL export, approval, revoke exclusion, restart, encrypted backup and staged restore")
 PY

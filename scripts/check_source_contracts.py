@@ -80,3 +80,8 @@ assert "chain forward" in acl
 
 assert "accessibleName:" not in read("desktop/linux/Main.qml"), "Qt Quick Accessible.name is an attached property"
 assert 'Accessible.name: "Administrator token"' in read("desktop/linux/Main.qml")
+
+assert "backup-registry" in read("cmd/vpnctl/main.go")
+assert "restore-registry" in read("cmd/vpnctl/main.go")
+assert "cipher.NewGCM" in read("internal/backup/crypto.go")
+assert "ValidateSnapshotJSON" in read("internal/control/store.go")

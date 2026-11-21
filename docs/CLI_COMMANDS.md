@@ -86,3 +86,14 @@ Store the list in a newly created owner-private (0600) file in a 0700 directory,
 The command fails if a service permission references any key absent from the current approved peer snapshot. Empty rules mean **deny all VPN-origin gateway services and forwarding by default**. Protocols supported in the development renderer are tcp, udp and icmp (echo-request only); TCP/UDP must have a numeric 1–65535 port and ICMP must have none. No arbitrary subnet, full-tunnel, peer-to-peer or wildcard service grant is emitted.
 
 **Never invoke nft on the live VPS from these examples.** The generated file is review material, not an active firewall; correct host interface naming, rollback and boot restoration require a separately verified stage. The synthetic kernel GitHub Actions test uses a dedicated gateway namespace and is not live production policy enforcement.
+
+
+## Encrypted registry metadata backup and offline restore
+
+Use a distinct *owner-private* backup key, not a WireGuard private key or the control-plane administrator credential. The key must be preserved securely outside backup media. The commands never print its contents.
+
+    ./build/vpnctl backup-keygen --backup-key-file "$HOME/.config/goreecloud/vpn/backup-key"
+    ./build/vpnctl backup-registry --state-dir "$HOME/.local/share/goreecloud/vpn/control" --backup-key-file "$HOME/.config/goreecloud/vpn/backup-key" --output "$HOME/.local/share/goreecloud/vpn/registry-backup.gcvpnbak" --confirm
+    ./build/vpnctl restore-registry --backup-file "$HOME/.local/share/goreecloud/vpn/registry-backup.gcvpnbak" --backup-key-file "$HOME/.config/goreecloud/vpn/backup-key" --state-dir "$HOME/.local/share/goreecloud/vpn/restored-staging" --confirm
+
+The output path must not exist and its parent directory must be real and private (0700); snapshot and key files are mode 0600. Restore requires a **new, nonexistent state directory** under an existing private parent: it never overwrites a live state.json or starts vpnd. A clean readback and independent device authorization checks are required before any controlled recovery handoff. Retain the backup encryption key separately, or recovery is impossible. This feature protects registry metadata only, not device WireGuard private keys or any deployed server/network configuration.

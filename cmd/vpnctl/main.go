@@ -295,7 +295,7 @@ func writeGatewayConfiguration(dir, peersFile, output string, port int) error {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: vpnctl init-admin | keygen | config-client | config-gateway | config-acl | export-peers | list | register | approve | revoke | info")
+		fmt.Fprintln(os.Stderr, "Usage: vpnctl init-admin | backup-keygen | backup-registry | restore-registry | keygen | config-client | config-gateway | config-acl | export-peers | list | register | approve | revoke | info")
 		os.Exit(2)
 	}
 	command := os.Args[1]
@@ -314,6 +314,9 @@ func main() {
 	peersFile := flags.String("peers-file", "", "private JSON array of explicit gateway peer public keys and /32s")
 	rulesFile := flags.String("rules-file", "", "private JSON array of gateway-local ACL permissions")
 	listenPort := flags.Int("listen-port", 51820, "WireGuard gateway UDP listener")
+	stateDir := flags.String("state-dir", "", "absolute owner-private control-plane registry directory")
+	backupPath := flags.String("backup-file", "", "absolute private encrypted backup input")
+	backupKeyPath := flags.String("backup-key-file", "", "absolute independent 0600 backup secret key")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		os.Exit(2)
 	}
@@ -324,6 +327,27 @@ func main() {
 		if err == nil {
 			fmt.Println("Private administrator token created (0600). Token contents not displayed.")
 		}
+	case "backup-keygen":
+		if *backupKeyPath == "" || !filepath.IsAbs(*backupKeyPath) {
+			err = errors.New("backup-keygen requires an absolute --backup-key-file path")
+			break
+		}
+		err = credentials.Create(*backupKeyPath)
+		if err == nil {
+			fmt.Println("Independent 256-bit random backup encryption key created privately (0600). Store outside backup media; contents not printed.")
+		}
+	case "backup-registry":
+		if !*confirm || *stateDir == "" || *backupKeyPath == "" || *output == "" {
+			err = errors.New("backup-registry requires --state-dir, --backup-key-file, --output and --confirm")
+			break
+		}
+		err = backupRegistry(*stateDir, *backupKeyPath, *output)
+	case "restore-registry":
+		if !*confirm || *stateDir == "" || *backupKeyPath == "" || *backupPath == "" {
+			err = errors.New("restore-registry requires --state-dir NEW_TARGET, --backup-file, --backup-key-file and --confirm")
+			break
+		}
+		err = restoreRegistry(*backupPath, *backupKeyPath, *stateDir)
 	case "keygen":
 		err = localKeygen(*dir)
 	case "config-client":

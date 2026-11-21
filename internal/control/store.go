@@ -170,20 +170,42 @@ func Open(dir string) (result *Store, openErr error) {
 	if err := json.Unmarshal(b, &s.state); err != nil {
 		return nil, fmt.Errorf("invalid stored state: %w", err)
 	}
-	if s.state.Version != 1 {
-		return nil, errors.New("unsupported state schema version")
-	}
-	seenID, seenAddress, seenKey := map[string]bool{}, map[string]bool{}, map[string]bool{}
-	for _, p := range s.state.Peers {
-		if !validStoredPeer(p) || seenID[p.ID] || seenAddress[p.Address] || seenKey[p.PublicKey] {
-			return nil, errors.New("inconsistent stored peer registry")
-		}
-		seenID[p.ID], seenAddress[p.Address], seenKey[p.PublicKey] = true, true, true
+	if err := validatePersisted(s.state); err != nil {
+		return nil, err
 	}
 	if s.state.Peers == nil {
 		s.state.Peers = []Peer{}
 	}
 	return s, nil
+}
+
+// ValidateSnapshotJSON authenticates registry *structure*, never device
+// authorization. It is used for safe encrypted backup and staged restore.
+func ValidateSnapshotJSON(data []byte) error {
+	if len(data) == 0 || len(data) > 2<<20 {
+		return errors.New("invalid registry snapshot size")
+	}
+	var snapshot persisted
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return errors.New("invalid registry snapshot JSON")
+	}
+	return validatePersisted(snapshot)
+}
+func validatePersisted(snapshot persisted) error {
+	if snapshot.Version != 1 {
+		return errors.New("unsupported registry schema version")
+	}
+	if len(snapshot.Peers) > 253 {
+		return errors.New("registry peer address limit exceeded")
+	}
+	seenID, seenAddress, seenKey := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, p := range snapshot.Peers {
+		if !validStoredPeer(p) || seenID[p.ID] || seenAddress[p.Address] || seenKey[p.PublicKey] {
+			return errors.New("inconsistent stored peer registry")
+		}
+		seenID[p.ID], seenAddress[p.Address], seenKey[p.PublicKey] = true, true, true
+	}
+	return nil
 }
 
 func ValidPublicKey(v string) bool {
@@ -338,5 +360,13 @@ func (s *Store) save(next persisted) error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(s.dir, "state.json"))
+	if err := os.Rename(tmp, filepath.Join(s.dir, "state.json")); err != nil {
+		return err
+	}
+	dir, err := os.Open(s.dir)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
