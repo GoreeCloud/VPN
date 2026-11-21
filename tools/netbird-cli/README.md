@@ -1,6 +1,6 @@
 # GoreeCloud NetBird management CLI
 
-**Source:** GoreeCloud/VPN/tools/netbird-cli. **Executable:** gc-netbird (Python 3 standard library). **Target:** the fresh NetBird combined server over HTTPS at https://netbird.goreecloud.com. **Host:** VPS Mesh /home/ladamian/.local/bin/gc-netbird. **Status:** installed; local read-only SQLite inventory and 18 isolated transport/safety tests verified; authenticated API calls and production CRUD pending enrollment of a personal access token (PAT).
+**Source:** GoreeCloud/VPN/tools/netbird-cli. **Executable:** gc-netbird (Python 3 standard library). **Target:** the fresh NetBird combined server over HTTPS at https://netbird.goreecloud.com. **Host:** VPS Mesh /home/ladamian/.local/bin/gc-netbird. **Status:** installed; 19 isolated transport/safety tests passed; owner-enrolled PAT authenticated via live GET, and approved additive group, private DNS zone/record and TCP/443 policy writes succeeded with API readback. The broad Default policy is still enabled.
 
 ## Authentication and least privilege
 
@@ -17,7 +17,7 @@ Login verifies the PAT against the authenticated GET /api/peers endpoint before 
 
 ## Reading from Remote Desktop Commander
 
-The following are fully operational once a valid PAT is enrolled. Summaries minimize private data by default; --show-data displays additional fields with token-like values redacted; --output FILE stores the unredacted API response in a *new* mode-0600 file, never overwriting.
+The following are operational with the privately enrolled, authenticated PAT. Summaries minimize private data by default; --show-data displays additional fields with token-like values redacted; --output FILE stores the unredacted API response in a *new* mode-0600 file, never overwriting.
 
 ~~~sh
 gc-netbird list peers
@@ -77,7 +77,7 @@ gc-netbird delete groups VERIFIED_GROUP_ID --confirm-write --confirm-network-imp
 
 ## Private DNS for AdGuard
 
-After enrolling newly created VPS and laptop NetBird peers, verify the VPS overlay address and an admin-only network policy first. Use NetBird custom DNS zones (not public Porkbun DNS) to map adguard.goreecloud.com to that freshly verified private address. The zone needs a validated distribution_groups list and enable_search_domain false. See https://docs.netbird.io/api/resources/dns-zones.
+The administrator-device group and a scoped custom DNS zone and A record have been created and read back; verify the VPS overlay address and policy before modifying these records further. Use NetBird custom DNS zones (not public Porkbun DNS) to map adguard.goreecloud.com to that freshly verified private address. The zone needs a validated distribution_groups list and enable_search_domain false. See https://docs.netbird.io/api/resources/dns-zones.
 
 ~~~sh
 gc-netbird create dns-zones --data-file "$HOME/adguard-zone.json" --dry-run
@@ -102,12 +102,21 @@ GC_NETBIRD_BIN="$HOME/.local/bin/gc-netbird" python3 -m unittest discover -v \
 
 Official docs: https://docs.netbird.io/api , https://docs.netbird.io/api/resources/groups , https://docs.netbird.io/api/resources/policies , https://docs.netbird.io/api/resources/dns-zones , https://docs.netbird.io/manage/mcp-server .
 
-## Verified new-peer VPN acceptance and private DNS staging
+## Verified new-peer VPN acceptance and initial private DNS implementation
 
 On November 20, 2026 (America/Chicago), the newly enrolled VPS and laptop connected directly over NetBird P2P, both reporting 1/1 peers connected. The laptop reached the AdGuard Home login page over its verified VPS overlay IP using a per-request `curl --resolve` override and the Caddy private CA certificate. HTTP 200 and TLS verification result 0 were observed. The public-address AdGuard route continued returning HTTP 404. This validates the private transport but **not** normal DNS resolution or the AdGuard account login.
 
-The VPS owner-only directory `~/.local/share/goreecloud/netbird-cli/examples/` now contains three live-specific, private JSON proposals: `admin-devices-live-proposal.json`, `adguard-private-zone-proposal.json` and `adguard-private-record-proposal.json`. Their local fields were prepared from the current fresh NetBird peer inventory and validated with `--dry-run` (no request sent). Public source templates `examples/adguard-private-zone.json` and `examples/adguard-private-record.json` contain only placeholders, not a real peer ID or private IP. The CLI now fails closed for live writes while any `REPLACE_...` placeholder remains.
+The VPS owner-only directory `~/.local/share/goreecloud/netbird-cli/examples/` contains live-specific, private JSON proposals (their initial submissions are now completed): `admin-devices-live-proposal.json`, `adguard-private-zone-proposal.json` and `adguard-private-record-proposal.json`. Their local fields were prepared from the current fresh NetBird peer inventory and validated with `--dry-run` (no request sent). Public source templates `examples/adguard-private-zone.json` and `examples/adguard-private-record.json` contain only placeholders, not a real peer ID or private IP. The CLI now fails closed for live writes while any `REPLACE_...` placeholder remains.
 
 The operator must privately enroll an authorized NetBird PAT with `gc-netbird login`, then read the existing resources, create only the approved administrator group, and replace its returned group ID in the private DNS zone payload. Create that zone with distribution limited to admin devices, then write a record using its returned zone ID and the verified new VPS overlay IP. Confirm that hostname resolution succeeds on the laptop. No API mutation, policy replacement, DNS zone creation or server-side setup-key revocation was executed in this phase.
 
 The one-time VPS bootstrap key file and mount have been removed after the peer successfully reconnected from persistent state. Revoke the issued key in the NetBird dashboard. The initial default all-to-all NetBird access policy remains enabled and should be narrowed **only after** validating a specific admin-to-VPS TCP/443 replacement policy, including fail-safe administrative access.
+
+
+## Authenticated management acceptance (verified November 20, 2026, America/Chicago)
+
+`gc-netbird auth-check` succeeded on VPS Mesh using the owner-enrolled PAT stored privately as mode 0600. All live modifications were explicit, additive, and preceded by a dry-run: created a group containing only the authorized laptop; created an enabled private DNS zone scoped to that group; added one apex A record for `adguard.goreecloud.com` with the newly verified VPS overlay IP; and created an enabled unidirectional TCP/443-only allow rule from administrator devices to the VPS server group. Authenticated readback verified each resource. The current Default All-to-All policy was **not** disabled or deleted, so this is not yet an enforced least-privilege network.
+
+Laptop verification without `--resolve`: NetBird managed DNS answers the private VPS IP via `wt0`; `curl --cacert` to `https://adguard.goreecloud.com/login.html` returned HTTP 200 with TLS verify result 0. The public Caddy route denies the same hostname with HTTP 404. The VPS and laptop remain connected over NetBird P2P.
+
+Future API use must reuse the existing created resource IDs rather than rerun CREATE commands; the example JSON in public source remains intentionally non-deployable until identifiers are replaced. The approved private file records and verified CLI output are on VPS Mesh, not in Git. The PAT and other secrets were never copied to source, logs, or Drive.
