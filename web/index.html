@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>GoreeCloud VPN — Control Plane Preview</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <main id="main">
+    <header>
+      <h1>GoreeCloud VPN</h1>
+      <p>First-party control-plane preview. <strong>No encrypted tunnel is active.</strong></p>
+    </header>
+    <section aria-labelledby="connect-title">
+      <h2 id="connect-title">Connect to your control plane</h2>
+      <form id="auth-form" autocomplete="off">
+        <label for="token">Administrator token</label>
+        <input id="token" type="password" required minlength="32" autocomplete="off" spellcheck="false">
+        <button type="submit">Connect</button>
+        <button id="disconnect" type="button" hidden>Disconnect</button>
+      </form>
+      <p class="notice">Token stays in memory; this app never saves it to browser storage.</p>
+      <p id="status" role="status" aria-live="polite">Disconnected</p>
+    </section>
+    <section aria-labelledby="peers-title">
+      <div class="heading">
+        <h2 id="peers-title">Registered peer identities</h2>
+        <button id="refresh" type="button" disabled>Refresh</button>
+      </div>
+      <p>Peer records are not live VPN sessions. No key is installed on this device.</p>
+      <ul id="peers" class="peer-list" aria-label="Registered peers"></ul>
+    </section>
+    <section aria-labelledby="register-title">
+      <h2 id="register-title">Register a peer</h2>
+      <p>Generate the WireGuard-compatible private/public key pair on the destination device using <code>vpnctl keygen</code>. Submit only its public key here.</p>
+      <form id="create-form">
+        <label for="peer-name">Device name</label>
+        <input id="peer-name" maxlength="64" required placeholder="My laptop">
+        <label for="pubkey">Public key (base64)</label>
+        <textarea id="pubkey" required rows="2" autocomplete="off" spellcheck="false"></textarea>
+        <button id="register" type="submit" disabled>Register peer identity</button>
+      </form>
+    </section>
+    <footer>GoreeCloud VPN is separate from third-party NetBird. This preview does not configure WireGuard networking.</footer>
+  </main>
+</body>
+</html>
