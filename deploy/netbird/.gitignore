@@ -15,3 +15,5 @@ Caddyfile.before-*
 *.pem
 *.key
 *.log
+
+caddy-ca-public/
