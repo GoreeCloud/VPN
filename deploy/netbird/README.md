@@ -30,11 +30,11 @@ Do not embed a plaintext password in config, invoke a password-changing CLI with
 | STUN UDP/3478 | Verified responding during earlier control-plane tests; **repeat after fresh replacement before accepting final peer connections** |
 | Existing application sites | Vikunja, Plane, Stirling PDF HTTP 200 after NetBird cutover |
 | AdGuard via existing Caddy | Caddy internal TLS + `remote_ip 100.64.0.0/10` matcher; forced public-IP request was denied with HTTP 404, verified against Caddy local public root |
-| VPS NetBird peer / laptop peer | **Not yet enrolled** into this new network; the old client login/profile cannot authenticate to the new management identity without new enrollment |
-| NetBird private DNS | **Not yet established**; only after peer enrollment, resolve `adguard.goreecloud.com` to the *new* live VPS overlay IP |
+| VPS NetBird peer / laptop peer | **Both enrolled and P2P tested** on the new network. Both devices reported 1/1 connected; laptop reached AdGuard's login page via the VPN overlay address with verified private TLS |
+| NetBird private DNS | **Not yet established**. Laptop transport passes with an explicit per-request IP override; normal hostname resolution remains pending a new admin-only DNS zone |
 | Historical migration archive | Separate old historical files exist under a migration archive **outside the running deployment**. They were not imported or mounted. Destructive removal of that pre-existing archival material is a separate retention decision |
 
-No authenticated end-to-end AdGuard access is claimed yet. The new admin is not a migrated identity: use the newly generated password as documented below.
+**Transport confirmed:** laptop NetBird P2P to VPS AdGuard login page, HTTP 200 with private TLS verified. Actual AdGuard account login, normal hostname DNS and Firefox certificate trust are not yet verified.
 
 ## Reproduce a clean install
 
@@ -80,7 +80,7 @@ docker exec goreecloud-netbird-client netbird status
 ip -br addr
 ```
 
-The helper requires an actual private interactive TTY. After stable enrollment, remove the setup-key mount from the running client Compose (with a reviewed configuration change), revoke the setup key server-side and delete the local key file. Do not embed a key in Compose, environment logs, or argv. The host-network peer requires restricted Docker/admin privileges and changes the network namespace; review firewall, inbound rules, and NetBird policy before starting.
+The helper requires a private interactive TTY. **Post-enrollment hardening completed:** recreated only the peer container using persisted state, with no setup-key mount or bootstrap environment variable. The one-time key file was deleted locally. The key still needs server-side revocation through the NetBird dashboard. A private 0600 Compose rollback snapshot is retained. The source now has `docker-compose.peer.enrolled.yml` for durable restarts. Do not embed a key in Compose, environment logs, or argv. The host-network peer requires restricted Docker/admin privileges and changes the network namespace; review firewall, inbound rules, and NetBird policy before starting.
 
 ### Connect laptops and configure the private AdGuard hostname
 
@@ -105,6 +105,18 @@ docker ps --format '{{.Names}}'
 ```
 
 The deployed Caddy routes are **still** the NetBird public management domain and the separately protected VPN-only AdGuard domain. There are independently retained Caddy rollback snapshots under the new working directory `caddy-recovery/`, but restoring these blindly could remove intervening changes. A usable application backup requires fresh server data/secret preservation and an independent restore rehearsal; neither should import the retired historical NetBird dataset.
+
+## Verified private AdGuard transport and outstanding policy/DNS work
+
+The authorized laptop and VPS were both enrolled into the **new** NetBird account. The laptop reports a direct P2P connection, both peers show `1/1 Connected`, and two-way ICMP succeeds. A laptop HTTPS request to `adguard.goreecloud.com` routed explicitly to the VPS's newly assigned overlay IP using `curl --resolve` and the Caddy private CA root returned **HTTP 200, TLS verification result 0**. The identical hostname forced through the VPS public address returned **HTTP 404**, preserving the Caddy access restriction. This is proof of transport and the login-page response, not proof of an AdGuard account login.
+
+**Private DNS remains unconfigured.** The `gc-netbird` management CLI is installed but has no NetBird PAT enrolled. Three private, owner-only proposal JSON files on VPS Mesh have passed offline dry-runs: a new admin-device group with the authorized laptop peer, a custom zone `adguard.goreecloud.com` restricted to that group, and its apex A record pointing at the freshly verified VPS overlay IP. Their current identifiers are private runtime details; no real changes have been sent. After privately enrolling an approved PAT, create the admin group, substitute its returned ID into the zone proposal, create the zone, then create the record under its returned zone ID. Verify hostname resolution and browser certificate trust on the laptop before declaring full user acceptance. Do not add a public Porkbun A record for AdGuard.
+
+The fresh `Default` NetBird policy currently allows the `All` group to communicate with itself across protocols. **Do not disable it until a tested administrator-to-VPS TCP/443 policy exists.** Restrict the final access policy to approved administrator peers; the Caddy `100.64.0.0/10` source matcher alone is not an admin-only authorization policy.
+
+The peer's persistent identity survived recreation without the setup key environment or mount. The local one-time setup key file was deleted after validation, and `docker-compose.peer.enrolled.yml` in the repository is the correct subsequent-runtime template. The owner still must revoke the one-off setup key in the NetBird dashboard. Preserve the client-state directory during future upgrades.
+
+**Reliability note:** Intermittent NetBird Signal/Management gRPC stream disconnects were observed behind Caddy 2.11 even while P2P was healthy. Investigate before certifying long-term uptime. A documented Caddy-specific workaround disables a global body idle timeout; it was **not deployed** because disabling slowloris-related protection across all unrelated GoreeCloud sites would require a separately assessed change.
 
 ## Security and authority
 
