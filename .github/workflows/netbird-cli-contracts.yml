@@ -1,0 +1,24 @@
+name: NetBird admin CLI safety checks
+on:
+  pull_request:
+    paths:
+      - 'tools/netbird-cli/**'
+      - '.github/workflows/netbird-cli-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/netbird-cli/**'
+      - '.github/workflows/netbird-cli-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cli-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Compile NetBird admin CLI
+        run: python3 -m py_compile tools/netbird-cli/gc-netbird.py tools/netbird-cli/test_gc_netbird.py
+      - name: Run isolated NetBird CLI safety tests
+        run: python3 -m unittest discover -v -s tools/netbird-cli -p 'test_*.py'
