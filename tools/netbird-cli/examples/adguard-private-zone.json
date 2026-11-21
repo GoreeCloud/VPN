@@ -1,0 +1,9 @@
+{
+  "name": "GoreeCloud private AdGuard management",
+  "domain": "adguard.goreecloud.com",
+  "enabled": true,
+  "enable_search_domain": false,
+  "distribution_groups": [
+    "REPLACE_NEW_ADMIN_GROUP_ID"
+  ]
+}
