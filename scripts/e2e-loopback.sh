@@ -15,6 +15,12 @@ go build -o "$TMP/vpnd" "$ROOT/cmd/vpnd"
 go build -o "$TMP/vpnctl" "$ROOT/cmd/vpnctl"
 "$TMP/vpnctl" init-admin --token-file "$TMP/admin/token"
 "$TMP/vpnctl" keygen --dir "$TMP/client" >/dev/null
+"$TMP/vpnctl" keygen --dir "$TMP/gateway" >/dev/null
+"$TMP/vpnctl" config-client --dir "$TMP/client" \
+  --gateway-public-key-file "$TMP/gateway/wg-public.key" --address 10.77.0.2/32 \
+  --endpoint vpn.example.test:51820 --output "$TMP/client/gc-vpn.conf" --confirm >/dev/null
+[[ "$(stat -c %a "$TMP/client/gc-vpn.conf")" == "600" ]]
+grep -q 'AllowedIPs = 10.77.0.0/24' "$TMP/client/gc-vpn.conf"
 "$TMP/vpnd" --listen 127.0.0.1:18788 --state-dir "$TMP/state" \
   --token-file "$TMP/admin/token" --web-root "$ROOT/web" >"$TMP/server.log" 2>&1 &
 PID="$!"
@@ -52,5 +58,5 @@ python3 - "$TMP/peers.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))["peers"]
 assert len(p)==1 and p[0]["name"]=="isolated-test" and p[0]["revoked_at"]
-print("PASS: localhost auth, web, register, revoke and restart persistence")
+print("PASS: localhost auth, web, split-tunnel config, register, revoke and restart persistence")
 PY
