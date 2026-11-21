@@ -8,7 +8,7 @@ GoreeCloud VPN is an original native VPN product, **not NetBird**, not a NetBird
 - `internal/control`: concurrency-safe, owner-private JSON peer registry, unique /32 address reservations in a development-only 10.77.0.0/24 range, revocation tombstones, no key escrow.
 - `internal/credentials`: CSPRNG administrator-token creation and strict private-file read; no default credentials, no token in URL, no secrets in public source.
 - `internal/api`: constant-time hash comparison for bearer token, bounded strict JSON input, secure response headers, fail-closed unknown routes, immutable public-health check, protected peer CRUD.
-- `cmd/vpnctl`: private local WireGuard-compatible X25519 key generation; no server-side private key creation; an administrative CLI for local HTTPS/loopback peer registry and revocation.
+- `cmd/vpnctl`: private local WireGuard-compatible X25519 key generation and strict 0600 split-tunnel client config export; no server-side private key creation; administrative CLI for local HTTPS/loopback peer registry and revocation. The configuration exporter does not activate tunnels.
 - `web/`: responsive same-origin console, in-memory token, registered identities, explicit confirmation for revoke; no token storage.
 - `desktop/linux/`: native Qt Quick 6.12.0 client surface for local/HTTPS control-plane viewing, not Electron.
 - `android/`: native Kotlin Compose Material 3 (Expressive-compatible Android foundation), HTTPS-only control-plane peer list; token only in Activity memory, cleared on backgrounding. It is not a VpnService implementation.
