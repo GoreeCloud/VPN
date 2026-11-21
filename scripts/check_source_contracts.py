@@ -14,6 +14,11 @@ assert "GoreeCloud/VPN" in read("go.mod")
 assert not (ROOT / "deploy/netbird").exists(), "NetBird deployments must not be in GoreeCloud VPN"
 assert not (ROOT / "tools/netbird-cli").exists(), "NetBird CLI belongs to Mesh integration, not VPN"
 
+wg = read("internal/wireguard/config.go")
+assert "AllowedIPs = 10.77.0.0/24" in wg
+assert "RenderClientConfig" in wg
+assert "config-client" in read("cmd/vpnctl/main.go")
+
 go = read("internal/api/handler.go")
 assert '"tunnel_operational":false' in go, "Source must explicitly deny tunnel activation"
 assert "ConstantTimeCompare" in go and "MaxBytesReader" in go
