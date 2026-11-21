@@ -1,0 +1,32 @@
+name: GoreeCloud VPN first-party control-plane safety
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  go-control-and-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Go race tests and vet
+        run: |
+          go test -race -count=1 ./...
+          go vet ./...
+      - name: Build first-party binaries
+        run: |
+          go build -o /tmp/goreecloud-vpnd ./cmd/vpnd
+          go build -o /tmp/goreecloud-vpnctl ./cmd/vpnctl
+      - name: Check native app and product-ownership contracts
+        run: python3 scripts/check_source_contracts.py
+      - name: Web JavaScript syntax
+        run: node --check web/app.js
+      - name: Isolated peer identity lifecycle
+        run: bash scripts/e2e-loopback.sh
