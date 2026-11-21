@@ -102,3 +102,10 @@ The Go peer registry now uses an exclusive nonblocking private OS file lock to p
 
 
 The native Qt CI now includes an offscreen QML engine start-and-exit smoke test with a special --smoke-test argument. It does not contact the management API, create tunnel interfaces, or exercise real Linux desktop interaction; physical Linux packaging and input/runtime acceptance remain pending.
+
+
+## Reviewed gateway-local access policies (new development source)
+
+The offline vpnctl config-acl command produces a private, mode-0600, no-overwrite nftables ruleset from a reviewed approved-peers snapshot and an explicit service-grant JSON file. Each grant binds one approved WireGuard public key to a **gateway-local** TCP/UDP port or ICMP echo request. Unapproved keys, unknown protocols, duplicate grants, wildcard/overbroad addresses and non-private inputs fail closed. The generated firewall defaults to **deny gateway input and forwarded traffic from the dedicated VPN interface** while preserving unrelated host interfaces.
+
+No firewall rules are applied by the CLI. The isolated CI test exercises the generated rules only inside its disposable gateway network namespace, proving an authenticated WireGuard peer cannot ping a gateway service until a separate explicit ICMP allowance is installed. This is NOT yet production Identity/RBAC, per-user resource grants, an automatically reconciled nftables service, audited policy deployment or unrestricted LAN access.

@@ -72,3 +72,11 @@ assert "syscall.Flock" in read("internal/control/store.go")
 assert "/approve" in read("internal/api/handler.go")
 assert 'case "approve":' in read("cmd/vpnctl/main.go")
 assert '"/approve"' in read("web/src/main.tsx")
+
+assert "config-acl" in read("cmd/vpnctl/main.go")
+acl = read("internal/policy/nft.go")
+assert 'iifname \\"gateway\\" drop' in acl
+assert "chain forward" in acl
+
+assert "accessibleName:" not in read("desktop/linux/Main.qml"), "Qt Quick Accessible.name is an attached property"
+assert 'Accessible.name: "Administrator token"' in read("desktop/linux/Main.qml")

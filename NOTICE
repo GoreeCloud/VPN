@@ -5,3 +5,5 @@ GoreeCloud VPN is first-party source independent from NetBird.
 This project uses Go standard library and upstream Android/Qt framework APIs;
 third-party components retain their respective licenses. The Android WireGuard GoBackend upstream (com.wireguard.android:tunnel:1.0.20260102, https://git.zx2c4.com/wireguard-android) includes Apache-2.0 wrapper code and native components requiring release notice review. React 19.2.0, React DOM and Vite 7.3.0 are separately MIT licensed; resolve transitive notices for redistribution. Qt 6.12.0 has LGPL/GPL/commercial module-specific licensing. The canonical GoreeCloud UI alpha token source is https://github.com/GoreeCloud/gc-ui (MIT).
 See LICENSE for Apache-2.0 terms. No NetBird source has been copied or bundled.
+
+The optional Linux nftables policy renderer emits plain nftables syntax for a separately installed distro nftables tool (GPL-2.0 licensed upstream). No nftables source code is vendored or relicensed here. WireGuard/nftables kernel and distribution package notices apply independently to actual host deployments.

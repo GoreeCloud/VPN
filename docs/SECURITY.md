@@ -21,3 +21,6 @@ Security responsibilities: Wardveil handles cybersecurity and threat defense; Go
 
 
 **Admission and revocation boundaries:** ApprovedAt is a durable administrator decision to include a key in an offline gateway snapshot, not a signed GoreeCloud Identity grant or live ACL. Unapproved peers and revoked peers are excluded and negative tests assert that. Revocation is not effective on a running gateway until the separately reviewed configuration is safely reconciled and actual packets are denied. The static admin bearer token must not be publicly exposed, and all peer actions ultimately require scoped Identity/RBAC.
+
+
+**Service-level ACL preview:** The gateway-local nftables source generator now defaults to dropping INPUT and FORWARD traffic entering through the dedicated gateway WireGuard interface unless a narrowly reviewed key-bound service rule permits a gateway-local destination. The CLI never applies rules. The isolated GitHub CI namespace enforces a generated deny/allow test. Manual source input files can be forged by their own privileged operator, so this is not an end-to-end GoreeCloud Identity authorization assertion, dynamic policy convergence or full zero-trust network segmentation. Real deployments require signed policy source authority, least-privilege reconciliation, audit logs, drift detection, and independent recovery testing.

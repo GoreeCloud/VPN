@@ -10,7 +10,7 @@ fi
 : "${VPNCTL:?compiled vpnctl binary required}"
 : "${VPND:?compiled vpnd binary required}"
 [[ -x "$VPNCTL" && -x "$VPND" ]] || { echo "Missing first-party CLI binaries" >&2; exit 2; }
-for program in ip wg wg-quick ping python3 curl; do
+for program in ip wg wg-quick nft ping python3 curl; do
   command -v "$program" >/dev/null || { echo "Missing $program" >&2; exit 2; }
 done
 umask 077
@@ -65,6 +65,20 @@ fi
   --token-file "$TMP/admin/token" --output "$TMP/gateway/active.json" --confirm >/dev/null
 "$VPNCTL" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/active.json" \
   --output "$TMP/gateway/gateway.conf" --listen-port 51820 --confirm >/dev/null
+# An approved key still cannot access ANY gateway service unless separately
+# granted a narrow gateway-local ACL. Generate both reviewed policy variants.
+printf '[]\n' > "$TMP/gateway/no-services.json"
+chmod 600 "$TMP/gateway/no-services.json"
+python3 - "$TMP/client/wg-public.key" "$TMP/gateway/icmp-rule.json" <<'PYACL'
+import json,sys
+key=open(sys.argv[1],encoding="utf-8").read().strip()
+with open(sys.argv[2],"w",encoding="utf-8") as f:
+    json.dump([{"public_key":key,"protocol":"icmp"}],f)
+PYACL
+chmod 600 "$TMP/gateway/icmp-rule.json"
+"$VPNCTL" config-acl --peers-file "$TMP/gateway/active.json"   --rules-file "$TMP/gateway/no-services.json" --output "$TMP/gateway/deny.nft" --confirm > /dev/null
+"$VPNCTL" config-acl --peers-file "$TMP/gateway/active.json"   --rules-file "$TMP/gateway/icmp-rule.json" --output "$TMP/gateway/allow-icmp.nft" --confirm > /dev/null
+
 "$VPNCTL" config-client --dir "$TMP/client" \
   --gateway-public-key-file "$TMP/gateway/wg-public.key" \
   --address 10.77.0.2/32 --endpoint 198.18.0.1:51820 \
@@ -84,13 +98,26 @@ ip -n "$NGW" link set dev vethgcvpn up
 ip -n "$NCL" link set dev vethgccl up
 ip netns exec "$NCL" ping -c 1 -W 2 198.18.0.1 >/dev/null
 
+# nft is invoked ONLY in the synthetic gateway namespace (never on the host).
+ip netns exec "$NGW" nft -c -f "$TMP/gateway/deny.nft"
+ip netns exec "$NGW" nft -c -f "$TMP/gateway/allow-icmp.nft"
+ip netns exec "$NGW" nft -f "$TMP/gateway/deny.nft"
+ip netns exec "$NCL" ping -c 1 -W 2 198.18.0.1 >/dev/null
 ip netns exec "$NGW" wg-quick up "$TMP/gateway/gateway.conf" >/dev/null
 ip netns exec "$NCL" wg-quick up "$TMP/client/client.conf" >/dev/null
-ip netns exec "$NCL" ping -c 2 -W 3 10.77.0.1 >/dev/null
+# WireGuard can authenticate, but firewall must deny even an approved peer
+# until an explicit service permission is applied.
+if ip netns exec "$NCL" ping -c 1 -W 2 10.77.0.1 >/dev/null 2>&1; then
+  echo "Approved identity bypassed default-deny gateway service ACL" >&2; exit 1
+fi
 LATEST="$(ip netns exec "$NCL" wg show client latest-handshakes | awk '{print $2}')"
 [[ "$LATEST" =~ ^[0-9]+$ && "$LATEST" -gt 0 ]] || {
   echo "Real WireGuard handshake not verified" >&2; exit 1;
 }
+
+ip netns exec "$NGW" nft delete table inet goreecloud_vpn
+ip netns exec "$NGW" nft -f "$TMP/gateway/allow-icmp.nft"
+ip netns exec "$NCL" ping -c 2 -W 3 10.77.0.1 >/dev/null
 
 # A different unregistered X25519 identity must not authenticate even from
 # the same network namespace, address, endpoint and allowed IP route.
@@ -114,6 +141,14 @@ fi
   --token-file "$TMP/admin/token" --output "$TMP/gateway/revoked.json" --confirm >/dev/null
 "$VPNCTL" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/revoked.json" \
   --output "$TMP/gateway/gateway-revoked.conf" --listen-port 51820 --confirm >/dev/null
+# Export cannot grant old keys once revoked, even if the old ACL rules file
+# still references them. Remove the last service grant.
+if "$VPNCTL" config-acl --peers-file "$TMP/gateway/revoked.json"   --rules-file "$TMP/gateway/icmp-rule.json" --output "$TMP/gateway/invalid.nft" --confirm >/dev/null 2>&1; then
+  echo "Revoked key was accepted as firewall ACL member" >&2; exit 1
+fi
+"$VPNCTL" config-acl --peers-file "$TMP/gateway/revoked.json"   --rules-file "$TMP/gateway/no-services.json" --output "$TMP/gateway/deny-revoked.nft" --confirm >/dev/null
+ip netns exec "$NGW" nft delete table inet goreecloud_vpn
+ip netns exec "$NGW" nft -f "$TMP/gateway/deny-revoked.nft"
 ip netns exec "$NGW" wg-quick strip "$TMP/gateway/gateway-revoked.conf" > "$TMP/gateway/stripped.conf"
 ip netns exec "$NGW" wg syncconf gateway "$TMP/gateway/stripped.conf"
 [[ -z "$(ip netns exec "$NGW" wg show gateway peers)" ]] || {
@@ -122,4 +157,4 @@ ip netns exec "$NGW" wg syncconf gateway "$TMP/gateway/stripped.conf"
 if ip netns exec "$NCL" ping -c 1 -W 2 10.77.0.1 >/dev/null 2>&1; then
   echo "Revoked peer still has packet-level access" >&2; exit 1
 fi
-echo "PASS: isolated Linux namespaces: first-party configs, kernel WireGuard handshake, wrong-key denial, no default route, applied revocation, denied traffic"
+echo "PASS: isolated Linux namespaces: first-party configs, kernel WireGuard handshake, wrong-key denial, default-deny service firewall with explicit allow, no default route, applied revocation and denied traffic"

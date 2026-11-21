@@ -90,14 +90,14 @@ ApplicationWindow {
                         text: "http://127.0.0.1:8788"
                         placeholderText: "HTTPS control-plane origin"
                         Layout.fillWidth: true
-                        accessibleName: "Control-plane URL"
+                        Accessible.name: "Control-plane URL"
                     }
                     TextField {
                         id: tokenField
                         echoMode: TextInput.Password
                         placeholderText: "Administrator token (held in memory only)"
                         Layout.fillWidth: true
-                        accessibleName: "Administrator token"
+                        Accessible.name: "Administrator token"
                     }
                     RowLayout {
                         Button {

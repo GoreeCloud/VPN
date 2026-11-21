@@ -71,3 +71,18 @@ This is a mode-0600 **no-overwrite** peer snapshot containing only administrator
 
 
 **Exclusive server state:** The local vpnd process creates a private mode-0600 state.lock file under its owner-private state directory. A second vpnd using the same directory fails instead of risking lost peer approvals or revocations. Stop and inspect the owning process; never delete the lock file to bypass a running owner. Existing pending identities remain pending across restarts.
+
+
+## Gateway-local firewall policy preview — never automatically applied
+
+Create a reviewed private JSON list of gateway-local service grants, such as an approved public key permitted to access TCP 443:
+
+    [{"public_key":"VERIFIED_APPROVED_PUBLIC_KEY_BASE64","protocol":"tcp","port":443}]
+
+Store the list in a newly created owner-private (0600) file in a 0700 directory, replacing the illustrative key with an actual verified public key. Then:
+
+    ./build/vpnctl config-acl --peers-file "$HOME/.local/share/goreecloud/vpn/gateway/current-peers.json" --rules-file "$HOME/.local/share/goreecloud/vpn/gateway/service-rules.json" --output "$HOME/.local/share/goreecloud/vpn/gateway/review-acl.nft" --confirm
+
+The command fails if a service permission references any key absent from the current approved peer snapshot. Empty rules mean **deny all VPN-origin gateway services and forwarding by default**. Protocols supported in the development renderer are tcp, udp and icmp (echo-request only); TCP/UDP must have a numeric 1–65535 port and ICMP must have none. No arbitrary subnet, full-tunnel, peer-to-peer or wildcard service grant is emitted.
+
+**Never invoke nft on the live VPS from these examples.** The generated file is review material, not an active firewall; correct host interface naming, rollback and boot restoration require a separately verified stage. The synthetic kernel GitHub Actions test uses a dedicated gateway namespace and is not live production policy enforcement.

@@ -60,6 +60,15 @@ PY
 )"
 [[ "$ID" =~ ^[0-9a-f]{32}$ ]]
 
+python3 - "$TMP/client/wg-public.key" "$TMP/gateway/service-rules.json" <<'PYRULES'
+import json,sys
+key=open(sys.argv[1],encoding="utf-8").read().strip()
+with open(sys.argv[2],"w",encoding="utf-8") as f:
+    json.dump([{"public_key":key,"protocol":"icmp"}],f)
+PYRULES
+chmod 600 "$TMP/gateway/service-rules.json"
+
+
 # Default-deny: new registration must not enter gateway configuration without
 # explicit authenticated administrator approval.
 "$TMP/vpnctl" export-peers --api http://127.0.0.1:18788 --token-file "$TMP/admin/token"   --output "$TMP/gateway/pending.json" --confirm >/dev/null
@@ -67,6 +76,9 @@ python3 - "$TMP/gateway/pending.json" <<'PYPENDING'
 import json,sys
 assert json.load(open(sys.argv[1],encoding="utf-8")) == [], "Pending peer leaked into gateway"
 PYPENDING
+if "$TMP/vpnctl" config-acl --peers-file "$TMP/gateway/pending.json" --rules-file "$TMP/gateway/service-rules.json"   --output "$TMP/gateway/unsafe-pending.nft" --confirm >/dev/null 2>&1; then
+  echo "Unapproved identity unexpectedly gained service ACL" >&2; exit 1
+fi
 if "$TMP/vpnctl" approve --api http://127.0.0.1:18788 --id "$ID"   --token-file "$TMP/admin/token" >/dev/null 2>&1; then
   echo "Approval without --confirm unexpectedly allowed" >&2; exit 1
 fi
@@ -79,6 +91,9 @@ records=json.load(open(sys.argv[1],encoding="utf-8"))
 key=open(sys.argv[2],encoding="utf-8").read().strip()
 assert len(records)==1 and records[0]["public_key"]==key and records[0]["address"]=="10.77.0.2/32"
 PYACTIVE
+"$TMP/vpnctl" config-acl --peers-file "$TMP/gateway/export-active.json" --rules-file "$TMP/gateway/service-rules.json"   --output "$TMP/gateway/allowed.nft" --confirm > /dev/null
+grep -q 'iifname "gateway" ip saddr 10.77.0.2 ip daddr 10.77.0.1 icmp type echo-request accept' "$TMP/gateway/allowed.nft"
+grep -q 'iifname "gateway" drop' "$TMP/gateway/allowed.nft"
 "$TMP/vpnctl" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/export-active.json"   --output "$TMP/gateway/gateway-from-registry.conf" --listen-port 51820 --confirm >/dev/null
 grep -q 'AllowedIPs = 10.77.0.2/32' "$TMP/gateway/gateway-from-registry.conf"
 "$TMP/vpnctl" revoke --api http://127.0.0.1:18788 --id "$ID" --token-file "$TMP/admin/token" --confirm >/dev/null
@@ -87,6 +102,9 @@ python3 - "$TMP/gateway/export-revoked.json" <<'PYREVOKE'
 import json,sys
 assert json.load(open(sys.argv[1],encoding="utf-8"))==[], "Revoked identity was re-exported"
 PYREVOKE
+if "$TMP/vpnctl" config-acl --peers-file "$TMP/gateway/export-revoked.json" --rules-file "$TMP/gateway/service-rules.json"   --output "$TMP/gateway/unsafe-revoked.nft" --confirm >/dev/null 2>&1; then
+  echo "Revoked identity unexpectedly gained service ACL" >&2; exit 1
+fi
 "$TMP/vpnctl" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/export-revoked.json"   --output "$TMP/gateway/gateway-after-revoke.conf" --listen-port 51820 --confirm >/dev/null
 if grep -q '^\[Peer\]' "$TMP/gateway/gateway-after-revoke.conf"; then
   echo "Revoked peer still appears in rendered gateway config" >&2; exit 1
@@ -104,5 +122,5 @@ python3 - "$TMP/peers.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))["peers"]
 assert len(p)==1 and p[0]["name"]=="isolated-test" and p[0]["revoked_at"]
-print("PASS: localhost auth, React web, private split-tunnel configs, registry export, revoke exclusion and restart persistence")
+print("PASS: localhost auth, React web, private split-tunnel configs, default-deny ACL export, approval, revoke exclusion and restart persistence")
 PY

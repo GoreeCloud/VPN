@@ -21,7 +21,7 @@ jobs:
       - name: Install distro WireGuard dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends iproute2 wireguard-tools iputils-ping
+          sudo apt-get install -y --no-install-recommends iproute2 wireguard-tools iputils-ping nftables
       - name: Compile first-party binaries
         run: |
           go build -o "$RUNNER_TEMP/gcvpn-vpnd" ./cmd/vpnd

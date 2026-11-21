@@ -295,7 +295,7 @@ func writeGatewayConfiguration(dir, peersFile, output string, port int) error {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: vpnctl init-admin | keygen | config-client | config-gateway | export-peers | list | register | approve | revoke | info")
+		fmt.Fprintln(os.Stderr, "Usage: vpnctl init-admin | keygen | config-client | config-gateway | config-acl | export-peers | list | register | approve | revoke | info")
 		os.Exit(2)
 	}
 	command := os.Args[1]
@@ -312,6 +312,7 @@ func main() {
 	endpoint := flags.String("endpoint", "", "reviewed gateway host:port")
 	output := flags.String("output", "", "new private 0600 configuration path")
 	peersFile := flags.String("peers-file", "", "private JSON array of explicit gateway peer public keys and /32s")
+	rulesFile := flags.String("rules-file", "", "private JSON array of gateway-local ACL permissions")
 	listenPort := flags.Int("listen-port", 51820, "WireGuard gateway UDP listener")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		os.Exit(2)
@@ -337,6 +338,12 @@ func main() {
 			break
 		}
 		err = writeGatewayConfiguration(*dir, *peersFile, *output, *listenPort)
+	case "config-acl":
+		if !*confirm {
+			err = errors.New("ACL export requires --confirm after independent peer and service review")
+			break
+		}
+		err = writeGatewayAccessPolicy(*peersFile, *rulesFile, *output)
 	case "list", "register", "approve", "revoke", "info", "export-peers":
 		var token string
 		token, err = credentials.Read(*tokenFile)
