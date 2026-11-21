@@ -1,0 +1,35 @@
+# Generated build output and local secrets
+/android/.gradle/
+/android/.kotlin/
+/android/build/
+/android/app/build/
+/desktop/linux/build/
+/build/
+/dist/
+/.idea/
+/.vscode/
+*.iml
+*.keystore
+*.jks
+*.pem
+*.key
+admin-token
+state.json
+.env
+.env.*
+/private/
+/secrets/
+.DS_Store
+
+# React/Vite compiled preview
+/web/dist/
+/web/node_modules/
+/web/*.tsbuildinfo
+
+
+# CI-only source-derived provisional SPDX inventory
+/gcvpn-dependency-inventory.spdx.json
+
+# Python standard-library inventory test cache
+__pycache__/
+*.pyc

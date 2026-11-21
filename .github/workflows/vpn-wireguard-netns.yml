@@ -1,0 +1,33 @@
+name: GoreeCloud VPN isolated kernel WireGuard integration
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  namespace-wireguard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install distro WireGuard dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends iproute2 wireguard-tools iputils-ping nftables
+      - name: Compile first-party binaries
+        run: |
+          go build -o "$RUNNER_TEMP/gcvpn-vpnd" ./cmd/vpnd
+          go build -o "$RUNNER_TEMP/gcvpn-vpnctl" ./cmd/vpnctl
+      - name: Verify isolated WireGuard handshake and revocation
+        run: |
+          sudo env GITHUB_ACTIONS=true GITHUB_REPOSITORY=GoreeCloud/VPN RUNNER_OS=Linux \
+            VPNCTL="$RUNNER_TEMP/gcvpn-vpnctl" VPND="$RUNNER_TEMP/gcvpn-vpnd" \
+            bash scripts/wireguard-netns-smoke.sh
