@@ -1,0 +1,22 @@
+# Add to the existing Caddyfile, do not deploy a second public proxy.
+netbird.goreecloud.com {
+    encode zstd gzip
+    @grpc header Content-Type application/grpc*
+    reverse_proxy @grpc h2c://netbird-server:80
+    @backend path /relay* /ws-proxy/* /api/* /oauth2/*
+    reverse_proxy @backend netbird-server:80
+    reverse_proxy /* netbird-dashboard:80
+}
+
+# Private internal DNS hostname; requires NetBird DNS Custom Zone.
+# Browser clients must explicitly trust the Caddy local CA for this hostname.
+# The NetBird application policy must ALSO restrict client-to-server TCP/443.
+adguard.goreecloud.com {
+    tls internal
+    encode zstd gzip
+    @netbird remote_ip 100.64.0.0/10
+    handle @netbird {
+        reverse_proxy goreecloud-temp-adguard:3000
+    }
+    respond "Not Found" 404
+}
