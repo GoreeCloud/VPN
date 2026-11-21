@@ -20,6 +20,17 @@ class NetBirdDeploymentContracts(unittest.TestCase):
         self.assertIn("NB_SETUP_KEY_FILE:", peer)
         self.assertNotRegex(peer, r"(?m)^\s+NB_SETUP_KEY:\s*\S+")
 
+    def test_enrolled_peer_has_no_bootstrap_key_mount(self):
+        initial = (ROOT / "docker-compose.peer.yml").read_text()
+        enrolled = (ROOT / "docker-compose.peer.enrolled.yml").read_text()
+        self.assertIn("NB_SETUP_KEY_FILE:", initial)
+        self.assertIn("client-setup.key:", initial)
+        self.assertIn("client-state:/var/lib/netbird", enrolled)
+        self.assertIn("goreecloud-netbird-client", enrolled)
+        self.assertNotIn("NB_SETUP_KEY_FILE:", enrolled)
+        self.assertNotIn("client-setup.key", enrolled)
+        self.assertIn("unless-stopped", enrolled)
+
     def test_caddy_does_not_expose_adguard_publicly(self):
         caddy = (ROOT / "Caddyfile.example").read_text()
         self.assertIn("@netbird remote_ip 100.64.0.0/10", caddy)
