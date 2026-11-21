@@ -48,7 +48,9 @@ func request(method,base,token,path string,payload interface{})([]byte,error){
  req.Header.Set("Authorization","Bearer "+token)
  req.Header.Set("Accept","application/json")
  if payload!=nil{req.Header.Set("Content-Type","application/json")}
- client:=&http.Client{Timeout:12*time.Second,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("API redirect refused")}}
+ // Never send an admin bearer token through inherited HTTP(S)_PROXY settings.
+ transport:=&http.Transport{Proxy:nil,TLSHandshakeTimeout:5*time.Second,DisableKeepAlives:true}
+ client:=&http.Client{Timeout:12*time.Second,Transport:transport,CheckRedirect:func(_ *http.Request,_ []*http.Request)error{return errors.New("API redirect refused")}}
  resp,err:=client.Do(req);if err!=nil{return nil,errors.New("API request failed; verify TLS and control-plane availability")}
  defer resp.Body.Close()
  b,err:=io.ReadAll(io.LimitReader(resp.Body,65537));if err!=nil{return nil,err}
