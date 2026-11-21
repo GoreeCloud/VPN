@@ -38,6 +38,7 @@ func NewHandler(store *control.Store, token, webRoot string) (http.Handler,error
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter,r *http.Request) {
+    w.Header().Set("Content-Security-Policy","default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
     w.Header().Set("X-Content-Type-Options","nosniff")
     w.Header().Set("X-Frame-Options","DENY")
     w.Header().Set("Referrer-Policy","no-referrer")
