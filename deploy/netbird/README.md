@@ -67,7 +67,7 @@ ssh -i ~/.ssh/<VERIFIED_LAPTOP_SSH_KEY> -o IdentitiesOnly=yes \
   'cat "$HOME/goreecloud-netbird-fresh/credentials/initial-admin-password"'
 ```
 
-Enter the generated password into [the new NetBird dashboard](https://netbird.goreecloud.com). This is intentionally not a public setup wizard with an unauthenticated owner-claim window. The first sign-in must be verified before making claims about new management accounts. On first successful sign-in, configure MFA if supported, rotate the initial password, verify the current owner and its permissions, and remove the plaintext bootstrap password from the private config only **after verifying account creation and subsequent login**. Do not revoke/remove initial access prematurely. The file under `credentials/` also requires secure retirement/rotation. Never put passwords, PATs, setup keys or private IDs in a GitHub PR, ChatGPT or unredacted log.
+Enter the generated password into [the new NetBird dashboard](https://netbird.goreecloud.com). This is intentionally not a public setup wizard with an unauthenticated owner-claim window. The first sign-in must be verified before making claims about new management accounts. On first successful sign-in, configure MFA if supported, rotate the initial password, verify the current owner and its permissions, and verify login and password rotation before retiring the private bootstrap password file or removing the temporary owner bootstrap stanza; the configuration now contains a bcrypt hash, **not plaintext**. Do not revoke/remove initial access prematurely. The file under `credentials/` also requires secure retirement/rotation. Never put passwords, PATs, setup keys or private IDs in a GitHub PR, ChatGPT or unredacted log.
 
 ### Enroll an entirely NEW VPS peer
 
