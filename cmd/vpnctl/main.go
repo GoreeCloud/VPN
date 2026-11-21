@@ -7,6 +7,7 @@ import (
  "crypto/rand"
  "encoding/base64"
  "encoding/json"
+ "bytes"
  "errors"
  "flag"
  "fmt"
@@ -111,8 +112,44 @@ func writeClientConfiguration(dir,gatewayFile,address,endpoint,output string)err
  return nil
 }
 
+func writeGatewayConfiguration(dir,peersFile,output string,port int)error{
+ if dir==""||peersFile==""||output==""{return errors.New("config-gateway needs --dir, --peers-file and --output")}
+ keyFile:=filepath.Join(dir,"wg-private.key")
+ keyInfo,err:=os.Lstat(keyFile);if err!=nil{return err}
+ if !keyInfo.Mode().IsRegular() || keyInfo.Mode().Perm()!=0600 || keyInfo.Size()>256 {
+  return errors.New("gateway private key file must be regular mode 0600")
+ }
+ pinfo,err:=os.Lstat(peersFile);if err!=nil{return err}
+ if !pinfo.Mode().IsRegular() || pinfo.Mode().Perm()&0077!=0 || pinfo.Size()>64*1024 {
+  return errors.New("peer metadata must be a private regular file <=64KiB")
+ }
+ raw,err:=os.ReadFile(keyFile);if err!=nil{return err}
+ peerJSON,err:=os.ReadFile(peersFile);if err!=nil{return err}
+ var peers []wireguard.GatewayPeer
+ dec:=json.NewDecoder(bytes.NewReader(peerJSON))
+ dec.DisallowUnknownFields()
+ if err:=dec.Decode(&peers);err!=nil{return errors.New("invalid gateway peers JSON")}
+ var trailing interface{}
+ if err:=dec.Decode(&trailing);!errors.Is(err,io.EOF){return errors.New("unexpected JSON trailing data")}
+ body,err:=wireguard.RenderGatewayConfig(wireguard.GatewayOptions{
+  PrivateKey:strings.TrimSpace(string(raw)),ListenPort:port,Peers:peers,
+ })
+ if err!=nil{return err}
+ parent,err:=os.Lstat(filepath.Dir(output));if err!=nil{return err}
+ if !parent.IsDir()||parent.Mode()&os.ModeSymlink!=0||parent.Mode().Perm()&0077!=0{
+  return errors.New("output parent must be private real directory 0700")
+ }
+ file,err:=os.OpenFile(output,os.O_CREATE|os.O_WRONLY|os.O_EXCL,0600)
+ if err!=nil{return err}
+ if _,err=file.Write(body);err!=nil{file.Close();os.Remove(output);return err}
+ if err=file.Sync();err!=nil{file.Close();os.Remove(output);return err}
+ if err=file.Close();err!=nil{os.Remove(output);return err}
+ fmt.Println("Private development WireGuard gateway config created (0600). Gateway NOT activated.")
+ return nil
+}
+
 func main(){
- if len(os.Args)<2{fmt.Fprintln(os.Stderr,"Usage: vpnctl init-admin | keygen | config-client | list | register | revoke | info");os.Exit(2)}
+ if len(os.Args)<2{fmt.Fprintln(os.Stderr,"Usage: vpnctl init-admin | keygen | config-client | config-gateway | list | register | revoke | info");os.Exit(2)}
  command:=os.Args[1]
  flags:=flag.NewFlagSet(command,flag.ContinueOnError)
  tokenFile:=flags.String("token-file",defaultTokenPath(),"owner-private administrator token file")
@@ -125,7 +162,9 @@ func main(){
  gatewayKeyFile:=flags.String("gateway-public-key-file","","local gateway public key file")
  address:=flags.String("address","","assigned private peer IPv4 /32")
  endpoint:=flags.String("endpoint","","reviewed gateway host:port")
- output:=flags.String("output","","new mode-0600 client configuration path")
+ output:=flags.String("output","","new private 0600 configuration path")
+ peersFile:=flags.String("peers-file","","private JSON array of explicit gateway peer public keys and /32s")
+ listenPort:=flags.Int("listen-port",51820,"WireGuard gateway UDP listener")
  if err:=flags.Parse(os.Args[2:]);err!=nil{os.Exit(2)}
  var err error
  switch command{
@@ -137,6 +176,9 @@ func main(){
  case "config-client":
   if !*confirm {err=errors.New("client configuration export requires --confirm");break}
   err=writeClientConfiguration(*dir,*gatewayKeyFile,*address,*endpoint,*output)
+ case "config-gateway":
+  if !*confirm {err=errors.New("gateway configuration export requires --confirm");break}
+  err=writeGatewayConfiguration(*dir,*peersFile,*output,*listenPort)
  case "list","register","revoke","info":
   var token string
   token,err=credentials.Read(*tokenFile);if err!=nil{break}
