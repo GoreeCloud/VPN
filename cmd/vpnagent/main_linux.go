@@ -14,6 +14,7 @@ import (
     "os/exec"
     "path/filepath"
     "strings"
+    "syscall"
     "time"
 
     "github.com/GoreeCloud/VPN/internal/tunnel"
@@ -35,9 +36,8 @@ func safeBinary(name string)(string,error){
         p:=filepath.Join(dir,name)
         info,err:=os.Stat(p)
         if err!=nil{continue}
-        sys:=info.Sys()
-        _=sys
-        if info.Mode().IsRegular() && info.Mode().Perm()&0022==0 {
+        st,ok:=info.Sys().(*syscall.Stat_t)
+        if ok && st.Uid==0 && info.Mode().IsRegular() && info.Mode().Perm()&0022==0 {
             return p,nil
         }
     }
@@ -71,6 +71,9 @@ func ownerMarker()string{return filepath.Join(agentState,markerName)}
 func preflight()error{
     if os.Geteuid()!=0{return errors.New("network mutations require root / narrow CAP_NET_ADMIN context")}
     if _,err:=os.Lstat(ownerMarker());err==nil{return errors.New("VPN agent already has active ownership marker")}
+    if _,err:=os.Lstat("/sys/class/net/"+tunnel.Interface);err==nil{
+        return errors.New("VPN interface exists in sysfs; refusing to touch it")
+    }else if !os.IsNotExist(err){return fmt.Errorf("cannot inspect interface namespace: %w",err)}
     if text,err:=output("ip","link","show","dev",tunnel.Interface);err==nil || strings.TrimSpace(text)!="" {
         return errors.New("target interface already exists, refusing to alter it")
     }
@@ -98,8 +101,15 @@ func saveMarker(addr string)error{
 
 func readMarker()(marker,error){
     var m marker
+    dir,err:=os.Lstat(agentState)
+    if err!=nil{return m,err}
+    if !dir.IsDir() || dir.Mode()&os.ModeSymlink!=0 || dir.Mode().Perm()&0077!=0{
+        return m,errors.New("unsafe agent state directory")
+    }
     info,err:=os.Lstat(ownerMarker())
     if err!=nil{return m,err}
+    st,ok:=info.Sys().(*syscall.Stat_t)
+    if !ok || st.Uid!=0 {return m,errors.New("agent state marker not root-owned")}
     if !info.Mode().IsRegular() || info.Mode().Perm()!=0600 || info.Size()>1024 {
         return m,errors.New("unsafe agent state marker")
     }
