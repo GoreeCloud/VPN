@@ -1,6 +1,6 @@
 # GoreeCloud NetBird management CLI
 
-**Source:** GoreeCloud/VPN/tools/netbird-cli. **Executable:** gc-netbird (Python 3 standard library). **Target:** the fresh NetBird combined server over HTTPS at https://netbird.goreecloud.com. **Host:** VPS Mesh /home/ladamian/.local/bin/gc-netbird. **Status:** installed; 19 isolated transport/safety tests passed; owner-enrolled PAT authenticated via live GET, and approved additive group, private DNS zone/record and TCP/443 policy writes succeeded with API readback. The broad Default policy is still enabled.
+**Source:** GoreeCloud/VPN/tools/netbird-cli. **Executable:** gc-netbird (Python 3 standard library). **Target:** the fresh NetBird combined server over HTTPS at https://netbird.goreecloud.com. **Host:** VPS Mesh /home/ladamian/.local/bin/gc-netbird. **Status:** installed; 19 isolated transport/safety tests passed; owner-enrolled PAT authenticated via live GET, and approved additive group, private DNS zone/record and TCP/443 policy writes succeeded with API readback. The broad Default policy has now been explicitly disabled by the owner; the only enabled VPN peer access rule is the verified admin-device-to-VPS TCP/443 policy.
 
 ## Authentication and least privilege
 
@@ -110,7 +110,7 @@ The VPS owner-only directory `~/.local/share/goreecloud/netbird-cli/examples/` c
 
 The operator must privately enroll an authorized NetBird PAT with `gc-netbird login`, then read the existing resources, create only the approved administrator group, and replace its returned group ID in the private DNS zone payload. Create that zone with distribution limited to admin devices, then write a record using its returned zone ID and the verified new VPS overlay IP. Confirm that hostname resolution succeeds on the laptop. No API mutation, policy replacement, DNS zone creation or server-side setup-key revocation was executed in this phase.
 
-The one-time VPS bootstrap key file and mount have been removed after the peer successfully reconnected from persistent state. Revoke the issued key in the NetBird dashboard. The initial default all-to-all NetBird access policy remains enabled and should be narrowed **only after** validating a specific admin-to-VPS TCP/443 replacement policy, including fail-safe administrative access.
+The one-time VPS bootstrap key file and mount have been removed after the peer successfully reconnected from persistent state. Revoke the issued key in the NetBird dashboard. The initial Default All-to-All policy was **disabled after verifying the narrow replacement rule**, and is retained in disabled state for safe rollback. Live post-cutover tests proved HTTPS/443 still allowed and previously working ICMP now unavailable. The owner-private rollback payload can re-enable Default only with explicit confirmation.
 
 
 ## Authenticated management acceptance (verified November 20, 2026, America/Chicago)
@@ -120,3 +120,23 @@ The one-time VPS bootstrap key file and mount have been removed after the peer s
 Laptop verification without `--resolve`: NetBird managed DNS answers the private VPS IP via `wt0`; `curl --cacert` to `https://adguard.goreecloud.com/login.html` returned HTTP 200 with TLS verify result 0. The public Caddy route denies the same hostname with HTTP 404. The VPS and laptop remain connected over NetBird P2P.
 
 Future API use must reuse the existing created resource IDs rather than rerun CREATE commands; the example JSON in public source remains intentionally non-deployable until identifiers are replaced. The approved private file records and verified CLI output are on VPS Mesh, not in Git. The PAT and other secrets were never copied to source, logs, or Drive.
+
+
+## Authorized Default All-to-All policy cutover, validated on both peers
+
+The owner explicitly directed **disable the Default All-to-All policy; keep only the verified administrator-to-VPS rule**. The existing `Default` object was preserved, but `enabled` was changed to `false` through authenticated `gc-netbird update policies` PUT after confirming the live narrow rule (administrator laptop group → VPS server group, unidirectional TCP/443). This avoids deleting the original object or making uncontrolled group/peer changes.
+
+The original full policy API response, a checked disabled JSON payload, and a checked re-enable/rollback JSON payload are stored privately on VPS Mesh under `~/.local/share/goreecloud/netbird-cli/rollback/`. Each file is mode 0600. Both PUT payloads passed offline `--dry-run` validation. The rollback was **not executed**. The API update returned HTTP 200; authenticated GET and LIST showed `Default.enabled=false` and the scoped policy `enabled=true`.
+
+From the laptop: `netbird status` stayed 1/1 Connected P2P; NetBird private DNS continued resolving the AdGuard hostname over the overlay; ordinary HTTPS to the AdGuard login page continued returning HTTP 200 with verified private TLS. Negative tests: ping to the VPS previously returned replies but produced 0/2 afterward; reverse-direction VPS-to-laptop ping produced 0/2; TCP/22 was unreachable (also potentially affected by listener availability). Public NetBird, Vikunja and Plane HTTPS remained healthy. Only TCP/443 is intended to be permitted by the remaining NetBird access rule, not by Caddy alone.
+
+**Emergency restore only if explicitly approved:**
+
+```sh
+file="$HOME/.local/share/goreecloud/netbird-cli/rollback/20261120-default-policy-disable-reenable.json"
+gc-netbird update policies VERIFIED_DEFAULT_POLICY_ID --data-file "$file" --dry-run
+# Re-enabling this will allow broad All-to-All networking again:
+gc-netbird update policies VERIFIED_DEFAULT_POLICY_ID --data-file "$file" --confirm-write --confirm-network-impact
+```
+
+Do not run the rollback merely to check it; dry-run and previously saved API evidence are sufficient unless a real incident demands restoration. The policy change does not revoke existing device identities or close public host/service ports outside NetBird.
