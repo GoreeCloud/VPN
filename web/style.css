@@ -1,0 +1,25 @@
+/* Neutral platform palette until verified GoreeCloud UI design tokens are available. */
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; color: CanvasText; background: Canvas; }
+main { max-width: 860px; margin-inline: auto; padding: 2rem 1rem 3rem; }
+header { padding-bottom: 1rem; border-bottom: 1px solid GrayText; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); margin-bottom: .4rem; }
+h2 { font-size: 1.2rem; }
+section { padding-block: 1rem; }
+form { display: grid; gap: .7rem; max-width: 620px; }
+input, textarea, button { font: inherit; padding: .65rem; }
+input, textarea { width: 100%; border: 1px solid GrayText; border-radius: .5rem; background: Field; color: FieldText; }
+button { width: fit-content; border: 1px solid GrayText; border-radius: .6rem; background: ButtonFace; color: ButtonText; cursor: pointer; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px solid Highlight; outline-offset: 2px; }
+.heading { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.heading h2 { margin-right: auto; }
+.peer-list { padding-left: 0; list-style: none; }
+.peer-list li { border: 1px solid GrayText; border-radius: .65rem; padding: .75rem; margin-block: .5rem; }
+.peer-list p { overflow-wrap: anywhere; }
+.notice { color: GrayText; }
+footer { border-top: 1px solid GrayText; padding-top: 1rem; font-size: .9rem; }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { position: static; }
+@media (max-width: 480px) { main { padding: 1rem; } }
