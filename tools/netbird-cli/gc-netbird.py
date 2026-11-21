@@ -313,6 +313,10 @@ def command_action(args):
         return 0
     write = method in WRITE_METHODS
     if write:
+        # Public examples are intentionally non-deployable until reviewed IDs
+        # and private overlay addresses replace every placeholder.
+        if "REPLACE_" in path or (obj is not None and "REPLACE_" in json.dumps(obj)):
+            raise CLIError("Unresolved example placeholder; verify live IDs and private IP before a network write")
         if not args.confirm_write or not args.confirm_network_impact:
             raise CLIError("Live writes require --confirm-write AND --confirm-network-impact")
         if method == "DELETE" and not args.confirm_delete:
