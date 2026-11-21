@@ -98,6 +98,6 @@ GC_NETBIRD_BIN="$HOME/.local/bin/gc-netbird" python3 -m unittest discover -v \
   -s "$HOME/.local/share/goreecloud/netbird-cli/tests" -p 'test_*.py'
 ~~~
 
-The source and tests should also be synchronized into the canonical Google Drive GoreeCloud/CLI Commands/Third-Party/ folder, with VPS-specific commands under Hosts/ when Drive raw Markdown writing is accessible; a GitHub source file is not proof of Drive synchronization.
+**Google Drive canonical command reference — uploaded and read back:** [goreecloud-netbird-cli-commands.md](https://drive.google.com/file/d/1dwfxRtv6zYNqwvsKhp3OzAp3umpIiUvJ/view), under GoreeCloud/CLI Commands/Third-Party/. This is the operational CLI command registry entry, separate from GitHub source ownership. Keep both consistent as commands change.
 
 Official docs: https://docs.netbird.io/api , https://docs.netbird.io/api/resources/groups , https://docs.netbird.io/api/resources/policies , https://docs.netbird.io/api/resources/dns-zones , https://docs.netbird.io/manage/mcp-server .
