@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import ssl
 import stat
 import sys
@@ -47,7 +48,7 @@ SUMMARY_KEYS = ("id", "name", "hostname", "ip", "connected", "enabled", "role",
                 "expires_at", "peers_count", "resources_count", "groups",
                 "peer_groups", "protocol", "port", "metric", "network",
                 "distribution_groups", "rules")
-SENSITIVE_RESOURCES = frozenset(("setup-keys", "users"))
+LOCAL_DB = Path.home() / "goreecloud-netbird-fresh/data/store.db"
 PATH_RE = re.compile(
     r"^/api/(?:"
     + r"(?:peers|groups|policies|setup-keys|users|routes|posture-checks)"
@@ -110,12 +111,20 @@ def valid_path(path, method):
         raise CLIError("Unsupported HTTP method")
     if path.startswith("/api/events/") and method != "GET":
         raise CLIError("Audit events are read-only")
-    if method == "DELETE" and (path in ("/api/dns/settings",) or not re.search(r"/" + ID + r"$", path) or path.endswith("/records")):
-        raise CLIError("DELETE must target a specific resource ID")
+    parts = path.split("/")
+    if method in ("DELETE", "PUT") and path != "/api/dns/settings":
+        if parts[-1] in ("peers", "groups", "policies", "setup-keys", "users", "routes",
+                         "networks", "posture-checks", "zones", "nameservers",
+                         "records", "resources", "routers") or len(parts) < 4:
+            raise CLIError("PUT/DELETE requires a concrete resource ID")
+    if method == "POST":
+        base_names = {"/api/" + path for path, methods in COLLECTIONS.values() if "POST" in methods}
+        nested_names = bool(re.fullmatch(r"/api/networks/" + ID + r"/(?:resources|routers)", path) or
+                            re.fullmatch(r"/api/dns/zones/" + ID + r"/records", path))
+        if path not in base_names and not nested_names:
+            raise CLIError("POST requires a documented resource collection")
     if method == "POST" and path.endswith("/settings"):
         raise CLIError("DNS settings use PUT, not POST")
-    if method == "POST" and path in ("/api/peers",):
-        raise CLIError("Peers are enrolled with NetBird clients, not POST /api/peers")
     return path
 
 
@@ -351,6 +360,36 @@ def command_logout(args):
     return 0
 
 
+def local_list(name):
+    """Emergency read-only count/list from *fresh* VPS SQLite. API stays authoritative."""
+    fields = {
+        "peers": ("peers", "id,name,ip,peer_status_connected"),
+        "groups": ("groups", "id,name"),
+        "policies": ("policies", "id,name,enabled"),
+    }
+    if name not in fields:
+        raise CLIError("local-list permits only peers, groups or policies")
+    p = LOCAL_DB
+    if p.is_symlink() or not p.is_file() or not p.parent.is_dir():
+        raise CLIError("Fresh VPS NetBird state unavailable")
+    if stat.S_IMODE(p.parent.stat().st_mode) & 0o077:
+        raise CLIError("Fresh NetBird data directory must be private")
+    table, columns = fields[name]
+    try:
+        with sqlite3.connect("file:" + str(p) + "?mode=ro", uri=True, timeout=3) as db:
+            db.execute("PRAGMA query_only=ON")
+            cursor = db.execute("SELECT " + columns + " FROM " + table + " LIMIT 251")
+            names = [c[0] for c in cursor.description]
+            records = [dict(zip(names, row)) for row in cursor.fetchall()]
+        print(json.dumps({"source": "fresh local SQLite read-only; API preferred",
+                          "resource": name, "count_returned": min(len(records), 250),
+                          "truncated": len(records) > 250, "items": records[:250]},
+                         indent=2, ensure_ascii=False))
+    except (sqlite3.Error, ValueError) as exc:
+        raise CLIError("Local NetBird database read failed") from exc
+    return 0
+
+
 def doctor():
     try:
         urllib.request.urlopen(urllib.request.Request(BASE + "/api/instance",
@@ -376,6 +415,8 @@ def main(argv=None):
     logout = sub.add_parser("logout", help="Delete local PAT only")
     logout.add_argument("--confirm-write", action="store_true")
     sub.add_parser("auth-check", help="Verify authenticated peer-list access")
+    loc = sub.add_parser("local-list", help="Read nonsecret peers/groups/policies from fresh VPS SQLite, no PAT")
+    loc.add_argument("resource", choices=("peers", "groups", "policies"))
     for action in ("list", "get", "create", "update", "delete"):
         p = sub.add_parser(action)
         p.add_argument("resource", choices=tuple(COLLECTIONS))
@@ -395,6 +436,8 @@ def main(argv=None):
         if args.operation == "doctor":
             doctor()
             return 0
+        if args.operation == "local-list":
+            return local_list(args.resource)
         if args.operation == "login":
             return command_login()
         if args.operation == "logout":
