@@ -1,0 +1,32 @@
+name: NetBird VPS source safety checks
+on:
+  pull_request:
+    paths:
+      - 'deploy/netbird/**'
+      - '.github/workflows/netbird-deployment-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/netbird/**'
+      - '.github/workflows/netbird-deployment-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Compile test source
+        run: python3 -m py_compile deploy/netbird/test_deployment_contracts.py
+      - name: Test non-secret deployment contracts
+        run: python3 -m unittest discover -v -s deploy/netbird -p 'test_*.py'
+      - name: Shell syntax
+        run: bash -n deploy/netbird/enroll-vps-peer.sh
+      - name: Compose syntax with non-secret fixture
+        run: |
+          cp deploy/netbird/dashboard.env.example deploy/netbird/dashboard.env
+          trap 'rm -f deploy/netbird/dashboard.env' EXIT
+          docker compose -f deploy/netbird/docker-compose.yml config --quiet
+          docker compose -f deploy/netbird/docker-compose.peer.yml config --quiet
