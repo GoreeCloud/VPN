@@ -15,7 +15,8 @@ This branch contains a functional, authenticated **peer registry and administrat
 | Web `web/` | Accessible HTML/CSS/JS same-origin identity console, in-memory token | Static code, JavaScript syntax and localhost HTML/JS HTTP acceptance; browser UX not yet exercised |
 | Linux `desktop/linux/` | Native Qt Quick 6.12 graphical registry client | Source contracts; native Qt 6.12 build/hardware QA pending |
 | Android `android/` | Native Jetpack Compose Material 3 control-plane viewer with HTTPS and non-persistent token | Source contracts; APK/emulator/physical device QA tracked separately |
-| Actual encrypted tunnel | **Not implemented** | Not accepted, not deployed |
+| Linux WireGuard agent | Separate root-gated `cmd/vpnagent` with fixed `gcvpn0`, split-only route, and rollback | Go unit/plan tests only; no privileged execution or real handshake |
+| Actual encrypted tunnel | **Not running or accepted** | Gateway setup, agent installation and real two-peer handshake pending |
 
 The first-party client apps are independent of NetBird; do not confuse source readiness with a VPN that carries traffic.
 
