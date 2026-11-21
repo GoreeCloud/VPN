@@ -5,6 +5,7 @@ import (
  "crypto/ecdh"
  "crypto/rand"
  "encoding/base64"
+ "encoding/json"
  "strings"
  "path/filepath"
  "testing"
@@ -45,4 +46,25 @@ func TestPrivateWireGuardConfigExportAndNoOverwrite(t *testing.T){
     content,err:=os.ReadFile(output);if err!=nil{t.Fatal(err)}
     if !strings.Contains(string(content),"AllowedIPs = 10.77.0.0/24"){t.Fatal("unsafe route scope")}
     if err:=writeClientConfiguration(dir,pub,"10.77.0.2/32","vpn.example.test:51820",output);err==nil{t.Fatal("overwrote private config")}
+}
+
+
+func TestPrivateGatewayConfigurationExport(t *testing.T){
+    gatewayDir:=filepath.Join(t.TempDir(),"gateway")
+    clientDir:=filepath.Join(t.TempDir(),"client")
+    if err:=localKeygen(gatewayDir);err!=nil{t.Fatal(err)}
+    if err:=localKeygen(clientDir);err!=nil{t.Fatal(err)}
+    clientKey,err:=os.ReadFile(filepath.Join(clientDir,"wg-public.key"));if err!=nil{t.Fatal(err)}
+    peers:=[]map[string]string{{"public_key":strings.TrimSpace(string(clientKey)),"address":"10.77.0.2/32"}}
+    payload,err:=json.Marshal(peers);if err!=nil{t.Fatal(err)}
+    input:=filepath.Join(gatewayDir,"peers.json")
+    if err:=os.WriteFile(input,payload,0600);err!=nil{t.Fatal(err)}
+    output:=filepath.Join(gatewayDir,"gateway.conf")
+    if err:=writeGatewayConfiguration(gatewayDir,input,output,51820);err!=nil{t.Fatal(err)}
+    info,err:=os.Stat(output);if err!=nil{t.Fatal(err)}
+    if info.Mode().Perm()!=0600{t.Fatal("gateway config file is not private")}
+    content,err:=os.ReadFile(output);if err!=nil{t.Fatal(err)}
+    if !strings.Contains(string(content),"AllowedIPs = 10.77.0.2/32"){t.Fatal("missing peer-specific allowed address")}
+    if strings.Contains(string(content),"0.0.0.0/0"){t.Fatal("unexpected full-tunnel route")}
+    if err:=writeGatewayConfiguration(gatewayDir,input,output,51820);err==nil{t.Fatal("overwrote gateway configuration")}
 }
