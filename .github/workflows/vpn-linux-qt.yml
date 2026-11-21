@@ -33,6 +33,11 @@ jobs:
         run: |
           cmake -S desktop/linux -B "$RUNNER_TEMP/gcvpn-qt" -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build "$RUNNER_TEMP/gcvpn-qt" --parallel 2
+      - name: Start actual Qt Quick QML engine offscreen
+        run: |
+          mkdir -p "$RUNNER_TEMP/qt-runtime"
+          chmod 700 "$RUNNER_TEMP/qt-runtime"
+          XDG_RUNTIME_DIR="$RUNNER_TEMP/qt-runtime" QT_QPA_PLATFORM=offscreen             QT_QUICK_BACKEND=software timeout 20s             "$RUNNER_TEMP/gcvpn-qt/goreecloud-vpn-linux" --smoke-test
       - name: Verify executable artifacts exist
         run: |
           test -s "$RUNNER_TEMP/gcvpn-qt/goreecloud-vpn-linux"

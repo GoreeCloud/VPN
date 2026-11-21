@@ -61,7 +61,6 @@ if "$VPNCTL" approve --api http://127.0.0.1:18789 --id "$ID"   --token-file "$TM
   echo "Approval without --confirm unexpectedly allowed" >&2; exit 1
 fi
 "$VPNCTL" approve --api http://127.0.0.1:18789 --id "$ID"   --token-file "$TMP/admin/token" --confirm >/dev/null
- || exit 1
 "$VPNCTL" export-peers --api http://127.0.0.1:18789 \
   --token-file "$TMP/admin/token" --output "$TMP/gateway/active.json" --confirm >/dev/null
 "$VPNCTL" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/active.json" \
@@ -93,6 +92,21 @@ LATEST="$(ip netns exec "$NCL" wg show client latest-handshakes | awk '{print $2
   echo "Real WireGuard handshake not verified" >&2; exit 1;
 }
 
+# A different unregistered X25519 identity must not authenticate even from
+# the same network namespace, address, endpoint and allowed IP route.
+"$VPNCTL" keygen --dir "$TMP/rogue" >/dev/null
+ip netns exec "$NCL" wg set client private-key "$TMP/rogue/wg-private.key"
+if ip netns exec "$NCL" ping -c 1 -W 2 10.77.0.1 >/dev/null 2>&1; then
+  echo "Unregistered key authenticated on the development gateway" >&2; exit 1
+fi
+ip netns exec "$NCL" wg set client private-key "$TMP/client/wg-private.key"
+ip netns exec "$NCL" ping -c 2 -W 3 10.77.0.1 >/dev/null
+
+# Verify the split route was not accidentally changed into a default route.
+if [[ -n "$(ip -n "$NCL" route show default)" ]]; then
+  echo "Client default route was unexpectedly modified" >&2; exit 1
+fi
+
 # A registry tombstone alone does not revoke access: explicitly apply a new gateway state.
 "$VPNCTL" revoke --api http://127.0.0.1:18789 --id "$ID" \
   --token-file "$TMP/admin/token" --confirm >/dev/null
@@ -108,4 +122,4 @@ ip netns exec "$NGW" wg syncconf gateway "$TMP/gateway/stripped.conf"
 if ip netns exec "$NCL" ping -c 1 -W 2 10.77.0.1 >/dev/null 2>&1; then
   echo "Revoked peer still has packet-level access" >&2; exit 1
 fi
-echo "PASS: isolated Linux namespaces: first-party configs, kernel WireGuard handshake, applied revocation, denied traffic"
+echo "PASS: isolated Linux namespaces: first-party configs, kernel WireGuard handshake, wrong-key denial, no default route, applied revocation, denied traffic"

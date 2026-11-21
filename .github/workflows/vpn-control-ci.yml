@@ -35,5 +35,7 @@ jobs:
         run: cd web && npm ci --no-audit --no-fund && npm run typecheck && npm run build
       - name: Isolated peer identity lifecycle
         run: bash scripts/e2e-loopback.sh
+      - name: Fail fast on shell test script syntax
+        run: bash -n scripts/e2e-loopback.sh scripts/test_linux_agent_plan.sh scripts/wireguard-netns-smoke.sh
       - name: WireGuard kernel operation plan (dry run, no privileges)
         run: bash scripts/test_linux_agent_plan.sh
