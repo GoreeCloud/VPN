@@ -25,3 +25,11 @@ state.json
 /web/dist/
 /web/node_modules/
 /web/*.tsbuildinfo
+
+
+# CI-only source-derived provisional SPDX inventory
+/gcvpn-dependency-inventory.spdx.json
+
+# Python standard-library inventory test cache
+__pycache__/
+*.pyc

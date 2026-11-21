@@ -20,6 +20,19 @@ jobs:
         run: |
           go test -race -count=1 ./...
           go vet ./...
+      - name: Inspect reproducible source dependency and license evidence
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_dependency_inventory.py' -v
+          python3 scripts/generate_dependency_inventory.py --output "$RUNNER_TEMP/gcvpn-dependency-inventory.spdx.json"
+          python3 -m json.tool "$RUNNER_TEMP/gcvpn-dependency-inventory.spdx.json" > /dev/null
+          cp "$RUNNER_TEMP/gcvpn-dependency-inventory.spdx.json" ./gcvpn-dependency-inventory.spdx.json
+      - name: Upload provisional source-derived dependency inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: goreecloud-vpn-provisional-spdx-dependencies
+          path: ./gcvpn-dependency-inventory.spdx.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Build first-party binaries
         run: |
           go build -o /tmp/goreecloud-vpnd ./cmd/vpnd
