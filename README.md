@@ -11,7 +11,7 @@ This branch contains a functional, authenticated **peer registry and administrat
 | Component | Implemented source | Verified acceptance |
 | --- | --- | --- |
 | Backend `cmd/vpnd` | Go standard-library REST control plane, localhost default, TLS mandatory on non-loopback, bounded auth/JSON, private atomic state | Go race tests, vet, local build, isolated local API lifecycle and restart |
-| `cmd/vpnctl` | CSPRNG admin token creation, local X25519/WireGuard-compatible keys, mode-0600 split-tunnel config export, admin peer registry and revocation commands | Go tests and disposable localhost E2E (including private client + gateway config exports) |
+| `cmd/vpnctl` | CSPRNG admin token creation, local X25519/WireGuard-compatible keys, mode-0600 split-tunnel config export, admin peer registry, revocation and current non-revoked gateway snapshot export commands | Go tests and disposable localhost E2E, including client/gateway config exports and revocation-filtered snapshots |
 | Web `web/` | React 19/Vite compiled same-origin identity console, in-memory token and verified GoreeCloud UI Lagoon alpha colors | Local TypeScript/build and localhost compiled asset/JSON E2E passed; browser UX still unverified |
 | Linux `desktop/linux/` | Native Qt Quick 6.12 graphical registry client | Source contracts; native Qt 6.12 build/hardware QA pending |
 | Android `android/` | Native Compose Material 3 admin viewer and opt-in WireGuard GoBackend with local config import and Android VpnService consent | [Earlier viewer APK CI passed](https://github.com/GoreeCloud/VPN/actions/runs/44875185791); no emulator/phone runtime acceptance |
@@ -85,3 +85,5 @@ Original GoreeCloud-controlled source in this repository is available under the 
 ## Source-build acceptance boundaries
 
 Build the React application into web/dist before starting vpnd with that directory as web-root. The Go handler serves only the compiled entrypoint and assets, not source files. Native Qt Quick 6.12 is checked by a separate hosted compilation job; Android GoBackend compilation and physical-device consent tests are independent acceptance gates. No live VPS or NetBird systems are modified by these source builds.
+
+The Android debug build uses a separate application ID suffix (.dev) so that temporary physical-device QA does not replace an installed GoreeCloud VPN application. Hosted CI stores an unsigned-for-production, debug-signed development APK only as a short-lived Actions testing artifact; it is not a release or distribution channel.

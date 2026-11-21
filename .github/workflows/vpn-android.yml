@@ -32,6 +32,12 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.1" "build-tools;36.0.0"
       - name: Compile Android control plane and WireGuard GoBackend
         run: gradle -p android :app:assembleDebug --no-daemon --max-workers=2 --console=plain
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: goreecloud-vpn-debug-qa
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 1
       - name: Verify debug APK exists and is not production signed
         run: |
           test -s android/app/build/outputs/apk/debug/app-debug.apk

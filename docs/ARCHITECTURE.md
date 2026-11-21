@@ -54,3 +54,8 @@ The first-party `internal/wireguard/gateway.go` renderer and `vpnctl config-gate
 ## Static React build and Android data-plane ownership
 
 The web React app compiles with Vite into web/dist; vpnd serves only the compiled index and /assets/ directory, with management requests protected by explicit bearer authorization. No token is persisted to web storage. Android imports a user-reviewed WireGuard config via the Android system picker and requests OS VPN permission only on user-initiated Connect. Android GoBackend provides encrypted transport; the management API never receives a private key or reports an active tunnel. No real two-device handshake was demonstrated in this source change.
+
+
+## Registry-to-gateway snapshot (offline and revocation-sensitive)
+
+vpnctl export-peers authenticates to the first-party control-plane API, verifies the bounded complete response and fails on duplicate IDs, addresses, keys or invalid /32s. It writes a new private mode-0600 JSON snapshot containing only **non-revoked** public keys and assigned peer addresses, for subsequent reviewed config-gateway rendering. Neither action changes active kernel WireGuard or firewall state. Revocation becomes packet-enforced only after an independent, authorized gateway apply and real traffic-denial test. Manually crafted --peers-file exports remain supported but must not be confused with the current registry.

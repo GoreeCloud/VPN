@@ -22,7 +22,7 @@ Private one-time developer token and local key generation (no token or private k
 ./build/vpnd --listen 127.0.0.1:8788 \
   --state-dir "$HOME/.local/share/goreecloud/vpn/control" \
   --token-file "$HOME/.config/goreecloud/vpn/admin-token" \
-  --web-root ./web
+  --web-root ./web/dist
 ```
 
 From an **independent** terminal, strictly local authenticated REST peer registry:
@@ -37,7 +37,7 @@ From an **independent** terminal, strictly local authenticated REST peer registr
 ./build/vpnctl revoke --id VERIFIED_32_CHAR_ID --confirm
 ```
 
-The `vpnctl config-client` command can render a **private** WireGuard split-tunnel configuration file from local private/public key files, an assigned private /32 and an approved gateway endpoint. It requires explicit `--confirm` and a fresh `--output` in a private directory. The file is **not activated**. There is **no** `vpnctl up`, `vpnctl connect`, `vpnctl route` or `VpnService` implementation in this stage. No command installs, routes, configures or launches an encrypted tunnel. Never run these scripts as root, provide admin tokens in command-line arguments, send a private WireGuard key to the server, or point these preview tools at the live NetBird management service.
+The `vpnctl config-client` command can render a **private** WireGuard split-tunnel configuration file from local private/public key files, an assigned private /32 and an approved gateway endpoint. It requires explicit `--confirm` and a fresh `--output` in a private directory. The file is **not activated**. The CLI never starts an Android tunnel. Android now includes an independent opt-in user-consented WireGuard GoBackend app path; native runtime acceptance is still pending. The key/config export commands never activate an interface. A separate root-gated Linux vpnagent is available for expressly approved isolated tests only. Never run these scripts as root, provide admin tokens in command-line arguments, send a private WireGuard key to the server, or point these preview tools at the live NetBird management service.
 
 ## Gateway configuration and isolated Linux agent
 
@@ -55,3 +55,13 @@ bash scripts/test_linux_agent_plan.sh
 ~~~
 
 The `plan` action is read-only and unprivileged; no interface is installed. The optional Linux `--action apply` requires root, `--confirm-apply`, and `--acknowledge-network-impact` and can alter the route to the fixed 10.77.0.0/24 test prefix. It must only run after explicit authorization on an isolated test host, never on the live NetBird production VPS. The separately confirmed `--action stop --confirm-stop --acknowledge-network-impact` checks an agent-owned marker before deleting gcvpn0. Neither action has been executed in this implementation phase.
+
+
+## Current registry snapshot for gateway review
+
+After registering device public keys with vpnctl, export a new private gateway input derived from the authenticated, current peer registry:
+
+    ./build/vpnctl export-peers --api http://127.0.0.1:8788 --output "$HOME/.local/share/goreecloud/vpn/gateway/current-peers.json" --confirm
+    ./build/vpnctl config-gateway --dir "$HOME/.local/share/goreecloud/vpn/gateway" --peers-file "$HOME/.local/share/goreecloud/vpn/gateway/current-peers.json" --output "$HOME/.local/share/goreecloud/vpn/gateway/review.conf" --confirm
+
+This is a mode-0600 **no-overwrite** peer snapshot containing only non-revoked public keys and valid 10.77.0.x/32 assigned addresses. It rejects malformed and duplicate records. It DOES NOT install the gateway config or enforce revocation in a live interface. After revoke, regenerate and independently apply a reviewed gateway configuration, and verify actual packet denial before claiming enforcement. The manual --peers-file path remains an explicit operator option but is not authoritative when it differs from the current registry.

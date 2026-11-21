@@ -14,6 +14,12 @@ android {
         versionName = "0.1.0"
     }
     buildFeatures { compose = true }
+    buildTypes {
+        getByName("debug") {
+            // Physical QA installs a separate app instead of replacing any existing VPN.
+            applicationIdSuffix = ".dev"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

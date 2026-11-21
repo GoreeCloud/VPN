@@ -59,7 +59,25 @@ print(p["id"])
 PY
 )"
 [[ "$ID" =~ ^[0-9a-f]{32}$ ]]
+"$TMP/vpnctl" export-peers --api http://127.0.0.1:18788 --token-file "$TMP/admin/token"   --output "$TMP/gateway/export-active.json" --confirm > /dev/null
+python3 - "$TMP/gateway/export-active.json" "$TMP/client/wg-public.key" <<'PYACTIVE'
+import json,sys
+records=json.load(open(sys.argv[1],encoding="utf-8"))
+key=open(sys.argv[2],encoding="utf-8").read().strip()
+assert len(records)==1 and records[0]["public_key"]==key and records[0]["address"]=="10.77.0.2/32"
+PYACTIVE
+"$TMP/vpnctl" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/export-active.json"   --output "$TMP/gateway/gateway-from-registry.conf" --listen-port 51820 --confirm >/dev/null
+grep -q 'AllowedIPs = 10.77.0.2/32' "$TMP/gateway/gateway-from-registry.conf"
 "$TMP/vpnctl" revoke --api http://127.0.0.1:18788 --id "$ID" --token-file "$TMP/admin/token" --confirm >/dev/null
+"$TMP/vpnctl" export-peers --api http://127.0.0.1:18788 --token-file "$TMP/admin/token"   --output "$TMP/gateway/export-revoked.json" --confirm > /dev/null
+python3 - "$TMP/gateway/export-revoked.json" <<'PYREVOKE'
+import json,sys
+assert json.load(open(sys.argv[1],encoding="utf-8"))==[], "Revoked identity was re-exported"
+PYREVOKE
+"$TMP/vpnctl" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/export-revoked.json"   --output "$TMP/gateway/gateway-after-revoke.conf" --listen-port 51820 --confirm >/dev/null
+if grep -q '^\[Peer\]' "$TMP/gateway/gateway-after-revoke.conf"; then
+  echo "Revoked peer still appears in rendered gateway config" >&2; exit 1
+fi
 kill "$PID"; wait "$PID" 2>/dev/null || true; PID=""
 "$TMP/vpnd" --listen 127.0.0.1:18788 --state-dir "$TMP/state" \
   --token-file "$TMP/admin/token" >"$TMP/server-restart.log" 2>&1 &
@@ -73,5 +91,5 @@ python3 - "$TMP/peers.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))["peers"]
 assert len(p)==1 and p[0]["name"]=="isolated-test" and p[0]["revoked_at"]
-print("PASS: localhost auth, web, split-tunnel client/gateway configs, register, revoke and restart persistence")
+print("PASS: localhost auth, React web, private split-tunnel configs, registry export, revoke exclusion and restart persistence")
 PY

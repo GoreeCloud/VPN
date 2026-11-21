@@ -18,6 +18,9 @@ wg = read("internal/wireguard/config.go")
 assert "AllowedIPs = 10.77.0.0/24" in wg
 assert "RenderClientConfig" in wg
 assert "config-client" in read("cmd/vpnctl/main.go")
+assert "export-peers" in read("cmd/vpnctl/main.go")
+assert "RevokedAt == nil" in read("cmd/vpnctl/export.go")
+assert "os.O_EXCL" in read("cmd/vpnctl/export.go")
 
 go = read("internal/api/handler.go")
 assert '"tunnel_operational"' in go and "false" in go, "Source must explicitly deny automatic tunnel activation"
