@@ -295,7 +295,7 @@ func writeGatewayConfiguration(dir, peersFile, output string, port int) error {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: vpnctl init-admin | keygen | config-client | config-gateway | export-peers | list | register | revoke | info")
+		fmt.Fprintln(os.Stderr, "Usage: vpnctl init-admin | keygen | config-client | config-gateway | export-peers | list | register | approve | revoke | info")
 		os.Exit(2)
 	}
 	command := os.Args[1]
@@ -337,7 +337,7 @@ func main() {
 			break
 		}
 		err = writeGatewayConfiguration(*dir, *peersFile, *output, *listenPort)
-	case "list", "register", "revoke", "info", "export-peers":
+	case "list", "register", "approve", "revoke", "info", "export-peers":
 		var token string
 		token, err = credentials.Read(*tokenFile)
 		if err != nil {
@@ -383,6 +383,12 @@ func main() {
 				fmt.Println("Private current-state gateway peer snapshot exported (0600). Revoked identities excluded. NOT APPLIED to a gateway.")
 				res = nil
 			}
+		case "approve":
+			if !*confirm || len(*id) != 32 || strings.Trim(*id, "0123456789abcdef") != "" {
+				err = errors.New("approve requires --id (32 lowercase hex characters) and --confirm")
+				break
+			}
+			res, err = request("POST", *origin, token, "/v1/peers/"+*id+"/approve", nil)
 		case "revoke":
 			if !*confirm || len(*id) != 32 || strings.Trim(*id, "0123456789abcdef") != "" {
 				err = errors.New("revoke requires --id (32 lowercase hex characters) and --confirm")

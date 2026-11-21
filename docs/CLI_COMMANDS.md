@@ -33,6 +33,9 @@ From an **independent** terminal, strictly local authenticated REST peer registr
 ./build/vpnctl register --name my-device \
   --public-key-file "$HOME/.local/share/goreecloud/vpn/my-device/wg-public.key" --confirm
 ./build/vpnctl list
+# New peer registrations are pending by default; after independently verifying
+# the owner and public key, authorize a reviewed gateway export (not live access):
+./build/vpnctl approve --id VERIFIED_32_CHAR_ID --confirm
 # After reviewing the exact target peer ID:
 ./build/vpnctl revoke --id VERIFIED_32_CHAR_ID --confirm
 ```
@@ -64,4 +67,7 @@ After registering device public keys with vpnctl, export a new private gateway i
     ./build/vpnctl export-peers --api http://127.0.0.1:8788 --output "$HOME/.local/share/goreecloud/vpn/gateway/current-peers.json" --confirm
     ./build/vpnctl config-gateway --dir "$HOME/.local/share/goreecloud/vpn/gateway" --peers-file "$HOME/.local/share/goreecloud/vpn/gateway/current-peers.json" --output "$HOME/.local/share/goreecloud/vpn/gateway/review.conf" --confirm
 
-This is a mode-0600 **no-overwrite** peer snapshot containing only non-revoked public keys and valid 10.77.0.x/32 assigned addresses. It rejects malformed and duplicate records. It DOES NOT install the gateway config or enforce revocation in a live interface. After revoke, regenerate and independently apply a reviewed gateway configuration, and verify actual packet denial before claiming enforcement. The manual --peers-file path remains an explicit operator option but is not authoritative when it differs from the current registry.
+This is a mode-0600 **no-overwrite** peer snapshot containing only administrator-approved, non-revoked public keys and valid 10.77.0.x/32 assigned addresses. It rejects malformed and duplicate records. It DOES NOT install the gateway config or enforce revocation in a live interface. After revoke, regenerate and independently apply a reviewed gateway configuration, and verify actual packet denial before claiming enforcement. The manual --peers-file path remains an explicit operator option but is not authoritative when it differs from the current registry.
+
+
+**Exclusive server state:** The local vpnd process creates a private mode-0600 state.lock file under its owner-private state directory. A second vpnd using the same directory fails instead of risking lost peer approvals or revocations. Stop and inspect the owning process; never delete the lock file to bypass a running owner. Existing pending identities remain pending across restarts.

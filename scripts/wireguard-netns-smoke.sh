@@ -48,7 +48,20 @@ assert record["address"]=="10.77.0.2/32"
 print(record["id"])
 PYID
 )"
-[[ "$ID" =~ ^[0-9a-f]{32}$ ]] || exit 1
+[[ "$ID" =~ ^[0-9a-f]{32}$ ]]
+
+# Default-deny: new registration must not enter gateway configuration without
+# explicit authenticated administrator approval.
+"$VPNCTL" export-peers --api http://127.0.0.1:18789 --token-file "$TMP/admin/token"   --output "$TMP/gateway/pending.json" --confirm >/dev/null
+python3 - "$TMP/gateway/pending.json" <<'PYPENDING'
+import json,sys
+assert json.load(open(sys.argv[1],encoding="utf-8")) == [], "Pending peer leaked into gateway"
+PYPENDING
+if "$VPNCTL" approve --api http://127.0.0.1:18789 --id "$ID"   --token-file "$TMP/admin/token" >/dev/null 2>&1; then
+  echo "Approval without --confirm unexpectedly allowed" >&2; exit 1
+fi
+"$VPNCTL" approve --api http://127.0.0.1:18789 --id "$ID"   --token-file "$TMP/admin/token" --confirm >/dev/null
+ || exit 1
 "$VPNCTL" export-peers --api http://127.0.0.1:18789 \
   --token-file "$TMP/admin/token" --output "$TMP/gateway/active.json" --confirm >/dev/null
 "$VPNCTL" config-gateway --dir "$TMP/gateway" --peers-file "$TMP/gateway/active.json" \

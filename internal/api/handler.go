@@ -89,6 +89,37 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/v1/peers/") && strings.HasSuffix(r.URL.Path, "/approve") {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/peers/"), "/approve")
+		if !idPattern.MatchString(id) {
+			h.failure(w, 404, "not found")
+			return
+		}
+		if r.Method != "POST" {
+			w.Header().Set("Allow", "POST")
+			h.failure(w, 405, "method not allowed")
+			return
+		}
+		peer, err := h.store.Approve(id)
+		if errors.Is(err, control.ErrNotFound) {
+			h.failure(w, 404, "peer not found")
+			return
+		}
+		if errors.Is(err, control.ErrRevoked) {
+			h.failure(w, 409, "revoked peer cannot be approved")
+			return
+		}
+		if errors.Is(err, control.ErrApproved) {
+			h.failure(w, 409, "peer already approved")
+			return
+		}
+		if err != nil {
+			h.failure(w, 500, "persistent state update failed")
+			return
+		}
+		h.respond(w, 200, peer)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/v1/peers/") && strings.HasSuffix(r.URL.Path, "/revoke") {
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/peers/"), "/revoke")
 		if !idPattern.MatchString(id) {

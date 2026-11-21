@@ -5,7 +5,7 @@ GoreeCloud VPN is an original native VPN product, **not NetBird**, not a NetBird
 ## Implemented: isolated control-plane preview
 
 - `cmd/vpnd`: HTTP JSON API, loopback by default; TLS certificate **mandatory** when binding an external address, no external HTTP/plaintext listener.
-- `internal/control`: concurrency-safe, owner-private JSON peer registry, unique /32 address reservations in a development-only 10.77.0.0/24 range, revocation tombstones, no key escrow.
+- `internal/control`: concurrency-safe, owner-private JSON peer registry, unique /32 address reservations in a development-only 10.77.0.0/24 range, separate explicit administrator approval, revocation tombstones, exclusive state lock and fail-closed stored-registry validation, no key escrow.
 - `internal/credentials`: CSPRNG administrator-token creation and strict private-file read; no default credentials, no token in URL, no secrets in public source.
 - `internal/api`: constant-time hash comparison for bearer token, bounded strict JSON input, secure response headers, fail-closed unknown routes, immutable public-health check, protected peer CRUD.
 - `cmd/vpnctl`: private local WireGuard-compatible X25519 key generation and strict 0600 split-tunnel client config export; no server-side private key creation; administrative CLI for local HTTPS/loopback peer registry and revocation. The configuration exporter does not activate tunnels.
@@ -58,9 +58,16 @@ The web React app compiles with Vite into web/dist; vpnd serves only the compile
 
 ## Registry-to-gateway snapshot (offline and revocation-sensitive)
 
-vpnctl export-peers authenticates to the first-party control-plane API, verifies the bounded complete response and fails on duplicate IDs, addresses, keys or invalid /32s. It writes a new private mode-0600 JSON snapshot containing only **non-revoked** public keys and assigned peer addresses, for subsequent reviewed config-gateway rendering. Neither action changes active kernel WireGuard or firewall state. Revocation becomes packet-enforced only after an independent, authorized gateway apply and real traffic-denial test. Manually crafted --peers-file exports remain supported but must not be confused with the current registry.
+vpnctl export-peers authenticates to the first-party control-plane API, verifies the bounded complete response and fails on duplicate IDs, addresses, keys or invalid /32s. It writes a new private mode-0600 JSON snapshot containing only **explicitly approved, non-revoked** public keys and assigned peer addresses, for subsequent reviewed config-gateway rendering. Neither action changes active kernel WireGuard or firewall state. Revocation becomes packet-enforced only after an independent, authorized gateway apply and real traffic-denial test. Manually crafted --peers-file exports remain supported but must not be confused with the current registry.
 
 
 ## Disposable kernel namespace lab (CI-only)
 
 The optional scripts/wireguard-netns-smoke.sh refuses non-GoreeCloud hosted GitHub Actions Linux execution and requires root only inside an ephemeral runner. It uses two isolated network namespaces and a synthetic veth underlay. GoreeCloud's actual compiled vpnd/vpnctl generates and exports reviewed development peer configs, upstream wg-quick provides the kernel encrypted transport, and wg syncconf explicitly applies the post-revoke gateway state. It asserts both a successful cryptographic handshake and negative peer traffic after applied revocation. Host routes, DNS, firewall and actual devices are not touched. A passing synthetic lab does not certify an authorized real remote-access overlay or physical Android/Linux clients.
+
+
+## Default-deny device admission
+
+Registration never grants an identity eligibility for gateway configuration. The Go peer registry records ApprovedAt only after a separately authenticated POST /v1/peers/{id}/approve admin action. The guarded CLI command vpnctl approve --id ID --confirm and the React console expose that action. Duplicate approvals and any attempt to reapprove a revoked identity return conflict. A gateway snapshot contains only ApprovedAt != nil AND RevokedAt == nil, while retaining tombstones for audit. Prior saved peer records lacking ApprovedAt stay pending (no implicit mass approval).
+
+One active process holds a Linux advisory flock on a 0600 file in the 0700 state directory before loading registry JSON. A concurrent daemon fails startup. The state loader validates peer ID, /32 address, canonical public key, distinct identity/address and consistent approval/revocation times; corrupted state fails closed and releases the lock. This is not a substitute for authenticated device owner verification, per-service packet-level ACLs, OIDC/RBAC, or automatic gateway convergence.

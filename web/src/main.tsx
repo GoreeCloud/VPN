@@ -2,7 +2,7 @@ import React, { useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 
-type Peer = { id: string; name: string; public_key: string; address: string; revoked_at?: string | null };
+type Peer = { id: string; name: string; public_key: string; address: string; approved_at?: string | null; revoked_at?: string | null };
 type PeerResponse = { peers: Peer[] };
 
 async function fetchJSON<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
@@ -75,10 +75,20 @@ function App() {
       });
       await fetchPeers(token);
       setName(""); setPublicKey("");
-      setNotice("Peer recorded. A gateway configuration update is required to enforce its access.");
+      setNotice("Device enrolled as pending. An administrator must approve it before gateway export; a separate gateway apply is still required.");
     } catch {
       setError("Enrollment failed. Check the public key, name and duplicate records.");
     } finally { setBusy(false); }
+  }
+  async function approve(peer: Peer) {
+    if (!window.confirm("Approve " + peer.name + " for future gateway configuration exports? Review this public key and device owner first. This does NOT change a running VPN gateway.")) return;
+    setBusy(true); setError("");
+    try {
+      await fetchJSON("/v1/peers/" + encodeURIComponent(peer.id) + "/approve", token, { method: "POST" });
+      await fetchPeers(token);
+      setNotice("Identity approved. A reviewed gateway export and explicit apply are still required for packet access.");
+    } catch { setError("Approval failed. Verify authorization and the peer state."); }
+    finally { setBusy(false); }
   }
   async function revoke(peer: Peer) {
     if (!window.confirm("Revoke " + peer.name + " in the registry? This does NOT remove a live WireGuard peer until the gateway is updated.")) return;
@@ -90,7 +100,9 @@ function App() {
     } catch { setError("Revocation failed. Verify the management connection."); }
     finally { setBusy(false); }
   }
-  const active = peers.filter(x => !x.revoked_at);
+  const approved = peers.filter(x => x.approved_at && !x.revoked_at);
+  const pending = peers.filter(x => !x.approved_at && !x.revoked_at);
+  const revoked = peers.filter(x => x.revoked_at);
   return <main className="shell">
     <header className="masthead">
       <div className="brand"><div className="brand-icon" aria-hidden="true">◈</div>
@@ -112,11 +124,11 @@ function App() {
       <>
         <section className="hero"><span className="eyebrow">NETWORK CONTROL</span>
           <h1>Connected to your<br/><em>control plane.</em></h1>
-          <p>Review registered identities and manage their enrollment. Network packet access remains subject to independently applied gateway policy.</p>
+          <p>Review registered identities and manage their enrollment. Device enrollment defaults to pending; only explicitly approved identities can enter future gateway configuration exports. Actual packet access requires separate reviewed gateway policy and application.</p>
         </section>
         <section className="stats" aria-label="Network inventory summary">
-          <article className="surface"><span>Registered</span><strong>{active.length}</strong><small>Non-revoked identities</small></article>
-          <article className="surface"><span>Revoked</span><strong>{peers.length - active.length}</strong><small>Pending enforcement until applied</small></article>
+          <article className="surface"><span>Approved</span><strong>{approved.length}</strong><small>Eligible for a reviewed gateway export</small></article>
+          <article className="surface"><span>Pending review</span><strong>{pending.length}</strong><small>Not eligible for gateway export</small></article>
           <article className="surface"><span>Data plane</span><strong className="state-text">Unverified</strong><small>No live tunnel assertion</small></article>
         </section>
         {error && <p role="alert" className="error">{error}</p>}
@@ -124,21 +136,25 @@ function App() {
         <div className="columns">
           <section className="surface panel" aria-labelledby="peers-title">
             <div className="heading"><div><span className="eyebrow">PEER INVENTORY</span>
-              <h2 id="peers-title">Trusted devices</h2></div>
+              <h2 id="peers-title">Device enrollment</h2></div>
               <button className="secondary" onClick={refresh} disabled={busy}>Refresh</button>
             </div>
-            {peers.length === 0 ? <p className="empty">No peer identities have been enrolled.</p> :
+            {peers.length === 0 ? <p className="empty">No devices enrolled. New devices require explicit approval.</p> :
               <ul className="peer-list">{peers.map(p => <li key={p.id}>
                 <div className="avatar" aria-hidden="true">⌁</div>
                 <div className="peer-main"><strong>{p.name}</strong>
                   <code title={p.public_key}>{p.public_key.slice(0, 10)}…{p.public_key.slice(-6)}</code>
                   <small>{p.address}</small></div>
                 {p.revoked_at ? <span className="pill revoked">Revoked</span> :
-                  <button className="revoke" disabled={busy} onClick={() => revoke(p)}>Revoke</button>}
+                  <div className="peer-actions">
+                    {p.approved_at ? <span className="pill">Approved</span> :
+                      <button className="secondary" disabled={busy} onClick={() => approve(p)}>Approve</button>}
+                    <button className="revoke" disabled={busy} onClick={() => revoke(p)}>Revoke</button>
+                  </div>}
               </li>)}</ul>}
           </section>
           <section className="surface panel" aria-labelledby="enroll-title">
-            <span className="eyebrow">ONBOARDING</span><h2 id="enroll-title">Add a device</h2>
+            <span className="eyebrow">ONBOARDING</span><h2 id="enroll-title">Request device enrollment</h2>
             <p>Generate a private/public key pair on the device. Paste its public key only.</p>
             <form onSubmit={enroll}>
               <label htmlFor="device-name">Device name</label>
@@ -149,11 +165,11 @@ function App() {
                 value={publicKey} onChange={e => setPublicKey(e.target.value)} />
               <button className="primary" type="submit" disabled={busy}>Enroll peer</button>
             </form>
-            <p className="footnote">Enrolled peers are not automatically connected, distributed, or granted packet-level access.</p>
+            <p className="footnote">Enrollment does not authorize a device. An administrator must approve its public key separately, and every gateway change must be reviewed and explicitly applied.</p>
           </section>
         </div>
       </>}
-    <footer>GoreeCloud VPN · Development preview · No third-party telemetry or account tracking</footer>
+    <footer>GoreeCloud VPN · Development preview · {revoked.length} revoked identities · No third-party telemetry or account tracking</footer>
   </main>;
 }
 

@@ -225,7 +225,11 @@ class MainActivity : ComponentActivity() {
         val array = data.optJSONArray("peers") ?: return emptyList()
         return (0 until array.length()).map { index ->
             val peer = array.getJSONObject(index)
-            val status = if (peer.has("revoked_at")) "Revoked" else "Registered only"
+            val status = when {
+                peer.has("revoked_at") -> "Revoked"
+                peer.has("approved_at") -> "Approved; gateway apply pending"
+                else -> "Pending administrator approval"
+            }
             peer.optString("name") + " · " + peer.optString("address") + " · " + status
         }
     }
@@ -250,7 +254,7 @@ class MainActivity : ComponentActivity() {
                     sessionToken = candidate
                     peers = result
                     loading = false
-                    state = "Control plane connected — no tunnel active"
+                    state = "Control plane connected — local tunnel status shown above"
                 }
             } catch (_: Exception) {
                 runOnUiThread {

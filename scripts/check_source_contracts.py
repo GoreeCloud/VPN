@@ -20,6 +20,8 @@ assert "RenderClientConfig" in wg
 assert "config-client" in read("cmd/vpnctl/main.go")
 assert "export-peers" in read("cmd/vpnctl/main.go")
 assert "RevokedAt == nil" in read("cmd/vpnctl/export.go")
+assert "ApprovedAt != nil" in read("cmd/vpnctl/export.go")
+assert '"approved_at,omitempty"' in read("internal/control/store.go")
 assert "os.O_EXCL" in read("cmd/vpnctl/export.go")
 
 go = read("internal/api/handler.go")
@@ -61,3 +63,12 @@ read("docs/SECURITY.md")
 read("docs/ARCHITECTURE.md")
 read("docs/CLI_COMMANDS.md")
 print("PASS: first-party ownership, secure API, Qt Quick, native Compose and truthful tunnel status")
+
+
+# A peer enrolled by an authenticated admin is pending until independently approved.
+assert "ApprovedAt *time.Time" in read("internal/control/store.go")
+assert "ErrLocked" in read("internal/control/store.go")
+assert "syscall.Flock" in read("internal/control/store.go")
+assert "/approve" in read("internal/api/handler.go")
+assert 'case "approve":' in read("cmd/vpnctl/main.go")
+assert '"/approve"' in read("web/src/main.tsx")

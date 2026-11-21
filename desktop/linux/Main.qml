@@ -52,7 +52,8 @@ ApplicationWindow {
                 peerModel.append({
                     name: list[i].name,
                     address: list[i].address,
-                    state: list[i].revoked_at ? "Revoked" : "Registered only"
+                    state: list[i].revoked_at ? "Revoked" :
+                        (list[i].approved_at ? "Approved (gateway apply required)" : "Pending administrator approval")
                 })
             statusLabel.text = "Connected · " + list.length + " registered identities"
         })
@@ -75,7 +76,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
             }
             Label {
-                text: "First-party control-plane preview — no encrypted tunnel is running"
+                text: "First-party enrollment preview — tunnel status not verified from this view"
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }

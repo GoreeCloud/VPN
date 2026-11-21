@@ -23,9 +23,10 @@ func syntheticPublicKey(t *testing.T) string {
 
 func TestActivePeerSnapshotFiltersRevoked(t *testing.T) {
 	now := time.Now().UTC()
-	p1 := registeredPeer{ID: strings.Repeat("a", 32), Name: "Laptop", PublicKey: syntheticPublicKey(t), Address: "10.77.0.2/32", CreatedAt: now}
+	p1 := registeredPeer{ID: strings.Repeat("a", 32), Name: "Laptop", PublicKey: syntheticPublicKey(t), Address: "10.77.0.2/32", CreatedAt: now, ApprovedAt: &now}
 	p2 := registeredPeer{ID: strings.Repeat("b", 32), Name: "Phone", PublicKey: syntheticPublicKey(t), Address: "10.77.0.3/32", CreatedAt: now, RevokedAt: &now}
-	source, _ := json.Marshal(map[string]any{"peers": []registeredPeer{p2, p1}})
+	pending := registeredPeer{ID: strings.Repeat("c", 32), Name: "Pending", PublicKey: syntheticPublicKey(t), Address: "10.77.0.4/32", CreatedAt: now}
+	source, _ := json.Marshal(map[string]any{"peers": []registeredPeer{p2, pending, p1}})
 	output, err := activePeerSnapshot(source)
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +36,7 @@ func TestActivePeerSnapshotFiltersRevoked(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(records) != 1 || records[0]["address"] != p1.Address || records[0]["public_key"] != p1.PublicKey {
-		t.Fatalf("revoked peer not filtered from gateway: %s", output)
+		t.Fatalf("revoked or pending peer not filtered from gateway: %s", output)
 	}
 	private := t.TempDir()
 	if err = os.Chmod(private, 0700); err != nil {

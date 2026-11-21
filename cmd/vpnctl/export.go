@@ -19,12 +19,13 @@ import (
 
 // A gateway export is a registry snapshot, NOT proof of packet enforcement.
 type registeredPeer struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	PublicKey string     `json:"public_key"`
-	Address   string     `json:"address"`
-	CreatedAt time.Time  `json:"created_at"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	PublicKey  string     `json:"public_key"`
+	Address    string     `json:"address"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ApprovedAt *time.Time `json:"approved_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 }
 
 var peerIDPattern = regexp.MustCompile("^[0-9a-f]{32}$")
@@ -64,7 +65,7 @@ func activePeerSnapshot(source []byte) ([]byte, error) {
 			return nil, errors.New("peer snapshot contains invalid or duplicate identities")
 		}
 		seenID[p.ID], seenAddress[p.Address], seenKey[p.PublicKey] = true, true, true
-		if p.RevokedAt == nil {
+		if p.RevokedAt == nil && p.ApprovedAt != nil {
 			peers = append(peers, wireguard.GatewayPeer{PublicKey: p.PublicKey, Address: p.Address})
 		}
 	}

@@ -59,6 +59,19 @@ print(p["id"])
 PY
 )"
 [[ "$ID" =~ ^[0-9a-f]{32}$ ]]
+
+# Default-deny: new registration must not enter gateway configuration without
+# explicit authenticated administrator approval.
+"$TMP/vpnctl" export-peers --api http://127.0.0.1:18788 --token-file "$TMP/admin/token"   --output "$TMP/gateway/pending.json" --confirm >/dev/null
+python3 - "$TMP/gateway/pending.json" <<'PYPENDING'
+import json,sys
+assert json.load(open(sys.argv[1],encoding="utf-8")) == [], "Pending peer leaked into gateway"
+PYPENDING
+if "$TMP/vpnctl" approve --api http://127.0.0.1:18788 --id "$ID"   --token-file "$TMP/admin/token" >/dev/null 2>&1; then
+  echo "Approval without --confirm unexpectedly allowed" >&2; exit 1
+fi
+"$TMP/vpnctl" approve --api http://127.0.0.1:18788 --id "$ID"   --token-file "$TMP/admin/token" --confirm >/dev/null
+
 "$TMP/vpnctl" export-peers --api http://127.0.0.1:18788 --token-file "$TMP/admin/token"   --output "$TMP/gateway/export-active.json" --confirm > /dev/null
 python3 - "$TMP/gateway/export-active.json" "$TMP/client/wg-public.key" <<'PYACTIVE'
 import json,sys

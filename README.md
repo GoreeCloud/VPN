@@ -6,12 +6,12 @@
 
 **0.2.0 development source preview; Android tunnel source exists, but end-to-end VPN connectivity and production readiness are unverified.**
 
-This branch contains a functional, authenticated **peer registry and administrator CLI**, including non-activating WireGuard client and gateway configuration generators written in Go, plus development-stage **web**, **native Linux Qt Quick 6.12**, and **native Android Compose Material 3** client surfaces. The API does **not** configure WireGuard, create encrypted tunnels, alter routes or host firewalls, relay traffic, control VPN DNS, or remotely provision Android VPN permission. Android separately requests OS VPN consent on demand. A registered peer is only an identity record. The authenticated `GET /v1/info` response explicitly returns `"tunnel_operational":false`.
+This branch contains a functional, authenticated **peer registry with separate admin approval and revocation, and administrator CLI**, including non-activating WireGuard client and gateway configuration generators written in Go, plus development-stage **web**, **native Linux Qt Quick 6.12**, and **native Android Compose Material 3** client surfaces. The API does **not** configure WireGuard, create encrypted tunnels, alter routes or host firewalls, relay traffic, control VPN DNS, or remotely provision Android VPN permission. Android separately requests OS VPN consent on demand. A registered peer is only an identity record. The authenticated `GET /v1/info` response explicitly returns `"tunnel_operational":false`.
 
 | Component | Implemented source | Verified acceptance |
 | --- | --- | --- |
 | Backend `cmd/vpnd` | Go standard-library REST control plane, localhost default, TLS mandatory on non-loopback, bounded auth/JSON, private atomic state | Go race tests, vet, local build, isolated local API lifecycle and restart |
-| `cmd/vpnctl` | CSPRNG admin token creation, local X25519/WireGuard-compatible keys, mode-0600 split-tunnel config export, admin peer registry, revocation and current non-revoked gateway snapshot export commands | Go tests and disposable localhost E2E, including client/gateway config exports and revocation-filtered snapshots |
+| `cmd/vpnctl` | CSPRNG admin token creation, local X25519/WireGuard-compatible keys, mode-0600 split-tunnel config export, admin peer registration, explicit approval, revocation and eligible gateway snapshot export commands | Go tests and disposable localhost E2E, including client/gateway config exports and approval/revocation-filtered snapshots |
 | Web `web/` | React 19/Vite compiled same-origin identity console, in-memory token and verified GoreeCloud UI Lagoon alpha colors | Local TypeScript/build and localhost compiled asset/JSON E2E passed; browser UX still unverified |
 | Linux `desktop/linux/` | Native Qt Quick 6.12 graphical registry client | Source contracts; native Qt 6.12 build/hardware QA pending |
 | Android `android/` | Native Compose Material 3 admin viewer and opt-in WireGuard GoBackend with local config import and Android VpnService consent | [Earlier viewer APK CI passed](https://github.com/GoreeCloud/VPN/actions/runs/44875185791); no emulator/phone runtime acceptance |
@@ -92,3 +92,10 @@ The Android debug build uses a separate application ID suffix (.dev) so that tem
 ## Isolated WireGuard integration test
 
 The optional GitHub-hosted kernel namespace workflow builds vpnd/vpnctl and exercises a complete development-only chain: register peer public key, export active gateway policy, generate client/gateway configs, establish an encrypted WireGuard handshake between disposable network namespaces, then revoke the record, apply the new gateway config and verify packets are denied. It runs only on an explicitly gated root-capable GoreeCloud GitHub Actions ephemeral Linux runner, never on the live VPS or laptop host namespace. A successful result is a synthetic two-namespace tunnel, not actual Android/Linux client device acceptance, NAT traversal, relay, Identity, DNS/IPv6 or production policy verification.
+
+
+## Explicit device approval and state ownership
+
+New device registrations are **pending and ineligible for gateway export** until an administrator explicitly verifies the public key and approves the peer using the guarded web console or vpnctl approve --id VERIFIED_ID --confirm. Approval never activates networking. Only **approved AND non-revoked** peer identities appear in subsequent vpnctl export-peers snapshots; the reviewed config must still be separately applied at the gateway. Revoked identities cannot be reapproved; enroll a different newly generated key after a manual owner review. Existing unapproved records remain pending after upgrades by design.
+
+The Go peer registry now uses an exclusive nonblocking private OS file lock to prevent two daemons from overwriting each other's state; start one instance per state directory. Startup validates persisted IDs, unique /32 allocations, public keys, approval/revocation chronology and file modes before serving API traffic. The daemon closes its lock on normal shutdown and the OS releases it on process termination. It does not contain WireGuard private keys.
