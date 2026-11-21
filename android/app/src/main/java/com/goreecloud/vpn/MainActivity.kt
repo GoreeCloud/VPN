@@ -51,17 +51,22 @@ import java.net.URL
  * Imported private configuration and admin token remain in process memory only.
  */
 class MainActivity : ComponentActivity() {
-    private val tunnelBackend by lazy { GoBackend(applicationContext) }
-    private var localTunnelConfig: Config? = null
-    private var tunnelBusy by mutableStateOf(false)
-    private var tunnelActive by mutableStateOf(false)
-    private var tunnelMessage by mutableStateOf("No WireGuard configuration imported")
-    private val nativeTunnel = object : Tunnel {
-        override fun getName(): String = "gcvpn"
-        override fun onStateChange(newState: Tunnel.State) {
-            runOnUiThread { tunnelActive = newState == Tunnel.State.UP }
-        }
-    }
+    // All runtime state remains in process memory, but survives Activity recreation.
+    // The WireGuard GoBackend identifies an active tunnel by its Tunnel object.
+    private val tunnelBackend get() = TunnelRuntime.backend(applicationContext)
+    private var localTunnelConfig: Config?
+        get() = TunnelRuntime.config
+        set(value) { TunnelRuntime.config = value }
+    private var tunnelBusy: Boolean
+        get() = TunnelRuntime.busy
+        set(value) { TunnelRuntime.busy = value }
+    private var tunnelActive: Boolean
+        get() = TunnelRuntime.active
+        set(value) { TunnelRuntime.active = value }
+    private var tunnelMessage: String
+        get() = TunnelRuntime.message
+        set(value) { TunnelRuntime.message = value }
+    private val nativeTunnel get() = TunnelRuntime.tunnel
     private val importTunnel = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@registerForActivityResult
         if (tunnelActive || tunnelBusy) {
@@ -82,11 +87,14 @@ class MainActivity : ComponentActivity() {
                 chunk.fill(0)
                 output.toByteArray()
             } ?: throw IOException("File unavailable")
+            if (!DevelopmentProfileGuard.accepts(bytes.toString(Charsets.UTF_8))) {
+                throw IOException("Imported profile is outside the reviewed private split-tunnel scope")
+            }
             localTunnelConfig = Config.parse(ByteArrayInputStream(bytes))
-            tunnelMessage = "Configuration loaded locally. Connect only to a trusted gateway."
+            tunnelMessage = "Development split-tunnel profile imported: private 10.77.0.0/24 route only."
         } catch (_: Exception) {
             localTunnelConfig = null
-            tunnelMessage = "Invalid or unsupported WireGuard configuration"
+            tunnelMessage = "Import rejected: only one peer, private 10.77.0.0/24 split route, and reviewed DNS are accepted"
         } finally {
             bytes?.fill(0)
         }
@@ -127,8 +135,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-check actual GoBackend state after foreground return, activity
+        // rotation or Android VPN service revocation. Never claim a handshake.
+        Thread {
+            val current = try { tunnelBackend.getState(nativeTunnel) }
+            catch (_: Exception) { null }
+            runOnUiThread {
+                if (current != null && !tunnelBusy) {
+                    tunnelActive = current == Tunnel.State.UP
+                    if (tunnelActive) {
+                        tunnelMessage = "Local WireGuard interface active; remote handshake not established by this check"
+                    }
+                }
+            }
+        }.start()
+    }
+
     override fun onStop() {
         super.onStop()
+        // The management bearer token must not outlive the foreground screen.
+        // This intentionally does NOT stop a user-consented Android VPN tunnel.
         disconnect()
     }
 
@@ -154,10 +182,12 @@ class MainActivity : ComponentActivity() {
         tunnelMessage = "Starting the WireGuard tunnel…"
         Thread {
             try {
-                tunnelBackend.setState(nativeTunnel, Tunnel.State.UP, config)
+                val current = tunnelBackend.setState(nativeTunnel, Tunnel.State.UP, config)
                 runOnUiThread {
-                    tunnelActive = true
-                    tunnelMessage = "WireGuard is active locally; remote reachability is unverified"
+                    tunnelActive = current == Tunnel.State.UP
+                    tunnelMessage = if (tunnelActive)
+                        "Local WireGuard interface active; no remote handshake or DNS-leak protection proven"
+                    else "WireGuard did not report a started tunnel"
                 }
             } catch (_: Exception) {
                 runOnUiThread {
@@ -173,10 +203,12 @@ class MainActivity : ComponentActivity() {
         tunnelBusy = true
         Thread {
             try {
-                tunnelBackend.setState(nativeTunnel, Tunnel.State.DOWN, null)
+                val current = tunnelBackend.setState(nativeTunnel, Tunnel.State.DOWN, null)
                 runOnUiThread {
-                    tunnelActive = false
-                    tunnelMessage = "WireGuard tunnel disconnected"
+                    tunnelActive = current == Tunnel.State.UP
+                    tunnelMessage = if (tunnelActive)
+                        "WireGuard still reports an active local interface"
+                    else "WireGuard tunnel disconnected"
                 }
             } catch (_: Exception) {
                 runOnUiThread { tunnelMessage = "Unable to disconnect. Check Android VPN settings." }
@@ -328,6 +360,7 @@ private fun VpnScreen(
                     ) {
                         Text(if (tunnelBusy) "Working…" else if (tunnelActive) "Disconnect VPN" else "Connect VPN")
                     }
+                    Text("Development-only split routing: 10.77.0.0/24. Full tunnel, IPv6 routing, DNS leak protection and kill switch are not supported or verified.")
                     Text("VPN tunnel state is separate from the control-plane session.")
                 }
             }

@@ -13,6 +13,7 @@ ApplicationWindow {
 
     property string bearer: ""
     property bool authenticated: false
+    Component.onCompleted: tunnelObserver.refresh()
 
     function request(path, method, body, callback) {
         if (!authenticated && path !== "/v1/info") {
@@ -143,6 +144,28 @@ ApplicationWindow {
                 text: "Disconnected"
                 Accessible.role: Accessible.StaticText
                 Layout.fillWidth: true
+            }
+            GroupBox {
+                title: "Local WireGuard diagnostics — unprivileged"
+                Layout.fillWidth: true
+                ColumnLayout {
+                    anchors.fill: parent
+                    Label {
+                        text: tunnelObserver.summary
+                        wrapMode: Text.WordWrap
+                        Accessible.name: "Observed native Linux WireGuard tunnel status"
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: "Read-only gcvpn0 inspection. A recent handshake is not proof of packet access or DNS safety."
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Button {
+                        text: "Refresh local status"
+                        onClicked: tunnelObserver.refresh()
+                    }
+                }
             }
             GroupBox {
                 title: "Registered peer identities (not tunnel sessions)"

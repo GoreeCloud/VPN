@@ -1,6 +1,8 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QtQml>
+#include <QQmlContext>
+#include "TunnelObserver.h"
 #include <QTimer>
 #include <QCoreApplication>
 
@@ -9,6 +11,12 @@ int main(int argc, char *argv[]) {
     application.setApplicationName("GoreeCloud VPN");
     application.setOrganizationName("GoreeCloud");
     QQmlApplicationEngine engine;
+    TunnelObserver observer;
+    engine.rootContext()->setContextProperty("tunnelObserver", &observer);
+    if (QCoreApplication::arguments().contains("--observer-self-test") &&
+        !TunnelObserver::runSelfTest()) {
+        return 3;
+    }
     engine.loadFromModule("GoreeCloud.VPN", "Main");
     if (engine.rootObjects().isEmpty()) {
         return 1;

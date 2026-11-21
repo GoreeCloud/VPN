@@ -85,3 +85,14 @@ assert "backup-registry" in read("cmd/vpnctl/main.go")
 assert "restore-registry" in read("cmd/vpnctl/main.go")
 assert "cipher.NewGCM" in read("internal/backup/crypto.go")
 assert "ValidateSnapshotJSON" in read("internal/control/store.go")
+
+
+# Nonproduction security gates are built into the actual Go listener.
+assert "boundManagement(handler, *addr" in read("cmd/vpnd/main.go")
+guard = read("cmd/vpnd/guard.go")
+assert '"Origin"' in guard and '"Sec-Fetch-Site"' in guard
+assert "StatusMisdirectedRequest" in guard and "StatusTooManyRequests" in guard
+assert "tls.VersionTLS13" in read("cmd/vpnd/main.go")
+assert "DevelopmentProfileGuard.accepts" in read("android/app/src/main/java/com/goreecloud/vpn/MainActivity.kt")
+assert "TunnelRuntime.backend" in read("android/app/src/main/java/com/goreecloud/vpn/MainActivity.kt")
+assert "classifyHandshakes" in read("desktop/linux/TunnelObserver.cpp")

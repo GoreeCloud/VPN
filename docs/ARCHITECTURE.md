@@ -85,3 +85,14 @@ vpnctl config-acl creates a new mode-0600 output from validated, private input f
 An independent 256-bit random key generated with vpnctl backup-keygen protects registry snapshots using Go standard-library AES-256-GCM with a random 96-bit nonce, versioned associated data and integrity tag. The backup input is read from a mode-0600 state.json file after structural and admission-state validation; atomic state replacement permits a consistent read while the owner daemon is operating. Backup files remain mode-0600 in a private output directory and are never overwritten.
 
 vpnctl restore-registry decrypts/authenticates before creating any target, refuses every pre-existing target directory, and restores identical metadata bytes to a new owner-private 0700 directory with an exclusive registry lock. A restored daemon is NOT started automatically; no device or gateway configuration is altered. Keep backup keys separate from backup files, encrypt independent storage, and rehearse backups beyond this synthetic local test before relying on them.
+
+
+## Direct management listener origin boundary (development)
+
+The vpnd entrypoint wraps the API in a direct-TCP guard: the request Host header must precisely match the --listen authority; if the browser supplies Origin, it must match the same scheme and authority, and cross-site Fetch Metadata is refused. The guard refuses duplicated Origin and Fetch Metadata headers. DNS-rebinding attempts fail with HTTP 421, foreign origins with HTTP 403, and per-direct-socket-IP rate exhaustion with HTTP 429. A 24-token/IP burst refills at two tokens per second and caps tracked clients at 4096 with stale eviction; the code ignores X-Forwarded-For. TLS-enabled listeners require caller-provided certificate material and enforce TLS >=1.3. This is not a reviewed reverse-proxy deployment, trusted workload identity or production denial-of-service guarantee.
+
+## Android runtime scope and Linux status observations
+
+A process-local Kotlin TunnelRuntime retains the identical GoBackend and Tunnel identity through Activity restarts, while React/Android management tokens still clear on sign-out/background. The strict Android development profile guard checks a single canonical 10.77.0.0/24 WireGuard split route, one 10.77.0.2–254/32 interface and only optional in-mesh DNS before the official upstream parser accepts the private configuration. Device consent and tunnel state are separate from management login. The source does not support arbitrary LAN, full tunnel or IPv6 imports; actual networking acceptance remains pending.
+
+The Qt Quick desktop client now exposes read-only unprivileged gcvpn0 diagnosis. It checks an existing interface and executes only a fixed absolute WireGuard user CLI with fixed argv to summarize no/old/recent authenticated handshakes. Observations never contain public keys in the user interface and cannot verify remote packet policy, authorization or DNS.

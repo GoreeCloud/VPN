@@ -97,3 +97,23 @@ Use a distinct *owner-private* backup key, not a WireGuard private key or the co
     ./build/vpnctl restore-registry --backup-file "$HOME/.local/share/goreecloud/vpn/registry-backup.gcvpnbak" --backup-key-file "$HOME/.config/goreecloud/vpn/backup-key" --state-dir "$HOME/.local/share/goreecloud/vpn/restored-staging" --confirm
 
 The output path must not exist and its parent directory must be real and private (0700); snapshot and key files are mode 0600. Restore requires a **new, nonexistent state directory** under an existing private parent: it never overwrites a live state.json or starts vpnd. A clean readback and independent device authorization checks are required before any controlled recovery handoff. Retain the backup encryption key separately, or recovery is impossible. This feature protects registry metadata only, not device WireGuard private keys or any deployed server/network configuration.
+
+
+## Native Linux read-only handshake observation
+
+The Qt Quick Linux client contains a button that inspects **only** the dedicated gcvpn0 interface without requesting root or modifying routes. Under the hood it checks for /sys/class/net/gcvpn0 and, when the local system has the executable and permissions, uses fixed direct arguments equivalent to:
+
+    /usr/bin/wg show gcvpn0 latest-handshakes
+
+If that absolute path is unavailable, the app may use /usr/sbin/wg instead. Never copy peer public keys, private keys, full wg show output or device IPs into public issue logs. Exit failures and stale timestamps are reported as **unverified**, not as a functional VPN. This is documentation-only command behavior unless independently observed on the target Linux machine; the CI self-test uses synthetic data and does not execute a live wg command.
+
+## Direct vpnd HTTP guard
+
+The existing vpnd --listen host:port and optional --tls-cert/--tls-key configuration now requires exact TCP-bound Host and matching browser Origin for every request. Examples:
+
+    ./build/vpnd --listen 127.0.0.1:8788 --state-dir PRIVATE_0700_STATE_DIR --token-file PRIVATE_0600_ADMIN_TOKEN
+    curl --fail --max-time 3 http://127.0.0.1:8788/healthz
+
+For a non-loopback listener, a separately provisioned and audited TLS certificate and key must be supplied; minimum negotiated TLS version is 1.3. Use only approved private endpoints, never assume a browser reverse proxy or externally exposed listener is safe. The direct-source request guard has a burst limit of 24 and refills two requests per second (HTTP 429 with Retry-After on exhaustion). Untrusted Host/Origin requests are rejected before authentication is evaluated. Curl is for synthetic localhost health tests, not production network acceptance.
+
+**Verification status (2026-11-21 CST):** The host-bound Go handler, same-origin validation and rate-limit negative tests passed local Go unit/race tests and disposable localhost integration; the first-party VPN code is on a development PR. The Qt observer and Android development-profile guard still require their independently compiled CI checks before native acceptance. Drive's existing GoreeCloud/CLI Commands/GoreeCloud/ directory has no VPN.md entry; direct in-place canonical Markdown creation/update needs an authorized file upload reference, so this repository source reference has not yet been synchronized into the Drive registry.

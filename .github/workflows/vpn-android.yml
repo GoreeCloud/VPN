@@ -30,6 +30,8 @@ jobs:
       - name: Provision Android SDK 37.1
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.1" "build-tools;36.0.0"
+      - name: Validate imported WireGuard routing policy with JVM unit tests
+        run: gradle -p android :app:testDebugUnitTest --no-daemon --max-workers=2 --console=plain
       - name: Compile Android control plane and WireGuard GoBackend
         run: gradle -p android :app:assembleDebug --no-daemon --max-workers=2 --console=plain
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

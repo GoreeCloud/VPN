@@ -40,6 +40,11 @@ for _ in {1..30}; do
   sleep 0.1
 done
 curl -sSf --max-time 3 http://127.0.0.1:18788/healthz | grep -q '"status":"ok"'
+# Local listener must reject rebinding authorities and cross-site browser
+# requests before any admin token or API route is processed.
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 -H 'Host: attacker.example:18788'   http://127.0.0.1:18788/healthz)" == "421" ]]
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 -H 'Origin: https://attacker.example'   http://127.0.0.1:18788/healthz)" == "403" ]]
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 -H 'Origin: http://127.0.0.1:18788'   http://127.0.0.1:18788/healthz)" == "200" ]]
 UNAUTH="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:18788/v1/peers)"
 [[ "$UNAUTH" == "401" ]] || { echo "Unauthenticated peer read was not denied"; exit 1; }
 curl -sSf --max-time 3 http://127.0.0.1:18788/ | grep -q 'GoreeCloud VPN'

@@ -1,5 +1,6 @@
 # Generated build output and local secrets
 /android/.gradle/
+/android/.kotlin/
 /android/build/
 /android/app/build/
 /desktop/linux/build/

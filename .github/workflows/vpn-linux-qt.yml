@@ -38,6 +38,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/qt-runtime"
           chmod 700 "$RUNNER_TEMP/qt-runtime"
           XDG_RUNTIME_DIR="$RUNNER_TEMP/qt-runtime" QT_QPA_PLATFORM=offscreen             QT_QUICK_BACKEND=software timeout 20s             "$RUNNER_TEMP/gcvpn-qt/goreecloud-vpn-linux" --smoke-test
+      - name: Validate Linux WireGuard handshake observation classifier
+        run: |
+          mkdir -p "$RUNNER_TEMP/qt-observer"
+          chmod 700 "$RUNNER_TEMP/qt-observer"
+          XDG_RUNTIME_DIR="$RUNNER_TEMP/qt-observer" QT_QPA_PLATFORM=offscreen             QT_QUICK_BACKEND=software timeout 20s             "$RUNNER_TEMP/gcvpn-qt/goreecloud-vpn-linux" --observer-self-test --smoke-test
       - name: Verify executable artifacts exist
         run: |
           test -s "$RUNNER_TEMP/gcvpn-qt/goreecloud-vpn-linux"

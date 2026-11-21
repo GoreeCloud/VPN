@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -73,7 +74,8 @@ func main() {
 		log.Fatal(err)
 	}
 	srv := &http.Server{
-		Addr: *addr, Handler: handler,
+		Addr: *addr, Handler: boundManagement(handler, *addr, *cert != ""),
+		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS13},
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second, WriteTimeout: 15 * time.Second,
 		IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192,
